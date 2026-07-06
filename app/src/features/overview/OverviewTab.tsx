@@ -1,6 +1,8 @@
 import {
+  ArrowRight,
   BookCheck,
   CalendarClock,
+  Eye,
   History,
   ListChecks,
   MessagesSquare,
@@ -9,7 +11,7 @@ import {
 import type { Project, ProjectTab } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { IconAction } from "@/components/ui/icon-action"
 import { cn } from "@/lib/utils"
 
 interface Props {
@@ -105,9 +107,14 @@ export function OverviewTab({ project, setTab }: Props) {
                   <div className="text-sm font-semibold">{s.title}</div>
                   <div className="text-xs text-muted-foreground">{s.stat}</div>
                 </div>
-                <Button variant="ghost" size="sm" className="text-primary">
-                  {s.done ? "確認する" : "進める"} →
-                </Button>
+                <IconAction
+                  label={s.done ? "確認する" : "進める"}
+                  variant="ghost"
+                  size="sm"
+                  className="size-8 text-primary"
+                >
+                  {s.done ? <Eye className="size-4" /> : <ArrowRight className="size-4" />}
+                </IconAction>
               </CardContent>
             </Card>
           ))}

@@ -7,6 +7,7 @@ import {
   Send,
   SkipForward,
   Workflow,
+  X,
 } from "lucide-react"
 import logo from "@/assets/logo.png"
 import type { AnswerStatus, HearingAnswer, Project, ProjectTab } from "@/lib/types"
@@ -14,6 +15,7 @@ import { HEARING_QUESTIONS } from "@/lib/mock-data"
 import { now } from "@/lib/project-utils"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { Button } from "@/components/ui/button"
+import { IconAction } from "@/components/ui/icon-action"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -155,10 +157,9 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                       未回答が {pendingList.length} 件あります(右の回答一覧からいつでも追記できます)
                     </p>
                   )}
-                  <Button className="w-fit gap-1.5" onClick={() => setTab("flow")}>
+                  <IconAction label="フロー図を生成する" variant="default" className="h-9" onClick={() => setTab("flow")}>
                     <Workflow className="size-4" />
-                    フロー図を生成する
-                  </Button>
+                  </IconAction>
                 </div>
               </AiBubble>
             )}
@@ -231,30 +232,29 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                       )
                     })}
                   </div>
-                  <Button
-                    className="w-fit"
+                  <IconAction
+                    label="この内容で回答する"
+                    variant="default"
+                    className="h-9"
                     disabled={multiSelection.length === 0}
                     onClick={() => saveAnswer(multiSelection.join(", "), "answered")}
                   >
-                    この内容で回答する
-                  </Button>
+                    <Check className="size-4" />
+                  </IconAction>
                 </div>
               )}
 
               {/* わからない・後で・スキップ */}
               <div className="mt-3 flex gap-2">
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => saveAnswer("", "unknown")}>
+                <IconAction label="わからない" variant="ghost" size="sm" className="h-8" onClick={() => saveAnswer("", "unknown")}>
                   <CircleHelp className="size-3.5" />
-                  わからない
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => saveAnswer("", "later")}>
+                </IconAction>
+                <IconAction label="後で答える" variant="ghost" size="sm" className="h-8" onClick={() => saveAnswer("", "later")}>
                   <Clock className="size-3.5" />
-                  後で答える
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => saveAnswer("", "skipped")}>
+                </IconAction>
+                <IconAction label="スキップ" variant="ghost" size="sm" className="h-8" onClick={() => saveAnswer("", "skipped")}>
                   <SkipForward className="size-3.5" />
-                  スキップ
-                </Button>
+                </IconAction>
                 <span className="ml-auto self-center text-[11px] text-muted-foreground">
                   回答は1問ごとに自動保存されます
                 </span>
@@ -365,12 +365,12 @@ function UserBubble({
               autoFocus
             />
             <div className="mt-2 flex justify-end gap-2">
-              <Button size="sm" variant="ghost" onClick={onCancelEdit}>
-                キャンセル
-              </Button>
-              <Button size="sm" onClick={onSaveEdit} disabled={!editDraft.trim()}>
-                修正を保存
-              </Button>
+              <IconAction label="キャンセル" variant="ghost" size="sm" className="h-8" onClick={onCancelEdit}>
+                <X className="size-3.5" />
+              </IconAction>
+              <IconAction label="修正を保存" variant="default" size="sm" className="h-8" disabled={!editDraft.trim()} onClick={onSaveEdit}>
+                <Check className="size-3.5" />
+              </IconAction>
             </div>
             <p className="mt-2 text-[11px] text-amber-600">
               ※ 回答を修正すると、フロー図の再生成が必要になる場合があります
@@ -388,15 +388,9 @@ function UserBubble({
             {isEmpty ? (
               <span className="flex items-center gap-2">
                 {STATUS_TEXT[answer.status] || "未回答"}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[11px] not-italic"
-                  onClick={onStartEdit}
-                >
+                <IconAction label="今答える" variant="outline" size="sm" className="h-7" onClick={onStartEdit}>
                   <Pencil className="size-3" />
-                  今答える
-                </Button>
+                </IconAction>
               </span>
             ) : (
               answer.value
