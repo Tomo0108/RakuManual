@@ -591,12 +591,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             </p>
           )}
           <div className="mt-5 flex justify-center gap-3">
-            <ToolButton label="ヒアリングに戻る" onClick={() => setTab("hearing")} variant="outline" className="h-9">
+            <Button variant="outline" onClick={() => setTab("hearing")} className="gap-1.5">
               <ArrowLeft className="size-4" />
-            </ToolButton>
-            <ToolButton label={generating ? "生成中…" : "フロー図を生成する"} onClick={generate} disabled={generating} variant="default" className="h-9">
+              ヒアリングに戻る
+            </Button>
+            <Button onClick={generate} disabled={generating} className="gap-1.5">
               <Sparkles className="size-4" />
-            </ToolButton>
+              {generating ? "生成中…" : "フロー図を生成する"}
+            </Button>
           </div>
         </div>
       </div>
@@ -607,24 +609,27 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     <div className="flex h-full flex-col">
       {/* ツールバー */}
       <div className="scrollbar-none scroll-touch flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1.5 md:gap-1.5 md:px-4 md:py-2">
-        <ToolButton label="ステップを追加" onClick={() => addStep("process")} disabled={isEditingDisabled}>
+        <ToolButton label="ステップを追加" onClick={() => addStep("process")} iconOnly={isMobile} disabled={isEditingDisabled}>
           <Plus className="size-4" />
+          {!isMobile && "ステップ"}
         </ToolButton>
-        <ToolButton label="条件分岐を追加" onClick={() => addStep("decision")} disabled={isEditingDisabled}>
+        <ToolButton label="条件分岐を追加" onClick={() => addStep("decision")} iconOnly={isMobile} disabled={isEditingDisabled}>
           <Diamond className="size-4" />
+          {!isMobile && "分岐"}
         </ToolButton>
-        <Separator orientation="vertical" className="mx-1 !h-5" />
+        {!isMobile && <Separator orientation="vertical" className="mx-1 !h-5" />}
         <ToolButton
           label="選択中の要素を削除(Delete)"
           onClick={deleteSelected}
           disabled={isEditingDisabled || (selectedNodes.length === 0 && selectedEdges.length === 0)}
+          iconOnly={isMobile}
         >
           <Trash2 className="size-4" />
         </ToolButton>
-        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0}>
+        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0} iconOnly={isMobile}>
           <Undo2 className="size-4" />
         </ToolButton>
-        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0}>
+        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0} iconOnly={isMobile}>
           <Redo2 className="size-4" />
         </ToolButton>
         {!isMobile && (
@@ -632,9 +637,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             <Separator orientation="vertical" className="mx-1 !h-5" />
             <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout} disabled={isEditingDisabled}>
               <AlignCenterVertical className="size-4" />
+              自動整列
             </ToolButton>
             <ToolButton label="ヒアリング回答からフロー図を再生成(手動修正は保護)" onClick={() => setRegenConfirmOpen(true)} disabled={isEditingDisabled}>
               <Sparkles className="size-4" />
+              再生成
             </ToolButton>
           </>
         )}
@@ -649,17 +656,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
             onClick={() => setIsLocked((v) => !v)}
             disabled={!!proposal}
+            iconOnly={isMobile}
           >
             {isLocked ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+            {!isMobile && (isLocked ? "編集" : "ロック")}
           </ToolButton>
           {!isMobile && (
             <span className="hidden text-[11px] text-muted-foreground lg:inline">
-              {isLocked ? "閲覧モード" : "自動保存"}
+              {isLocked ? "閲覧モード" : "編集内容は自動保存されます"}
             </span>
           )}
-          <ToolButton label="フロー図を確定して深掘りへ" onClick={confirmFlow} variant="default">
+          <Button size="sm" className="h-8 gap-1.5 px-2.5 whitespace-nowrap md:px-3" onClick={confirmFlow}>
             <ListChecks className="size-4" />
-          </ToolButton>
+            {isMobile ? "確定" : "フロー図を確定して深掘りへ"}
+          </Button>
         </div>
       </div>
 
@@ -791,12 +801,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                         緑=追加 / 赤=削除 / 黄=変更。承認するまでフロー図は変更されません。
                       </p>
                       <div className="mt-3 flex gap-2">
-                        <ToolButton label="承認して反映" onClick={approveProposal} variant="default" size="sm" className="h-8">
+                        <Button size="sm" className="gap-1" onClick={approveProposal}>
                           <Check className="size-3.5" />
-                        </ToolButton>
-                        <ToolButton label="却下" onClick={() => setProposal(null)} variant="outline" size="sm" className="h-8">
+                          承認して反映
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1" onClick={() => setProposal(null)}>
                           <X className="size-3.5" />
-                        </ToolButton>
+                          却下
+                        </Button>
                       </div>
                     </AlertDescription>
                   </Alert>
@@ -839,12 +851,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <ToolButton label="キャンセル" onClick={() => setRegenConfirmOpen(false)} variant="outline" size="sm" className="h-9 px-3">
-              <X className="size-4" />
-            </ToolButton>
-            <ToolButton label="再生成する" onClick={regenerate} variant="default" size="sm" className="h-9 px-3">
+            <Button variant="outline" onClick={() => setRegenConfirmOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={regenerate} className="gap-1.5">
               <Sparkles className="size-4" />
-            </ToolButton>
+              再生成する
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -908,15 +921,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) askAi()
               }}
             />
-            <ToolButton
-              label={aiThinking ? "解析中…" : "修正案を作成"}
-              onClick={askAi}
-              disabled={!instruction.trim() || !!proposal || aiThinking}
-              variant="default"
-              className="h-9"
-            >
+            <Button onClick={askAi} disabled={!instruction.trim() || !!proposal || aiThinking} className="gap-1.5">
               <Sparkles className="size-4" />
-            </ToolButton>
+              {aiThinking ? "解析中…" : "修正案を作成"}
+            </Button>
           </div>
         </div>
       )}
@@ -951,16 +959,16 @@ function ToolButton({
   disabled,
   children,
   variant = "ghost",
-  size = "icon",
   className,
+  iconOnly = true,
 }: {
   label: string
   onClick: () => void
   disabled?: boolean
   children: React.ReactNode
   variant?: "ghost" | "outline" | "default"
-  size?: "icon" | "sm"
   className?: string
+  iconOnly?: boolean
 }) {
   return (
     <Tooltip>
@@ -968,11 +976,11 @@ function ToolButton({
         <span>
           <Button
             variant={variant}
-            size={size}
-            className={cn(size === "icon" ? "size-9 shrink-0 px-0" : "gap-1", className)}
+            size={iconOnly ? "icon" : "sm"}
+            className={cn(iconOnly ? "size-9 shrink-0 px-0" : "h-8 gap-1 px-2 text-xs", className)}
             onClick={onClick}
             disabled={disabled}
-            aria-label={label}
+            aria-label={iconOnly ? label : undefined}
           >
             {children}
           </Button>
