@@ -5,70 +5,114 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.205 0.01 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0.01 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0.01 260);
-  /* ブランドカラー(ロゴの赤)をデフォルトに */
-  --primary: oklch(0.54 0.19 29);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.968 0.004 255);
-  --secondary-foreground: oklch(0.3 0.02 255);
-  --muted: oklch(0.968 0.004 255);
-  --muted-foreground: oklch(0.5 0.015 260);
-  --accent: oklch(0.955 0.01 255);
-  --accent-foreground: oklch(0.3 0.02 255);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0.004 260);
-  --input: oklch(0.922 0.004 260);
-  --ring: oklch(0.54 0.19 29);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0.002 260);
-  --sidebar-foreground: oklch(0.205 0.01 260);
-  --sidebar-primary: oklch(0.54 0.19 29);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.945 0.008 255);
-  --sidebar-accent-foreground: oklch(0.3 0.02 255);
-  --sidebar-border: oklch(0.922 0.004 260);
-  --sidebar-ring: oklch(0.54 0.19 29);
+/* =========================================================
+ * カラーシステム
+ * - サーフェス階層: sidebar(沈下) < background(キャンバス) < card(浮上)
+ * - ニュートラルはアクセント色相に連動し、全体の調和を保つ
+ * - 長時間の編集作業でも目に優しい暖色寄りオフホワイト
+ * ======================================================= */
+
+:root,
+[data-accent="red"] {
+  --brand-hue: 29;
+  --neutral-hue: 38;
+
+  --primary: oklch(0.51 0.19 var(--brand-hue));
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-subtle: oklch(0.955 0.038 var(--brand-hue));
+  --primary-muted: oklch(0.91 0.055 var(--brand-hue));
+  --ring: oklch(0.51 0.19 var(--brand-hue));
+
+  --background: oklch(0.987 0.006 var(--neutral-hue));
+  --foreground: oklch(0.235 0.022 var(--neutral-hue));
+  --card: oklch(0.998 0.003 var(--neutral-hue));
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.999 0.002 var(--neutral-hue));
+  --popover-foreground: var(--foreground);
+
+  --secondary: oklch(0.962 0.009 var(--neutral-hue));
+  --secondary-foreground: oklch(0.32 0.022 var(--neutral-hue));
+  --muted: oklch(0.952 0.01 var(--neutral-hue));
+  --muted-foreground: oklch(0.48 0.024 var(--neutral-hue));
+  --accent: oklch(0.944 0.014 var(--neutral-hue));
+  --accent-foreground: oklch(0.3 0.022 var(--neutral-hue));
+
+  --border: oklch(0.895 0.013 var(--neutral-hue));
+  --input: oklch(0.902 0.013 var(--neutral-hue));
+
+  --sidebar: oklch(0.966 0.01 var(--neutral-hue));
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.936 0.016 var(--neutral-hue));
+  --sidebar-accent-foreground: oklch(0.28 0.022 var(--neutral-hue));
+  --sidebar-border: oklch(0.885 0.015 var(--neutral-hue));
+  --sidebar-ring: var(--ring);
+
+  --destructive: oklch(0.54 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --chart-1: oklch(0.55 0.19 var(--brand-hue));
+  --chart-2: oklch(0.62 0.12 195);
+  --chart-3: oklch(0.48 0.08 255);
+  --chart-4: oklch(0.75 0.14 85);
+  --chart-5: oklch(0.58 0.16 330);
+
+  --status-hearing-bg: oklch(0.955 0.04 85);
+  --status-hearing-fg: oklch(0.42 0.09 65);
+  --status-hearing-border: oklch(0.87 0.06 80);
+  --status-flow-bg: oklch(0.955 0.035 235);
+  --status-flow-fg: oklch(0.4 0.1 240);
+  --status-flow-border: oklch(0.87 0.05 235);
+  --status-deepdive-bg: oklch(0.955 0.04 300);
+  --status-deepdive-fg: oklch(0.42 0.12 295);
+  --status-deepdive-border: oklch(0.87 0.06 295);
+  --status-manual-bg: oklch(0.955 0.04 55);
+  --status-manual-fg: oklch(0.43 0.1 45);
+  --status-manual-border: oklch(0.87 0.06 55);
+  --status-published-bg: oklch(0.955 0.04 155);
+  --status-published-fg: oklch(0.4 0.1 155);
+  --status-published-border: oklch(0.87 0.06 155);
 }
 
-/* アクセントカラーテーマ: data-accent 属性で切り替え */
 [data-accent="blue"] {
-  --primary: oklch(0.55 0.18 255);
-  --ring: oklch(0.55 0.18 255);
-  --sidebar-primary: oklch(0.55 0.18 255);
-  --sidebar-ring: oklch(0.55 0.18 255);
+  --brand-hue: 255;
+  --neutral-hue: 252;
+  --primary: oklch(0.51 0.17 var(--brand-hue));
+  --primary-subtle: oklch(0.955 0.035 var(--brand-hue));
+  --primary-muted: oklch(0.91 0.05 var(--brand-hue));
+  --ring: oklch(0.51 0.17 var(--brand-hue));
+  --chart-1: oklch(0.55 0.17 var(--brand-hue));
 }
 
 [data-accent="teal"] {
-  --primary: oklch(0.52 0.12 195);
-  --ring: oklch(0.52 0.12 195);
-  --sidebar-primary: oklch(0.52 0.12 195);
-  --sidebar-ring: oklch(0.52 0.12 195);
+  --brand-hue: 195;
+  --neutral-hue: 200;
+  --primary: oklch(0.5 0.11 var(--brand-hue));
+  --primary-subtle: oklch(0.955 0.03 var(--brand-hue));
+  --primary-muted: oklch(0.91 0.045 var(--brand-hue));
+  --ring: oklch(0.5 0.11 var(--brand-hue));
+  --chart-1: oklch(0.54 0.11 var(--brand-hue));
 }
 
 [data-accent="violet"] {
-  --primary: oklch(0.54 0.19 290);
-  --ring: oklch(0.54 0.19 290);
-  --sidebar-primary: oklch(0.54 0.19 290);
-  --sidebar-ring: oklch(0.54 0.19 290);
+  --brand-hue: 290;
+  --neutral-hue: 285;
+  --primary: oklch(0.51 0.18 var(--brand-hue));
+  --primary-subtle: oklch(0.955 0.036 var(--brand-hue));
+  --primary-muted: oklch(0.91 0.052 var(--brand-hue));
+  --ring: oklch(0.51 0.18 var(--brand-hue));
+  --chart-1: oklch(0.55 0.18 var(--brand-hue));
 }
 
 [data-accent="emerald"] {
-  --primary: oklch(0.55 0.13 160);
-  --ring: oklch(0.55 0.13 160);
-  --sidebar-primary: oklch(0.55 0.13 160);
-  --sidebar-ring: oklch(0.55 0.13 160);
+  --brand-hue: 160;
+  --neutral-hue: 155;
+  --primary: oklch(0.51 0.12 var(--brand-hue));
+  --primary-subtle: oklch(0.955 0.032 var(--brand-hue));
+  --primary-muted: oklch(0.91 0.048 var(--brand-hue));
+  --ring: oklch(0.51 0.12 var(--brand-hue));
+  --chart-1: oklch(0.54 0.12 var(--brand-hue));
 }
 
 @theme inline {
@@ -84,6 +128,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-muted: var(--primary-muted);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -109,6 +155,10 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: "Inter Variable", "Noto Sans JP Variable", system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.625rem;
 }
 
 @layer base {
@@ -140,4 +190,46 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* メインキャンバス: ブランド色のごく淡い放射グラデーションで奥行きを付与 */
+@utility canvas-surface {
+  background-color: var(--background);
+  background-image: radial-gradient(
+    ellipse 110% 70% at 50% -15%,
+    color-mix(in oklch, var(--primary) 7%, transparent),
+    transparent 62%
+  );
+}
+
+/* ページヘッダー帯 */
+@utility page-header {
+  @apply border-b border-border bg-card/85 backdrop-blur-sm;
+}
+
+/* ステータスバッジ（プロジェクト進捗） */
+@utility status-hearing {
+  background: var(--status-hearing-bg);
+  color: var(--status-hearing-fg);
+  border-color: var(--status-hearing-border);
+}
+@utility status-flow {
+  background: var(--status-flow-bg);
+  color: var(--status-flow-fg);
+  border-color: var(--status-flow-border);
+}
+@utility status-deepdive {
+  background: var(--status-deepdive-bg);
+  color: var(--status-deepdive-fg);
+  border-color: var(--status-deepdive-border);
+}
+@utility status-manual {
+  background: var(--status-manual-bg);
+  color: var(--status-manual-fg);
+  border-color: var(--status-manual-border);
+}
+@utility status-published {
+  background: var(--status-published-bg);
+  color: var(--status-published-fg);
+  border-color: var(--status-published-border);
 }

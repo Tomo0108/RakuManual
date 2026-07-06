@@ -20,6 +20,8 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-accent", accent)
+    const meta = document.querySelector('meta[name="theme-color"]')
+    meta?.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--background").trim() || "#faf8f6")
   }, [accent])
 
   const updateProject = useCallback(
@@ -55,7 +57,7 @@ export default function App() {
             projects={projects}
             onMenuOpen={() => setMobileMenuOpen(true)}
           />
-          <main className="min-h-0 flex-1 overflow-hidden">
+          <main className="canvas-surface min-h-0 flex-1 overflow-hidden">
             {view.name === "projects" && (
               <ProjectList
                 projects={projects}

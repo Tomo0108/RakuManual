@@ -67,7 +67,7 @@ export function QAChatPage({ onOpenProject }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b px-4 py-3 md:px-6 md:py-4">
+      <header className="page-header px-4 py-3 md:px-6 md:py-4">
         <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
           <MessageCircleQuestion className="size-5 text-primary" />
           業務QAチャット
@@ -110,15 +110,15 @@ export function QAChatPage({ onOpenProject }: Props) {
                 <div className="max-w-[85%]">
                   <div
                     className={cn(
-                      "rounded-2xl rounded-tl-sm border bg-card px-4 py-3 text-sm leading-relaxed shadow-xs",
-                      m.noSource && !m.source && "border-amber-200 bg-amber-50/60",
+                      "rounded-2xl rounded-tl-sm border border-border/70 bg-card px-4 py-3 text-sm leading-relaxed shadow-xs",
+                      m.noSource && !m.source && "border-amber-200/80 bg-[oklch(0.96_0.04_85)]",
                     )}
                   >
                     {m.text}
                     {m.source && (
                       <button
                         onClick={() => onOpenProject(m.source!.projectId)}
-                        className="mt-3 flex w-full items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-left text-xs transition-colors hover:border-primary/40"
+                        className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-left text-xs transition-colors hover:border-primary-muted hover:bg-primary-subtle/50"
                       >
                         <BookOpenText className="size-3.5 shrink-0 text-primary" />
                         <span>

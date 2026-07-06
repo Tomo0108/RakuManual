@@ -432,11 +432,11 @@ export const QA_PATTERNS: QAPattern[] = [
 
 /** アクセントカラーの選択肢 */
 export const ACCENT_OPTIONS = [
-  { id: "red", label: "レッド(ブランド)", swatch: "oklch(0.54 0.19 29)" },
-  { id: "blue", label: "ブルー", swatch: "oklch(0.55 0.18 255)" },
-  { id: "teal", label: "ティール", swatch: "oklch(0.52 0.12 195)" },
-  { id: "violet", label: "バイオレット", swatch: "oklch(0.54 0.19 290)" },
-  { id: "emerald", label: "エメラルド", swatch: "oklch(0.55 0.13 160)" },
+  { id: "red", label: "レッド(ブランド)", swatch: "oklch(0.51 0.19 29)" },
+  { id: "blue", label: "ブルー", swatch: "oklch(0.51 0.17 255)" },
+  { id: "teal", label: "ティール", swatch: "oklch(0.5 0.11 195)" },
+  { id: "violet", label: "バイオレット", swatch: "oklch(0.51 0.18 290)" },
+  { id: "emerald", label: "エメラルド", swatch: "oklch(0.51 0.12 160)" },
 ] as const
 
 export type AccentId = (typeof ACCENT_OPTIONS)[number]["id"]
