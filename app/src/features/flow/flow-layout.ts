@@ -150,6 +150,93 @@ export function syncLayoutMeta(state: FlowState): FlowState {
 /** 分岐ノードの出口ハンドル ID */
 export const DECISION_HANDLE = { yes: "yes", no: "no" } as const
 
+const FLOW_BOUNDS_PADDING = 32
+
+/** ノード配置からフロー図の表示範囲を算出 */
+export function flowContentBounds(state: FlowState) {
+  if (state.nodes.length === 0) {
+    return { minX: 0, minY: 0, width: 400, height: 300 }
+  }
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+
+  for (const n of state.nodes) {
+    const kind = n.data.kind
+    const dims = dimForKind(kind === "start" || kind === "end" || kind === "decision" ? kind : "process")
+    minX = Math.min(minX, n.position.x)
+    minY = Math.min(minY, n.position.y)
+    maxX = Math.max(maxX, n.position.x + dims.w)
+    maxY = Math.max(maxY, n.position.y + dims.h)
+  }
+
+  const paddedMinX = Math.max(0, minX - FLOW_BOUNDS_PADDING)
+  const paddedMinY = Math.max(0, minY - FLOW_BOUNDS_PADDING)
+  const paddedMaxX = maxX + FLOW_BOUNDS_PADDING
+  const paddedMaxY = maxY + FLOW_BOUNDS_PADDING
+
+  return {
+    minX: paddedMinX,
+    minY: paddedMinY,
+    width: paddedMaxX - paddedMinX,
+    height: paddedMaxY - paddedMinY,
+  }
+}
+
+/** ビューポート X の移動可能範囲 */
+export function flowPanXRange(bounds: ReturnType<typeof flowContentBounds>, viewWidth: number, zoom: number) {
+  const scaledW = bounds.width * zoom
+  if (scaledW <= viewWidth) {
+    const centered = (viewWidth - scaledW) / 2 - bounds.minX * zoom
+    return { min: centered, max: centered }
+  }
+  return {
+    min: viewWidth - (bounds.minX + bounds.width) * zoom,
+    max: -bounds.minX * zoom,
+  }
+}
+
+export function clampFlowPanX(
+  x: number,
+  bounds: ReturnType<typeof flowContentBounds>,
+  viewWidth: number,
+  zoom: number,
+) {
+  const { min, max } = flowPanXRange(bounds, viewWidth, zoom)
+  return Math.max(min, Math.min(max, x))
+}
+
+function isNoLabel(label: string | undefined): boolean {
+  return /いいえ|不要|否|×|偽|no/i.test(label ?? "")
+}
+
+function isYesLabel(label: string | undefined): boolean {
+  return /はい|可|○|真|yes/i.test(label ?? "")
+}
+
+/** 分岐ノードからのエッジに はい/いいえ ラベルを補完 */
+export function ensureDecisionEdgeLabel(
+  edge: FlowEdge,
+  src: FlowNode,
+  allEdges: FlowEdge[],
+): string | undefined {
+  const existing = typeof edge.label === "string" ? edge.label : undefined
+  if (existing) return existing
+  if (src.data.kind !== "decision") return undefined
+
+  if (edge.sourceHandle === DECISION_HANDLE.no) return "いいえ"
+  if (edge.sourceHandle === DECISION_HANDLE.yes) return "はい"
+
+  const siblings = allEdges.filter((e) => e.source === edge.source && e.id !== edge.id)
+  const hasYes = siblings.some((e) => isYesLabel(typeof e.label === "string" ? e.label : undefined))
+  const hasNo = siblings.some((e) => isNoLabel(typeof e.label === "string" ? e.label : undefined))
+  if (!hasYes) return "はい"
+  if (!hasNo) return "いいえ"
+  return "はい"
+}
+
 /** エッジラベルから分岐の出口を判定(はい=上、いいえ=下) */
 export function decisionSourceHandle(label: string | undefined, isBack: boolean): "yes" | "no" {
   const text = label ?? ""
@@ -229,7 +316,7 @@ export function enrichEdges(state: FlowState): FlowEdge[] {
 
     const srcKind = src.data.kind
     const tgtKind = tgt.data.kind
-    const label = typeof e.label === "string" ? e.label : undefined
+    const label = ensureDecisionEdgeLabel(e, src, state.edges)
     const srcW = dimForKind(srcKind === "start" || srcKind === "end" || srcKind === "decision" ? srcKind : "process").w
     const tgtW = dimForKind(tgtKind === "start" || tgtKind === "end" || tgtKind === "decision" ? tgtKind : "process").w
 
@@ -252,6 +339,7 @@ export function enrichEdges(state: FlowState): FlowEdge[] {
     if (isBack) {
       return {
         ...e,
+        label,
         ...handles,
         ...(branchLabels ?? {}),
         type: "smoothstep",
@@ -263,6 +351,7 @@ export function enrichEdges(state: FlowState): FlowEdge[] {
     if (!sameLane) {
       return {
         ...e,
+        label,
         ...handles,
         ...(branchLabels ?? {}),
         type: "smoothstep",
@@ -272,6 +361,7 @@ export function enrichEdges(state: FlowState): FlowEdge[] {
     }
     return {
       ...e,
+      label,
       ...handles,
       ...(branchLabels ?? {}),
       type: "smoothstep",
