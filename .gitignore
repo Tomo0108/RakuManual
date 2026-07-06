@@ -8,3 +8,4 @@ dev-dist/
 .env
 .env.*
 !.env.example
+.vercel
