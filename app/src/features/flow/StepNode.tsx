@@ -16,6 +16,7 @@ const KIND_LABEL: Record<StepKind, string> = {
 export interface StepNodeContext {
   lanes: string[]
   onRename: (id: string, label: string) => void
+  locked?: boolean
 }
 
 let ctx: StepNodeContext = { lanes: [], onRename: () => {} }
@@ -99,6 +100,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   }
 
   const startEdit = (e: React.MouseEvent) => {
+    if (ctx.locked) return
     e.stopPropagation()
     setDraft(data.label)
     setEditing(true)
@@ -202,6 +204,12 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
             { id: "no", top: "72%" },
           ]}
         />
+        <span className="pointer-events-none absolute -right-7 top-[28%] z-20 -translate-y-1/2 text-[9px] font-semibold text-primary">
+          はい
+        </span>
+        <span className="pointer-events-none absolute -right-7 top-[72%] z-20 -translate-y-1/2 text-[9px] font-semibold text-rose-600">
+          いいえ
+        </span>
         <div
           className={cn(
             "absolute inset-0 border-2 border-amber-400 bg-amber-50/90 shadow-sm",

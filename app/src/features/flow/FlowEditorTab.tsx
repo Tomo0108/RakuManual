@@ -20,6 +20,8 @@ import {
   Diamond,
   Focus,
   ListChecks,
+  Lock,
+  LockOpen,
   Plus,
   Redo2,
   Sparkles,
@@ -59,7 +61,11 @@ import {
   LANE_ROW_HEIGHT,
   NODE_DIMS,
   enrichEdges,
-  gridDimensions,
+  flowContentBounds,
+  flowPanXRange,
+  clampFlowPanX,
+  ensureDecisionEdgeLabel,
+  DECISION_HANDLE,
   needsInitialLayout,
   normalizeColumnSystems,
   snapNodePosition,
@@ -107,23 +113,12 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [generating, setGenerating] = useState(false)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
+  const [isLocked, setIsLocked] = useState(false)
   const [viewport, setViewport] = useState<FlowViewport>({ x: 0, y: 0, zoom: 1 })
   const dragSnapshot = useRef<FlowState | null>(null)
   const rfRef = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(0)
-
-  const fitCanvas = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      rfRef.current?.fitView({
-        padding: isMobile ? 0.06 : 0.15,
-        maxZoom: isMobile ? 1.35 : 1,
-        minZoom: 0.1,
-      })
-      const vp = rfRef.current?.getViewport()
-      if (vp) setViewport(vp)
-    })
-  }, [isMobile])
 
   const zoomBy = useCallback((factor: number) => {
     const inst = rfRef.current
@@ -144,18 +139,61 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   const minimapH = isMobile ? 96 : FLOW_MINIMAP_HEIGHT
 
-  const flowContentWidth = gridDimensions(
-    flow.lanes.length || 1,
-    flow.layoutMeta?.columnCount ?? 1,
-  ).width
+  const previewFlow = useMemo(
+    () => (proposal ? polishFlow(proposal.preview(flow)) : flow),
+    [proposal, flow],
+  )
 
-  const panFlowX = useCallback((x: number) => {
-    const inst = rfRef.current
-    if (!inst) return
-    const vp = inst.getViewport()
-    inst.setViewport({ ...vp, x })
-    setViewport({ ...vp, x })
-  }, [])
+  const flowBounds = useMemo(() => flowContentBounds(previewFlow), [previewFlow])
+  const panXRange = useMemo(
+    () => flowPanXRange(flowBounds, canvasWidth, viewport.zoom),
+    [flowBounds, canvasWidth, viewport.zoom],
+  )
+  const translateExtent = useMemo(
+    (): [[number, number], [number, number]] => [
+      [flowBounds.minX, flowBounds.minY],
+      [flowBounds.minX + flowBounds.width, flowBounds.minY + flowBounds.height],
+    ],
+    [flowBounds],
+  )
+
+  const isEditingDisabled = isLocked || !!proposal
+
+  const clampViewport = useCallback(
+    (vp: FlowViewport): FlowViewport => {
+      if (canvasWidth <= 0) return vp
+      return { ...vp, x: clampFlowPanX(vp.x, flowBounds, canvasWidth, vp.zoom) }
+    },
+    [canvasWidth, flowBounds],
+  )
+
+  const panFlowX = useCallback(
+    (x: number) => {
+      const inst = rfRef.current
+      if (!inst || canvasWidth <= 0) return
+      const vp = inst.getViewport()
+      const next = clampViewport({ ...vp, x })
+      inst.setViewport(next)
+      setViewport(next)
+    },
+    [canvasWidth, clampViewport],
+  )
+
+  const fitCanvas = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      rfRef.current?.fitView({
+        padding: isMobile ? 0.06 : 0.15,
+        maxZoom: isMobile ? 1.35 : 1,
+        minZoom: 0.1,
+      })
+      const vp = rfRef.current?.getViewport()
+      if (vp) {
+        const clamped = clampViewport(vp)
+        if (clamped.x !== vp.x) rfRef.current?.setViewport(clamped)
+        setViewport(clamped)
+      }
+    })
+  }, [isMobile, clampViewport])
 
   const didFitRef = useRef(false)
 
@@ -175,6 +213,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setRedoStack([])
     setProposal(null)
     setInstruction("")
+    setIsLocked(false)
     didFitRef.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps -- プロジェクト切替時のみ
   }, [project.id])
@@ -239,18 +278,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault()
+        if (isEditingDisabled) return
         if (e.shiftKey) redo()
         else undo()
       }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [undo, redo])
+  }, [undo, redo, isEditingDisabled])
 
   /* ノード名のその場編集(StepNodeから呼ばれる) */
   useEffect(() => {
     setStepNodeContext({
       lanes: flow.lanes,
+      locked: isEditingDisabled,
       onRename: (id, label) => {
         commit((s) => ({
           ...s,
@@ -260,7 +301,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         }))
       },
     })
-  }, [flow.lanes, commit])
+  }, [flow.lanes, commit, isEditingDisabled])
 
   /* React Flow のドラッグ等の変更 */
   const onNodesChange = useCallback(
@@ -336,7 +377,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   const onConnect = useCallback(
     (conn: Connection) => {
-      commit((s) => polishFlow({ ...s, edges: addEdge(conn, s.edges) as FlowState["edges"] }))
+      commit((s) => {
+        const newEdges = addEdge(conn, s.edges) as FlowState["edges"]
+        const added = newEdges[newEdges.length - 1]
+        const src = s.nodes.find((n) => n.id === conn.source)
+        if (!src || src.data.kind !== "decision" || !added) {
+          return polishFlow({ ...s, edges: newEdges })
+        }
+        const label = ensureDecisionEdgeLabel(added, src, newEdges)
+        const sourceHandle = label === "いいえ" ? DECISION_HANDLE.no : DECISION_HANDLE.yes
+        const edges = newEdges.map((e, i) =>
+          i === newEdges.length - 1 ? { ...e, label, sourceHandle } : e,
+        )
+        return polishFlow({ ...s, edges })
+      })
     },
     [commit],
   )
@@ -429,11 +483,6 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       setAiThinking(false)
     }, 700)
   }
-
-  const previewFlow = useMemo(
-    () => (proposal ? polishFlow(proposal.preview(flow)) : flow),
-    [proposal, flow],
-  )
 
   const approveProposal = () => {
     if (!proposal) return
@@ -557,11 +606,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     <div className="flex h-full flex-col">
       {/* ツールバー */}
       <div className="scrollbar-none scroll-touch flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1.5 md:gap-1.5 md:px-4 md:py-2">
-        <ToolButton label="ステップを追加" onClick={() => addStep("process")} iconOnly={isMobile}>
+        <ToolButton label="ステップを追加" onClick={() => addStep("process")} iconOnly={isMobile} disabled={isEditingDisabled}>
           <Plus className="size-4" />
           {!isMobile && "ステップ"}
         </ToolButton>
-        <ToolButton label="条件分岐を追加" onClick={() => addStep("decision")} iconOnly={isMobile}>
+        <ToolButton label="条件分岐を追加" onClick={() => addStep("decision")} iconOnly={isMobile} disabled={isEditingDisabled}>
           <Diamond className="size-4" />
           {!isMobile && "分岐"}
         </ToolButton>
@@ -569,25 +618,25 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         <ToolButton
           label="選択中の要素を削除(Delete)"
           onClick={deleteSelected}
-          disabled={selectedNodes.length === 0 && selectedEdges.length === 0}
+          disabled={isEditingDisabled || (selectedNodes.length === 0 && selectedEdges.length === 0)}
           iconOnly={isMobile}
         >
           <Trash2 className="size-4" />
         </ToolButton>
-        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={undoStack.length === 0} iconOnly={isMobile}>
+        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0} iconOnly={isMobile}>
           <Undo2 className="size-4" />
         </ToolButton>
-        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={redoStack.length === 0} iconOnly={isMobile}>
+        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0} iconOnly={isMobile}>
           <Redo2 className="size-4" />
         </ToolButton>
         {!isMobile && (
           <>
             <Separator orientation="vertical" className="mx-1 !h-5" />
-            <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout}>
+            <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout} disabled={isEditingDisabled}>
               <AlignCenterVertical className="size-4" />
               自動整列
             </ToolButton>
-            <ToolButton label="ヒアリング回答からフロー図を再生成(手動修正は保護)" onClick={() => setRegenConfirmOpen(true)}>
+            <ToolButton label="ヒアリング回答からフロー図を再生成(手動修正は保護)" onClick={() => setRegenConfirmOpen(true)} disabled={isEditingDisabled}>
               <Sparkles className="size-4" />
               再生成
             </ToolButton>
@@ -600,8 +649,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-2 pl-1">
+          <ToolButton
+            label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
+            onClick={() => setIsLocked((v) => !v)}
+            disabled={!!proposal}
+            iconOnly={isMobile}
+          >
+            {isLocked ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+            {!isMobile && (isLocked ? "編集" : "ロック")}
+          </ToolButton>
           {!isMobile && (
-            <span className="hidden text-[11px] text-muted-foreground lg:inline">編集内容は自動保存されます</span>
+            <span className="hidden text-[11px] text-muted-foreground lg:inline">
+              {isLocked ? "閲覧モード" : "編集内容は自動保存されます"}
+            </span>
           )}
           <Button size={isMobile ? "sm" : "sm"} className="h-8 gap-1 px-2.5 whitespace-nowrap md:gap-1.5 md:px-3" onClick={confirmFlow}>
             <ListChecks className="size-4" />
@@ -643,11 +703,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                     setViewport(inst.getViewport())
                   }}
                   onMove={(_, vp) => setViewport(vp)}
-                  onMoveEnd={(_, vp) => setViewport(vp)}
-                  onNodesChange={proposal ? undefined : onNodesChange}
-                  onEdgesChange={proposal ? undefined : onEdgesChange}
-                  onConnect={proposal ? undefined : onConnect}
+                  onMoveEnd={(_, vp) => {
+                    const clamped = clampViewport(vp)
+                    if (clamped.x !== vp.x) rfRef.current?.setViewport(clamped)
+                    setViewport(clamped)
+                  }}
+                  onNodesChange={isEditingDisabled ? undefined : onNodesChange}
+                  onEdgesChange={isEditingDisabled ? undefined : onEdgesChange}
+                  onConnect={isEditingDisabled ? undefined : onConnect}
                   nodeTypes={nodeTypes}
+                  nodesDraggable={!isEditingDisabled}
+                  nodesConnectable={!isEditingDisabled}
+                  elementsSelectable={!isEditingDisabled}
+                  translateExtent={translateExtent}
                   fitView
                   fitViewOptions={{
                     padding: isMobile ? 0.06 : 0.15,
@@ -659,7 +727,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   zoomOnPinch
                   zoomOnScroll={!isMobile}
                   panOnScroll={false}
-                  deleteKeyCode={proposal ? null : ["Backspace", "Delete"]}
+                  deleteKeyCode={isEditingDisabled ? null : ["Backspace", "Delete"]}
                   proOptions={{ hideAttribution: true }}
                   defaultEdgeOptions={{
                     type: "smoothstep",
@@ -711,9 +779,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
               {!proposal && (
                 <div className="pointer-events-none absolute bottom-2 left-2 z-40 max-w-[calc(100%-10rem)] rounded-md border bg-background/90 px-2.5 py-1 text-[10px] text-muted-foreground shadow-xs backdrop-blur md:max-w-[calc(100%-10rem)]">
-                  {isMobile
-                    ? "ピンチで拡大 / ドラッグで移動 / 下部バーで左右移動"
-                    : "左→右に進行 / ダブルクリックで編集 / 下部バーで左右移動"}
+                  {isLocked
+                    ? "ロック中 — 編集するにはツールバーのロックを解除"
+                    : isMobile
+                      ? "ピンチで拡大 / ドラッグで移動 / 下部バーで移動"
+                      : "左→右に進行 / ダブルクリックで編集 / 下部バーで移動"}
                 </div>
               )}
 
@@ -744,8 +814,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             </div>
             <FlowPanBar
               viewport={viewport}
-              contentWidth={flowContentWidth}
+              contentWidth={flowBounds.width}
               viewWidth={canvasWidth}
+              panMinX={panXRange.min}
+              panMaxX={panXRange.max}
               onPanX={panFlowX}
             />
           </div>
@@ -756,8 +828,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           <SystemAxisPanel
             columnSystems={columnSystems}
             viewport={viewport}
-            onUpdateColumn={proposal ? undefined : updateColumnSystem}
-            readOnly={!!proposal}
+            onUpdateColumn={isEditingDisabled ? undefined : updateColumnSystem}
+            readOnly={isEditingDisabled}
           />
         )}
       </div>
