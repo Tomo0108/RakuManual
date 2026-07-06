@@ -99,7 +99,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
         </div>
 
         {/* メッセージ */}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div ref={scrollRef} className="scroll-touch min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           <div className="mx-auto flex max-w-2xl flex-col gap-5">
             <AiBubble>
               こんにちは!「{project.name}」のマニュアル作成をお手伝いします。
@@ -270,7 +270,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
           <div className="text-sm font-semibold">回答一覧</div>
           <div className="text-xs text-muted-foreground">クリックで内容を確認・修正できます</div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-3">
           <div className="flex flex-col gap-1.5">
             {HEARING_QUESTIONS.map((q, i) => {
               const a = answers.find((x) => x.questionId === q.id)

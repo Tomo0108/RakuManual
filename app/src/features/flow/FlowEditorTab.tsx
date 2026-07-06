@@ -529,7 +529,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   return (
     <div className="flex h-full flex-col">
       {/* ツールバー */}
-      <div className="flex items-center gap-1.5 border-b bg-background px-4 py-2">
+      <div className="scrollbar-none scroll-touch flex items-center gap-1.5 overflow-x-auto border-b bg-background px-3 py-2 md:px-4">
         <ToolButton label="ステップを追加" onClick={() => addStep("process")}>
           <Plus className="size-4" />
           ステップ
@@ -562,9 +562,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           再生成
         </ToolButton>
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">編集内容は自動保存されます</span>
-          <Button size="sm" className="gap-1.5" onClick={confirmFlow}>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span className="hidden text-[11px] text-muted-foreground lg:inline">編集内容は自動保存されます</span>
+          <Button size="sm" className="gap-1.5 whitespace-nowrap" onClick={confirmFlow}>
             <ListChecks className="size-4" />
             フロー図を確定して深掘りへ
           </Button>

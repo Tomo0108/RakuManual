@@ -67,7 +67,7 @@ export function QAChatPage({ onOpenProject }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b px-6 py-4">
+      <header className="border-b px-4 py-3 md:px-6 md:py-4">
         <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
           <MessageCircleQuestion className="size-5 text-primary" />
           業務QAチャット
@@ -77,7 +77,7 @@ export function QAChatPage({ onOpenProject }: Props) {
         </p>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div ref={scrollRef} className="scroll-touch min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.length === 0 && (
             <div className="mt-8 text-center">
@@ -161,7 +161,7 @@ export function QAChatPage({ onOpenProject }: Props) {
         </div>
       </div>
 
-      <div className="border-t px-6 py-4">
+      <div className="border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 md:py-4">
         <div className="mx-auto flex max-w-2xl gap-2">
           <Input
             value={input}

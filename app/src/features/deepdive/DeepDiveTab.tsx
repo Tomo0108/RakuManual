@@ -119,7 +119,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
             {doneCount} / {items.length} 完了 ・ 好きな順で回答できます
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-3">
           <div className="flex flex-col gap-1.5">
             {items.map((item) => (
               <button
@@ -222,7 +222,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
               </Select>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="scroll-touch min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
               <div className="mx-auto flex max-w-2xl flex-col gap-4">
                 {selected.status === "recheck" && (
                   <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">

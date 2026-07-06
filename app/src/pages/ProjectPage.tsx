@@ -11,6 +11,7 @@ import { FlowEditorTab } from "@/features/flow/FlowEditorTab"
 import { DeepDiveTab } from "@/features/deepdive/DeepDiveTab"
 import { ManualTab } from "@/features/manual/ManualTab"
 import { ExportTab } from "@/features/export/ExportTab"
+import { cn } from "@/lib/utils"
 
 export type UpdateProject = (id: string, updater: (p: Project) => Project) => void
 
@@ -35,25 +36,26 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
   return (
     <div className="flex h-full flex-col">
       {/* ヘッダー */}
-      <header className="border-b bg-background px-6 pt-4">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Button variant="ghost" size="sm" className="-ml-2 h-7 gap-1 px-2" onClick={onBack}>
+      <header className="border-b bg-background px-4 pt-3 md:px-6 md:pt-4">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Button variant="ghost" size="sm" className="-ml-2 h-8 shrink-0 gap-1 px-2" onClick={onBack}>
             <ArrowLeft className="size-3.5" />
-            プロジェクト一覧
+            <span className="hidden sm:inline">プロジェクト一覧</span>
+            <span className="sm:hidden">戻る</span>
           </Button>
-          <ChevronRight className="size-3.5" />
-          <span className="font-medium text-foreground">{project.name}</span>
-          <Badge variant="outline" className={STATUS_BADGE[project.status]}>
+          <ChevronRight className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate font-medium text-foreground">{project.name}</span>
+          <Badge variant="outline" className={cn("shrink-0", STATUS_BADGE[project.status])}>
             {STATUS_LABEL[project.status]}
           </Badge>
         </div>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as ProjectTab)} className="mt-3">
-          <TabsList className="h-auto w-full justify-start gap-1 rounded-lg bg-muted/40 p-1">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as ProjectTab)} className="mt-2 md:mt-3">
+          <TabsList className="scrollbar-none scroll-touch h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg bg-muted/40 p-1 flex-nowrap">
             {TAB_ITEMS.map((t) => (
               <TabsTrigger
                 key={t.id}
                 value={t.id}
-                className="rounded-md px-4 py-2 text-[13px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:bg-primary/85 data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                className="shrink-0 rounded-md px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:bg-primary/85 data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-4 md:text-[13px]"
               >
                 {t.label}
               </TabsTrigger>
