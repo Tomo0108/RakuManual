@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Check, Download, FileText, Presentation } from "lucide-react"
 import type { Project } from "@/lib/types"
-import { Button } from "@/components/ui/button"
+import { IconAction } from "@/components/ui/icon-action"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import {
@@ -150,10 +150,15 @@ export function ExportTab({ project }: Props) {
         </Card>
 
         <div className="mt-6 flex items-center gap-3">
-          <Button className="gap-1.5" onClick={doExport} disabled={exporting || project.sections.length === 0}>
+          <IconAction
+            label={exporting ? "出力中…" : `${format === "pdf" ? "PDF" : "PowerPoint"} を出力`}
+            variant="default"
+            className="h-9"
+            disabled={exporting || project.sections.length === 0}
+            onClick={doExport}
+          >
             <Download className="size-4" />
-            {exporting ? "出力中…" : `${format === "pdf" ? "PDF" : "PowerPoint"} を出力`}
-          </Button>
+          </IconAction>
           {project.sections.length === 0 && (
             <span className="text-xs text-muted-foreground">マニュアルを生成すると出力できます</span>
           )}

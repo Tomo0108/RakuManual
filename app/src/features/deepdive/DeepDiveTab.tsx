@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react"
-import { AlertTriangle, ArrowLeft, BookCheck, Check, ChevronRight, Send } from "lucide-react"
+import { AlertTriangle, ArrowLeft, BookCheck, Check, ChevronRight, Send, Workflow } from "lucide-react"
 import type { DeepDiveItem, DeepDiveStatus, Project, ProjectTab } from "@/lib/types"
 import { DEEPDIVE_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { IconAction } from "@/components/ui/icon-action"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
@@ -121,9 +121,9 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
           <p className="mt-2 text-sm text-muted-foreground">
             先にフロー図を確定すると、各ステップの詳細を収集する深掘りヒアリングが始まります。
           </p>
-          <Button className="mt-4" onClick={() => setTab("flow")}>
-            フロー図へ進む
-          </Button>
+          <IconAction label="フロー図へ進む" variant="default" className="mt-4 h-9" onClick={() => setTab("flow")}>
+            <Workflow className="size-4" />
+          </IconAction>
         </div>
       </div>
     )
@@ -251,10 +251,15 @@ function StepListPanel({
         </div>
       </div>
       <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <Button className="w-full gap-1.5" disabled={!canGenerate} onClick={onGoToManual}>
+        <IconAction
+          label="マニュアル生成へ進む"
+          variant="default"
+          className="h-9 w-full"
+          disabled={!canGenerate}
+          onClick={onGoToManual}
+        >
           <BookCheck className="size-4" />
-          マニュアル生成へ進む
-        </Button>
+        </IconAction>
         {doneCount < items.length && (
           <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
             未完了のステップはプレースホルダとして扱われます
@@ -323,10 +328,9 @@ function StepDetailPanel({
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <div className={cn("border-b px-4 py-3.5 md:px-6", isMobile && "flex flex-col gap-3")}>
         {isMobile && onBack && (
-          <Button variant="ghost" size="sm" className="-ml-2 h-9 gap-1 px-2" onClick={onBack}>
+          <IconAction label="ステップ一覧" variant="ghost" size="sm" className="-ml-2 h-9" onClick={onBack}>
             <ArrowLeft className="size-4" />
-            ステップ一覧
-          </Button>
+          </IconAction>
         )}
         <div className={cn("flex gap-3", isMobile ? "flex-col" : "items-center")}>
           <div className="min-w-0 flex-1">
@@ -357,15 +361,15 @@ function StepDetailPanel({
               <div>
                 フロー図が修正されたため、このステップの回答は「要確認」になっています。
                 内容を見直して、問題なければ完了にしてください。
-                <Button
-                  size="sm"
+                <IconAction
+                  label="確認済みにする"
                   variant="outline"
-                  className="mt-2 block h-7 border-amber-300 bg-white text-xs"
+                  size="sm"
+                  className="mt-2 h-7 border-amber-300 bg-white"
                   onClick={() => onUpdate((d) => ({ ...d, status: "done" }))}
                 >
                   <Check className="size-3.5" />
-                  確認済みにする
-                </Button>
+                </IconAction>
               </div>
             </div>
           )}
@@ -409,10 +413,15 @@ function StepDetailPanel({
             placeholder="回答を入力…"
             className="mt-2 min-h-16 bg-background"
           />
-          <Button className="mt-2 w-full gap-1.5" disabled={!draft.trim()} onClick={onSubmit}>
+          <IconAction
+            label="回答する"
+            variant="default"
+            className="mt-2 h-9 w-full"
+            disabled={!draft.trim()}
+            onClick={onSubmit}
+          >
             <Send className="size-4" />
-            回答する
-          </Button>
+          </IconAction>
         </div>
       )}
     </div>
@@ -451,10 +460,9 @@ function QuestionInput({
       />
       <div className="mt-2 flex items-center justify-between">
         <span className="text-[11px] text-muted-foreground">⌘+Enter で送信</span>
-        <Button size="sm" className="gap-1" disabled={!draft.trim()} onClick={onSubmit}>
+        <IconAction label="回答する" variant="default" size="sm" className="h-8" disabled={!draft.trim()} onClick={onSubmit}>
           <Send className="size-3.5" />
-          回答する
-        </Button>
+        </IconAction>
       </div>
     </div>
   )

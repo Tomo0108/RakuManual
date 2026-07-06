@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ExternalLink, Link2, Pencil } from "lucide-react"
+import { Check, ExternalLink, Pencil, X } from "lucide-react"
 import {
   COL_WIDTH,
   FLOW_ORIGIN_X,
@@ -13,7 +13,7 @@ import {
 } from "./flow-layout"
 import type { ColumnSystemEntry, FlowLayoutMeta } from "@/lib/types"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { IconAction } from "@/components/ui/icon-action"
 import {
   Dialog,
   DialogContent,
@@ -229,13 +229,12 @@ function SystemCell({
                 />
               </div>
               <DialogFooter>
-                <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
-                  キャンセル
-                </Button>
-                <Button size="sm" className="gap-1" onClick={save}>
-                  <Link2 className="size-3.5" />
-                  保存
-                </Button>
+                <IconAction label="キャンセル" variant="outline" size="sm" className="h-8" onClick={() => setOpen(false)}>
+                  <X className="size-3.5" />
+                </IconAction>
+                <IconAction label="保存" variant="default" size="sm" className="h-8" onClick={save}>
+                  <Check className="size-3.5" />
+                </IconAction>
               </DialogFooter>
             </DialogContent>
           </Dialog>
