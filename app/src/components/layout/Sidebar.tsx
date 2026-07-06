@@ -12,7 +12,7 @@ interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   return (
-    <aside className="hidden w-60 shrink-0 border-r md:flex">
+    <aside className="hidden w-60 shrink-0 border-r border-sidebar-border md:flex">
       <SidebarContent {...props} className="w-full" />
     </aside>
   )

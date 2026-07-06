@@ -26,7 +26,7 @@ function pageTitle(view: View, projects: Project[]): string {
 
 export function MobileHeader({ view, projects, onMenuOpen }: MobileHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-background px-3 pt-[env(safe-area-inset-top)] md:hidden">
+    <header className="page-header flex h-14 shrink-0 items-center gap-3 px-3 pt-[env(safe-area-inset-top)] md:hidden">
       <Button
         variant="ghost"
         size="icon"

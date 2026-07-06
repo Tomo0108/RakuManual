@@ -1,11 +1,11 @@
 import type { Project, ProjectStatus, ProjectTab } from "./types"
 
 export const STATUS_BADGE: Record<ProjectStatus, string> = {
-  hearing: "bg-amber-50 text-amber-700 border-amber-200",
-  flow: "bg-sky-50 text-sky-700 border-sky-200",
-  deepdive: "bg-violet-50 text-violet-700 border-violet-200",
-  manual: "bg-orange-50 text-orange-700 border-orange-200",
-  published: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  hearing: "status-hearing",
+  flow: "status-flow",
+  deepdive: "status-deepdive",
+  manual: "status-manual",
+  published: "status-published",
 }
 
 /** ステータスに応じた「続きから」タブ */

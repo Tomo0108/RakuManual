@@ -36,7 +36,7 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
   return (
     <div className="flex h-full flex-col">
       {/* ヘッダー */}
-      <header className="border-b bg-background px-4 pt-3 md:px-6 md:pt-4">
+      <header className="page-header px-4 pt-3 md:px-6 md:pt-4">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Button variant="ghost" size="sm" className="-ml-2 h-8 shrink-0 gap-1 px-2" onClick={onBack}>
             <ArrowLeft className="size-3.5" />
@@ -50,12 +50,12 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
           </Badge>
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ProjectTab)} className="mt-2 md:mt-3">
-          <TabsList className="scrollbar-none scroll-touch h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg bg-muted/40 p-1 flex-nowrap">
+          <TabsList className="scrollbar-none scroll-touch h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg bg-secondary/70 p-1 flex-nowrap">
             {TAB_ITEMS.map((t) => (
               <TabsTrigger
                 key={t.id}
                 value={t.id}
-                className="shrink-0 rounded-md px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:bg-primary/85 data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-4 md:text-[13px]"
+                className="shrink-0 rounded-md px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-4 md:text-[13px]"
               >
                 {t.label}
               </TabsTrigger>
