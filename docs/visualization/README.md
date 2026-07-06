@@ -1,11 +1,20 @@
 # 要件定義書 ビジュアライゼーション
 
-`要件定義書.md` を shadcn/ui ベースの白基調モダンUIで表示するWebアプリです。
+`docs/要件定義書.md` を shadcn/ui ベースの白基調モダンUIで表示するWebアプリです。
 
 ## 起動方法
 
+リポジトリルートから:
+
 ```bash
-cd visualization
+npm install
+npm run dev:docs
+```
+
+またはこのディレクトリから:
+
+```bash
+cd docs/visualization
 npm install
 npm run dev
 ```
@@ -15,7 +24,7 @@ npm run dev
 ## 静的HTMLの生成
 
 ```bash
-npm run build
+npm run build:docs
 ```
 
 `dist/index.html` が生成されます。ローカルで確認する場合:

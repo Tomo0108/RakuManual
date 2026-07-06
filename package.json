@@ -1,0 +1,17 @@
+{
+  "name": "rakumanual",
+  "private": true,
+  "workspaces": [
+    "app",
+    "docs/visualization"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w app",
+    "build": "npm run build -w app",
+    "dev:docs": "npm run dev -w visualization",
+    "build:docs": "npm run build -w visualization"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
