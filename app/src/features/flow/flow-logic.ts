@@ -164,12 +164,20 @@ function previewInsertBetween(s: FlowState, aId: string, bId: string, label: str
   const a = s.nodes.find((n) => n.id === aId)!
   const b = s.nodes.find((n) => n.id === bId)!
   const node = makeNode(label, a.data.lane, "process", midpoint(a, b), { diff: "add" })
+  const origEdge = s.edges.find((e) => e.source === aId && e.target === bId)
+  const origLabel = typeof origEdge?.label === "string" ? origEdge.label : undefined
   return {
     ...s,
     nodes: [...s.nodes, node],
     edges: [
       ...s.edges.filter((e) => !(e.source === aId && e.target === bId)),
-      { id: uid("e"), source: aId, target: node.id, animated: true },
+      {
+        id: uid("e"),
+        source: aId,
+        target: node.id,
+        animated: true,
+        ...(origLabel ? { label: origLabel, sourceHandle: origEdge?.sourceHandle } : {}),
+      },
       { id: uid("e"), source: node.id, target: bId, animated: true },
     ],
   }
@@ -213,7 +221,12 @@ export function removeNodeAndReconnect(s: FlowState, nodeId: string): FlowState 
   for (const i of incoming) {
     for (const o of outgoing) {
       if (i.source !== o.target) {
-        bridges.push({ id: uid("e"), source: i.source, target: o.target })
+        bridges.push({
+          id: uid("e"),
+          source: i.source,
+          target: o.target,
+          ...(typeof i.label === "string" ? { label: i.label, sourceHandle: i.sourceHandle } : {}),
+        })
       }
     }
   }
