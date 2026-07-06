@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   Check,
+  ChevronDown,
   Image as ImageIcon,
   ListTree,
   Pencil,
@@ -18,8 +19,9 @@ import { SECTION_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now, today, uid } from "@/lib/project-utils"
 import { Badge } from "@/components/ui/badge"
-import { IconAction } from "@/components/ui/icon-action"
+import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 
@@ -113,9 +115,10 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               マニュアルはフロー図のセクション単位で生成されます。先にフロー図を作成・確定してください。
             </p>
-            <IconAction label="フロー図へ進む" variant="default" className="mt-4 h-9" onClick={() => setTab("flow")}>
+            <Button className="mt-4 gap-1.5" onClick={() => setTab("flow")}>
               <Workflow className="size-4" />
-            </IconAction>
+              フロー図へ進む
+            </Button>
           </div>
         </div>
       )
@@ -136,15 +139,10 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               深掘りヒアリングが未回答のため、生成してもプレースホルダが多くなります
             </p>
           )}
-          <IconAction
-            label={generating ? "生成中…" : "マニュアルを生成する"}
-            variant="default"
-            className="mt-5 h-9"
-            disabled={generating}
-            onClick={generateSections}
-          >
+          <Button className="mt-5 gap-1.5" onClick={generateSections} disabled={generating}>
             <Sparkles className="size-4" />
-          </IconAction>
+            {generating ? "生成中…" : "マニュアルを生成する"}
+          </Button>
         </div>
       </div>
     )
@@ -320,55 +318,54 @@ function SectionEditor({
 
   const actionButtons = (
     <>
-      <IconAction
-        label={regenerating ? "再生成中…" : "AI再生成"}
+      <Button
         variant="outline"
-        className={cn("h-10", isMobile && "flex-1")}
-        disabled={regenerating}
+        size={isMobile ? "default" : "sm"}
+        className={cn("gap-1", isMobile && "h-10 flex-1")}
         onClick={regenerate}
+        disabled={regenerating}
       >
         <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-      </IconAction>
-      <IconAction
-        label={section.status === "approved" ? "承認済み" : "承認する"}
-        variant="default"
-        className={cn("h-10", isMobile && "flex-1")}
+        {regenerating ? "再生成中…" : "AI再生成"}
+      </Button>
+      <Button
+        size={isMobile ? "default" : "sm"}
+        className={cn("gap-1", isMobile && "h-10 flex-1")}
         disabled={!canApprove}
         onClick={approve}
       >
         <BadgeCheck className="size-4" />
-      </IconAction>
+        {section.status === "approved" ? "承認済み" : "承認する"}
+      </Button>
     </>
   )
 
   const desktopActions = (
     <div className="flex shrink-0 gap-2">
-      <IconAction
-        label={regenerating ? "再生成中…" : "AI再生成"}
-        variant="outline"
-        size="sm"
-        className="h-8"
-        disabled={regenerating}
-        onClick={regenerate}
-      >
-        <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-      </IconAction>
-      <IconAction
-        label={
-          confirms > 0
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
+            <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+            {regenerating ? "再生成中…" : "AI再生成"}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>このセクションのみ再生成します。他セクションには影響しません</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <Button size="sm" className="gap-1" disabled={!canApprove} onClick={approve}>
+              <BadgeCheck className="size-4" />
+              {section.status === "approved" ? "承認済み" : "承認する"}
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          {confirms > 0
             ? `「要確認」が ${confirms} 件残っているため承認できません`
-            : section.status === "approved"
-              ? "承認済み"
-              : "承認する"
-        }
-        variant="default"
-        size="sm"
-        className="h-8"
-        disabled={!canApprove}
-        onClick={approve}
-      >
-        <BadgeCheck className="size-4" />
-      </IconAction>
+            : "内容を確認して承認済みにします"}
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 
@@ -376,9 +373,10 @@ function SectionEditor({
     <div className={cn("flex h-full flex-col", !isMobile && "scroll-touch overflow-y-auto")}>
       <div className={cn("mx-auto w-full max-w-3xl flex-1 px-4 py-4 md:px-8 md:py-8", isMobile && "scroll-touch overflow-y-auto pb-4")}>
         {isMobile && onBack && (
-          <IconAction label="セクション一覧" variant="ghost" size="sm" className="-ml-2 mb-2 h-9" onClick={onBack}>
+          <Button variant="ghost" size="sm" className="-ml-2 mb-2 h-9 gap-1 px-2" onClick={onBack}>
             <ArrowLeft className="size-4" />
-          </IconAction>
+            セクション一覧
+          </Button>
         )}
 
         <div className={cn("flex gap-4", isMobile ? "flex-col" : "items-start justify-between")}>
@@ -483,12 +481,14 @@ function BlockView({
         <div>
           <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="min-h-20 text-sm" autoFocus />
           <div className="mt-2 flex justify-end gap-2">
-            <IconAction label="キャンセル" variant="ghost" size="sm" className="h-8" onClick={onCancel}>
+            <Button size="sm" variant="ghost" onClick={onCancel}>
               <X className="size-3.5" />
-            </IconAction>
-            <IconAction label="保存" variant="default" size="sm" className="h-8" disabled={!draft.trim()} onClick={onSave}>
+              キャンセル
+            </Button>
+            <Button size="sm" onClick={onSave} disabled={!draft.trim()}>
               <Check className="size-3.5" />
-            </IconAction>
+              保存
+            </Button>
           </div>
         </div>
       ) : (
@@ -520,18 +520,19 @@ function BlockView({
                     要確認: AIが推測で補完した内容です
                   </Badge>
                   <div className="flex flex-wrap gap-2">
-                    <IconAction
-                      label="内容OK"
-                      variant="outline"
+                    <Button
                       size="sm"
-                      className="h-9 border-amber-300 bg-white"
+                      variant="outline"
+                      className="h-9 gap-1 border-amber-300 bg-white px-3 text-[11px]"
                       onClick={onResolveConfirm}
                     >
                       <Check className="size-3.5" />
-                    </IconAction>
-                    <IconAction label="修正する" variant="outline" size="sm" className="h-9 bg-white" onClick={onStartEdit}>
+                      内容OK
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-9 gap-1 bg-white px-3 text-[11px]" onClick={onStartEdit}>
                       <Pencil className="size-3.5" />
-                    </IconAction>
+                      修正する
+                    </Button>
                   </div>
                 </div>
               )}
@@ -539,15 +540,14 @@ function BlockView({
               {/* 画像(ヘルプボタン方式 F-5): 本文レイアウトを崩さず展開 */}
               {block.image && (
                 <div className="mt-2">
-                    <IconAction
-                      label="画像を見る"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 rounded-full px-2.5"
-                      onClick={() => setImageOpen((v) => !v)}
-                    >
-                      <ImageIcon className="size-3" />
-                    </IconAction>
+                  <button
+                    onClick={() => setImageOpen((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/5"
+                  >
+                    <ImageIcon className="size-3" />
+                    画像を見る
+                    <ChevronDown className={cn("size-3 transition-transform", imageOpen && "rotate-180")} />
+                  </button>
                   {imageOpen && (
                     <figure className="mt-2 overflow-hidden rounded-lg border">
                       <div

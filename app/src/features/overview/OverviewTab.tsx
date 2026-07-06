@@ -11,7 +11,7 @@ import {
 import type { Project, ProjectTab } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { IconAction } from "@/components/ui/icon-action"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 interface Props {
@@ -107,14 +107,19 @@ export function OverviewTab({ project, setTab }: Props) {
                   <div className="text-sm font-semibold">{s.title}</div>
                   <div className="text-xs text-muted-foreground">{s.stat}</div>
                 </div>
-                <IconAction
-                  label={s.done ? "確認する" : "進める"}
-                  variant="ghost"
-                  size="sm"
-                  className="size-8 text-primary"
-                >
-                  {s.done ? <Eye className="size-4" /> : <ArrowRight className="size-4" />}
-                </IconAction>
+                <Button variant="ghost" size="sm" className="gap-1 text-primary">
+                  {s.done ? (
+                    <>
+                      <Eye className="size-3.5" />
+                      確認
+                    </>
+                  ) : (
+                    <>
+                      進む
+                      <ArrowRight className="size-3.5" />
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           ))}
