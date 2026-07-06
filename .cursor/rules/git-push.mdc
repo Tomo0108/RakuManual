@@ -1,0 +1,11 @@
+---
+description: 作業完了後は確認なしでコミット・pushする
+alwaysApply: true
+---
+
+# Git push 方針
+
+- 実装・修正が完了したら、ユーザーに毎回確認せず **コミットして `origin` に push する**
+- コミットメッセージは一行で簡潔に（日本語）
+- 破壊的 git 操作（force push 等）は従来どおり明示指示がある場合のみ
+- push 不要な作業（質問のみ・レビューのみ）では commit/push しない
