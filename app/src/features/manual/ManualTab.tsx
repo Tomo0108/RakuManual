@@ -150,7 +150,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             {sections.filter((s) => s.status === "approved").length} / {sections.length} 承認済み
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-3">
           <div className="flex flex-col gap-1.5">
             {sections.map((s) => {
               const confirms = s.blocks.filter((b) => b.needsConfirm).length
@@ -186,7 +186,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
       </aside>
 
       {/* セクション内容 */}
-      <div className="min-w-0 flex-1 overflow-y-auto">
+      <div className="scroll-touch min-w-0 flex-1 overflow-y-auto">
         {selected && (
           <SectionEditor
             key={selected.id}

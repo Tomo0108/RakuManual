@@ -71,8 +71,8 @@ export function OverviewTab({ project, setTab }: Props) {
   ]
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-8 py-8">
+    <div className="scroll-touch h-full overflow-y-auto">
+      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
         <p className="text-sm text-muted-foreground">{project.description}</p>
         {project.reviewDeadline && (
           <div className="mt-3 flex items-center gap-2 text-sm">

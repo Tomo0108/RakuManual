@@ -67,18 +67,18 @@ export function ProjectList({ projects, onOpen, onCreate }: Props) {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-8 py-8">
-        <div className="flex items-end justify-between gap-4">
+    <div className="scroll-touch h-full overflow-y-auto">
+      <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">プロジェクト一覧</h1>
+            <h1 className="text-xl font-bold tracking-tight md:text-2xl">プロジェクト一覧</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               マニュアル1本 = 1プロジェクト。AIとの対話でマニュアルを作成できます。
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-1.5">
+              <Button className="w-full gap-1.5 sm:w-auto">
                 <Plus className="size-4" />
                 新規プロジェクト
               </Button>

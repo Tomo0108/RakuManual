@@ -43,8 +43,8 @@ export function ExportTab({ project }: Props) {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-8 py-8">
+    <div className="scroll-touch h-full overflow-y-auto">
+      <div className="mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-8">
         <h2 className="text-lg font-bold tracking-tight">エクスポート設定</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           マニュアルを PDF / PowerPoint 形式で出力します。社内テンプレートの体裁が適用されます。

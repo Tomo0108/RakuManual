@@ -68,11 +68,11 @@ export function FlowPanBar({ viewport, contentWidth, viewWidth, onPanX }: Props)
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2 border-t bg-muted/30 px-3 py-2">
+    <div className="flex shrink-0 items-center gap-2 border-t bg-muted/30 px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <MoveHorizontal className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <div
         ref={trackRef}
-        className="relative h-2 min-w-0 flex-1 cursor-pointer rounded-full bg-muted"
+        className="relative h-3 min-w-0 flex-1 cursor-pointer rounded-full bg-muted touch-none md:h-2"
         onPointerDown={onTrackDown}
         role="scrollbar"
         aria-label="フロー図を左右に移動"
@@ -81,7 +81,7 @@ export function FlowPanBar({ viewport, contentWidth, viewWidth, onPanX }: Props)
         aria-valuenow={Math.abs(viewport.x)}
       >
         <div
-          className="absolute top-0 h-full cursor-grab rounded-full border border-primary/30 bg-primary/25 active:cursor-grabbing"
+          className="absolute top-1/2 h-5 -translate-y-1/2 cursor-grab touch-none rounded-full border border-primary/30 bg-primary/25 active:cursor-grabbing md:h-full md:translate-y-0"
           style={{ width: thumbW, left: thumbLeft }}
           onPointerDown={onThumbDown}
           onPointerMove={onThumbMove}
