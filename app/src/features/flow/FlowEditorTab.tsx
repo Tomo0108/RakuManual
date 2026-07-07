@@ -70,6 +70,7 @@ import {
   syncLayoutMeta,
   nearestLaneIndex,
   dimForKind,
+  restackLaneColumnNodes,
 } from "./flow-layout"
 import { assignSectionNumbers } from "./flow-numbering"
 import { cn } from "@/lib/utils"
@@ -128,6 +129,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
   const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
   const [viewport, setViewport] = useState<FlowViewport>({ x: 0, y: 0, zoom: 1 })
+  const [mobileTeamAxisVisible, setMobileTeamAxisVisible] = useState(true)
+  const mobileTeamAxisTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dragSnapshot = useRef<FlowState | null>(null)
   const rfRef = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -171,6 +174,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   )
 
   const isEditingDisabled = isLocked || !!proposal
+
+  const bumpMobileTeamAxis = useCallback(() => {
+    if (!isMobile) return
+    setMobileTeamAxisVisible(true)
+    if (mobileTeamAxisTimer.current) clearTimeout(mobileTeamAxisTimer.current)
+    mobileTeamAxisTimer.current = setTimeout(() => setMobileTeamAxisVisible(false), 3000)
+  }, [isMobile])
+
+  useEffect(() => {
+    return () => {
+      if (mobileTeamAxisTimer.current) clearTimeout(mobileTeamAxisTimer.current)
+    }
+  }, [])
 
   const clampViewport = useCallback(
     (vp: FlowViewport): FlowViewport => {
@@ -393,10 +409,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         const li = nearestLaneIndex(position.y, dims.h, laneCount)
         const lane = s.lanes[li] ?? s.lanes[0] ?? "担当者"
         const node = makeNode(connector.defaultLabel, lane, connector.kind, position)
+        const snapped = snapNodePosition(node, laneCount, s.lanes.length > 0 ? s.lanes : [lane], s.nodes)
+        const withNode = [
+          ...s.nodes,
+          {
+            ...node,
+            position: snapped.position,
+            data: { ...node.data, lane: snapped.lane, manual: true },
+          },
+        ]
         return polishFlow({
           ...s,
           lanes: s.lanes.length > 0 ? s.lanes : [lane],
-          nodes: [...s.nodes, node],
+          nodes: restackLaneColumnNodes(withNode, s.lanes.length > 0 ? s.lanes : [lane]),
         })
       })
       fitCanvas()
@@ -418,12 +443,22 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   /* React Flow のドラッグ等の変更 */
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      const dragStart = changes.some((c) => c.type === "position" && c.dragging)
+      let effective = changes
+      if (isEditingDisabled) {
+        effective = changes.filter((c) => c.type === "select")
+        if (effective.length === 0) return
+      }
+
+      if (effective.some((c) => c.type === "select")) {
+        bumpMobileTeamAxis()
+      }
+
+      const dragStart = effective.some((c) => c.type === "position" && c.dragging)
       if (dragStart && !dragSnapshot.current) {
         dragSnapshot.current = flow
       }
-      const dragEnd = changes.some((c) => c.type === "position" && c.dragging === false)
-      const hasRemove = changes.some((c) => c.type === "remove")
+      const dragEnd = effective.some((c) => c.type === "position" && c.dragging === false)
+      const hasRemove = effective.some((c) => c.type === "remove")
       if (hasRemove) {
         // Deleteキーによる削除もUndo可能にする
         setUndoStack((s) => [...s.slice(-49), flow])
@@ -431,14 +466,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       }
       setFlow((prev) => {
         const removedIds = new Set(
-          changes.filter((c) => c.type === "remove").map((c) => c.id),
+          effective.filter((c) => c.type === "remove").map((c) => c.id),
         )
-        let updatedNodes = applyNodeChanges(changes, prev.nodes) as FlowState["nodes"]
+        let updatedNodes = applyNodeChanges(effective, prev.nodes) as FlowState["nodes"]
 
         // ドラッグ終了時: 行・列スナップ + 担当チーム更新
         if (dragEnd) {
           updatedNodes = updatedNodes.map((n) => {
-            const posChange = changes.find(
+            const posChange = effective.find(
               (c) => c.type === "position" && c.id === n.id && c.dragging === false,
             )
             if (!posChange || posChange.type !== "position" || !posChange.position) return n
@@ -449,6 +484,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               data: { ...n.data, lane: snapped.lane, manual: true },
             }
           })
+          updatedNodes = restackLaneColumnNodes(updatedNodes, prev.lanes)
         }
 
         const next = polishFlow({
@@ -468,23 +504,29 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         setRedoStack([])
       }
     },
-    [flow, persist],
+    [flow, persist, isEditingDisabled, bumpMobileTeamAxis],
   )
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
-      const hasRemove = changes.some((c) => c.type === "remove")
+      let effective = changes
+      if (isEditingDisabled) {
+        effective = changes.filter((c) => c.type === "select")
+        if (effective.length === 0) return
+      }
+
+      const hasRemove = effective.some((c) => c.type === "remove")
       if (hasRemove) {
         setUndoStack((s) => [...s.slice(-49), flow])
         setRedoStack([])
       }
       setFlow((prev) => {
-        const next = { ...prev, edges: applyEdgeChanges(changes, prev.edges) as FlowState["edges"] }
+        const next = { ...prev, edges: applyEdgeChanges(effective, prev.edges) as FlowState["edges"] }
         if (hasRemove) persist(next)
         return next
       })
     },
-    [flow, persist],
+    [flow, persist, isEditingDisabled],
   )
 
   const onConnect = useCallback(
@@ -789,7 +831,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {!isMobile && <FlowCanvasHeader />}
-            <div ref={canvasRef} className="relative min-h-0 flex-1">
+            <div
+              ref={canvasRef}
+              className="relative min-h-0 flex-1"
+              onPointerDown={bumpMobileTeamAxis}
+            >
               <ReactFlowProvider>
                 {/* 行・列ガイド(フロー座標系) */}
                 <div
@@ -813,14 +859,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                     rfRef.current = inst
                     setViewport(inst.getViewport())
                   }}
-                  onMove={(_, vp) => setViewport(vp)}
+                  onMove={(_, vp) => {
+                    setViewport(vp)
+                    bumpMobileTeamAxis()
+                  }}
                   onMoveEnd={(_, vp) => {
                     const clamped = clampViewport(vp)
                     if (clamped.x !== vp.x) rfRef.current?.setViewport(clamped)
                     setViewport(clamped)
                   }}
-                  onNodesChange={isEditingDisabled ? undefined : onNodesChange}
-                  onEdgesChange={isEditingDisabled ? undefined : onEdgesChange}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
                   onConnect={isEditingDisabled ? undefined : onConnect}
                   onDragOver={onDragOver}
                   onDrop={onDrop}
@@ -851,9 +900,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   edgeTypes={edgeTypes}
                   nodesDraggable={!isEditingDisabled}
                   nodesConnectable={!isEditingDisabled}
-                  elementsSelectable={!isEditingDisabled}
+                  elementsSelectable={!proposal}
                   translateExtent={translateExtent}
-                  fitView
                   fitViewOptions={{
                     padding: isMobile ? 0.06 : 0.15,
                     maxZoom: isMobile ? 1.35 : 1,
@@ -899,6 +947,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                     nodes={previewFlow.nodes}
                     viewport={viewport}
                     activeLane={activeLane}
+                    visible={mobileTeamAxisVisible}
                   />
                 )}
                 {isMobile && activeLane && (
