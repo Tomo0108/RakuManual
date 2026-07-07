@@ -304,6 +304,29 @@ export function clampFlowPanX(
   return Math.max(min, Math.min(max, x))
 }
 
+/** ビューポート Y の移動可能範囲 */
+export function flowPanYRange(bounds: ReturnType<typeof flowContentBounds>, viewHeight: number, zoom: number) {
+  const scaledH = bounds.height * zoom
+  if (scaledH <= viewHeight) {
+    const centered = (viewHeight - scaledH) / 2 - bounds.minY * zoom
+    return { min: centered, max: centered }
+  }
+  return {
+    min: viewHeight - (bounds.minY + bounds.height) * zoom,
+    max: -bounds.minY * zoom,
+  }
+}
+
+export function clampFlowPanY(
+  y: number,
+  bounds: ReturnType<typeof flowContentBounds>,
+  viewHeight: number,
+  zoom: number,
+) {
+  const { min, max } = flowPanYRange(bounds, viewHeight, zoom)
+  return Math.max(min, Math.min(max, y))
+}
+
 function isNoLabel(label: string | undefined): boolean {
   return /いいえ|不要|否|×|偽|no/i.test(label ?? "")
 }
