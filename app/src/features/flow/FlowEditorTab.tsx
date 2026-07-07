@@ -125,7 +125,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [generating, setGenerating] = useState(false)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
-  const [isLocked, setIsLocked] = useState(false)
+  const [isLocked, setIsLocked] = useState(true)
   const [connectorPanelOpen, setConnectorPanelOpen] = useState(false)
   const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
   const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
@@ -272,17 +272,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setRedoStack([])
     setProposal(null)
     setInstruction("")
-    setIsLocked(false)
+    setIsLocked(true)
     didFitRef.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps -- プロジェクト切替時のみ
   }, [project.id])
 
   useEffect(() => {
-    if (didFitRef.current || flow.nodes.length === 0) return
+    if (didFitRef.current || flow.nodes.length === 0 || !rfRef.current || canvasWidth <= 0) return
     didFitRef.current = true
     fitCanvas()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- 初回表示のみ
-  }, [flow.nodes.length])
+  }, [flow.nodes.length, canvasWidth, canvasHeight, fitCanvas])
 
   const prevIsMobileRef = useRef(isMobile)
   useEffect(() => {
@@ -845,7 +844,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           </>
         )}
         {isMobile && (
-          <ToolButton label="全体表示" onClick={fitCanvas}>
+          <ToolButton
+            label="全体表示"
+            onClick={() => {
+              bumpMobileTeamAxis()
+              fitCanvas()
+            }}
+          >
             <Focus className="size-4" />
           </ToolButton>
         )}
@@ -983,9 +988,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 </ReactFlow>
                 {isMobile && (
                   <FlowMobileControls
-                    onZoomIn={() => zoomBy(1.25)}
-                    onZoomOut={() => zoomBy(1 / 1.25)}
-                    onFitView={fitCanvas}
+                    visible={mobileTeamAxisVisible}
+                    onZoomIn={() => {
+                      bumpMobileTeamAxis()
+                      zoomBy(1.25)
+                    }}
+                    onZoomOut={() => {
+                      bumpMobileTeamAxis()
+                      zoomBy(1 / 1.25)
+                    }}
+                    onFitView={() => {
+                      bumpMobileTeamAxis()
+                      fitCanvas()
+                    }}
                     className="top-2"
                   />
                 )}
