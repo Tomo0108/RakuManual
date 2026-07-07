@@ -447,6 +447,21 @@ export function LaneGuideOverlay({
             fillOpacity={i % 2 === 0 ? 0.35 : 0}
           />
         ))}
+        {Array.from({ length: columnCount }, (_, col) => (
+          <rect
+            key={`col-zone-${col}`}
+            x={col * COL_WIDTH}
+            y={0}
+            width={COL_WIDTH}
+            height={guideH}
+            fill="var(--primary)"
+            fillOpacity={0.04}
+            stroke="var(--primary)"
+            strokeWidth={1}
+            strokeDasharray="6 5"
+            strokeOpacity={0.28}
+          />
+        ))}
         {Array.from({ length: columnCount + 1 }, (_, col) => (
           <line
             key={`col-${col}`}
