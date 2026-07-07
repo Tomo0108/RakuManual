@@ -6,15 +6,17 @@ interface Props {
   onZoomIn: () => void
   onZoomOut: () => void
   onFitView: () => void
+  visible: boolean
   className?: string
 }
 
 /** スマホ向け: 大きなタッチターゲットのズーム操作 */
-export function FlowMobileControls({ onZoomIn, onZoomOut, onFitView, className }: Props) {
+export function FlowMobileControls({ onZoomIn, onZoomOut, onFitView, visible, className }: Props) {
   return (
     <div
       className={cn(
-        "pointer-events-auto absolute left-2 top-2 z-50 flex flex-col gap-1 rounded-lg border border-border/80 bg-card/95 p-1 shadow-md backdrop-blur-sm",
+        "absolute left-2 top-2 z-50 flex flex-col gap-1 rounded-lg border border-border/60 bg-card/75 p-1 shadow-md backdrop-blur-sm transition-opacity duration-500 ease-in-out",
+        visible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
         className,
       )}
     >

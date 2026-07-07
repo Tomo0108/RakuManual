@@ -273,7 +273,7 @@ export function MobileTeamAxis({
 
   return (
     <div
-      className={`pointer-events-none absolute inset-y-0 right-0 z-30 overflow-hidden transition-opacity duration-100 ${
+      className={`pointer-events-none absolute inset-y-0 right-0 z-30 overflow-hidden transition-opacity duration-500 ease-in-out ${
         visible ? "opacity-100" : "opacity-0"
       }`}
       style={{ width: labelWidth }}
