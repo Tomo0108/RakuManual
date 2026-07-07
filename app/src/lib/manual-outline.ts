@@ -3,6 +3,8 @@ import type { ManualSection } from "@/lib/types"
 export interface ManualOutlineMajor {
   key: string
   number: string
+  /** 大項目のタイトル（業務名など） */
+  title?: string
   mediums: ManualOutlineMedium[]
 }
 
@@ -77,7 +79,10 @@ export function toSlideSectionNumber(mediumNumber?: string, index = 0): string |
 }
 
 /** セクション一覧を大項目→中項目→小項目(スライド)の階層に整理 */
-export function buildManualOutline(sections: ManualSection[]): ManualOutlineMajor[] {
+export function buildManualOutline(
+  sections: ManualSection[],
+  options?: { majorTitle?: string },
+): ManualOutlineMajor[] {
   const sorted = [...sections].sort((a, b) =>
     compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
   )
@@ -90,7 +95,12 @@ export function buildManualOutline(sections: ManualSection[]): ManualOutlineMajo
     const medium = mediumKey(num) ?? `${major}.0`
 
     if (!majorMap.has(major)) {
-      majorMap.set(major, { key: major, number: major, mediums: [] })
+      majorMap.set(major, {
+        key: major,
+        number: major,
+        title: options?.majorTitle,
+        mediums: [],
+      })
     }
     const majorGroup = majorMap.get(major)!
     let mediumGroup = majorGroup.mediums.find((m) => m.key === medium)
