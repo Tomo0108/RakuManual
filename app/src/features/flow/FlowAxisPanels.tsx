@@ -10,8 +10,9 @@ import {
   AXIS_HEADER_HEIGHT,
   flowToScreen,
   gridDimensions,
+  computeLaneRowMetrics,
 } from "./flow-layout"
-import type { ColumnSystemEntry, FlowLayoutMeta } from "@/lib/types"
+import type { ColumnSystemEntry, FlowLayoutMeta, FlowNode } from "@/lib/types"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,16 +29,20 @@ export interface FlowViewport {
   zoom: number
 }
 
-/** 左パネル: 担当チーム行(フロー座標に追従) */
+/** 左パネル: 担当チーム行(フロー座標に追従・縦並びコネクタ時は行を伸長) */
 export function TeamAxisPanel({
   lanes,
+  nodes,
   viewport,
   activeLane,
 }: {
   lanes: string[]
+  nodes: FlowNode[]
   viewport: FlowViewport
   activeLane?: string
 }) {
+  const rowMetrics = computeLaneRowMetrics(nodes, lanes)
+
   return (
     <aside
       className="relative flex shrink-0 flex-col overflow-hidden border-r bg-card"
@@ -46,9 +51,9 @@ export function TeamAxisPanel({
       <AxisHeader label="担当チーム" />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {lanes.map((lane, i) => {
-          const rowTop = FLOW_ORIGIN_Y + i * LANE_ROW_HEIGHT
-          const screen = flowToScreen(0, rowTop, viewport)
-          const rowH = LANE_ROW_HEIGHT * viewport.zoom
+          const metric = rowMetrics[i] ?? { top: FLOW_ORIGIN_Y + i * LANE_ROW_HEIGHT, height: LANE_ROW_HEIGHT }
+          const screen = flowToScreen(0, metric.top, viewport)
+          const rowH = metric.height * viewport.zoom
           const isActive = activeLane === lane
           return (
             <div
@@ -66,7 +71,7 @@ export function TeamAxisPanel({
                 boxShadow: isActive ? "inset 3px 0 0 var(--primary)" : undefined,
               }}
             >
-              <span className={`line-clamp-3 px-0.5 ${isActive ? "text-primary" : ""}`}>{lane}</span>
+              <span className={`line-clamp-4 px-0.5 ${isActive ? "text-primary" : ""}`}>{lane}</span>
             </div>
           )
         })}
@@ -104,6 +109,7 @@ export function SystemAxisPanel({
   readOnly?: boolean
 }) {
   const totalH = SYSTEM_ROW_HEIGHT + AXIS_HEADER_HEIGHT
+  const columnCount = columnSystems.length
   return (
     <footer className="flex shrink-0 border-t bg-card" style={{ height: totalH }}>
       <div
@@ -113,6 +119,7 @@ export function SystemAxisPanel({
         利用システム
       </div>
       <div className="relative min-w-0 flex-1 overflow-hidden">
+        <ColumnBoundaryOverlay columnCount={columnCount} viewport={viewport} height={totalH} />
         {columnSystems.map((entry, col) => {
           const colLeft = FLOW_ORIGIN_X + col * COL_WIDTH
           const screen = flowToScreen(colLeft, 0, viewport)
@@ -131,6 +138,161 @@ export function SystemAxisPanel({
         })}
       </div>
     </footer>
+  )
+}
+
+/** スマホ向け: 利用システムをビューポートと同期し列を点線で区切る */
+export function MobileSystemAxisPanel({
+  columnSystems,
+  viewport,
+}: {
+  columnSystems: ColumnSystemEntry[]
+  viewport: FlowViewport
+}) {
+  const columnCount = columnSystems.length
+  if (columnCount === 0) return null
+
+  const totalH = SYSTEM_ROW_HEIGHT + AXIS_HEADER_HEIGHT
+
+  return (
+    <footer className="shrink-0 border-t bg-card" style={{ height: totalH }}>
+      <AxisHeader label="利用システム" className="border-b" />
+      <div className="relative overflow-hidden" style={{ height: SYSTEM_ROW_HEIGHT }}>
+        <ColumnBoundaryOverlay columnCount={columnCount} viewport={viewport} height={SYSTEM_ROW_HEIGHT} />
+        {columnSystems.map((entry, col) => {
+          const colLeft = FLOW_ORIGIN_X + col * COL_WIDTH
+          const screen = flowToScreen(colLeft, 0, viewport)
+          const colW = COL_WIDTH * viewport.zoom
+          return (
+            <MobileSystemCell key={col} col={col} entry={entry} left={screen.x} width={colW} />
+          )
+        })}
+      </div>
+    </footer>
+  )
+}
+
+/** 列境界の点線ガイド（ピンチズーム時もフロー列と同期） */
+function ColumnBoundaryOverlay({
+  columnCount,
+  viewport,
+  height,
+}: {
+  columnCount: number
+  viewport: FlowViewport
+  height: number
+}) {
+  if (columnCount === 0) return null
+
+  return (
+    <>
+      {Array.from({ length: columnCount }, (_, col) => {
+        const colLeft = FLOW_ORIGIN_X + col * COL_WIDTH
+        const screen = flowToScreen(colLeft, 0, viewport)
+        const colW = COL_WIDTH * viewport.zoom
+        return (
+          <div
+            key={`col-zone-${col}`}
+            className="pointer-events-none absolute top-0 border-x border-dashed border-primary/25 bg-primary/[0.03]"
+            style={{ left: screen.x, width: colW, height }}
+            aria-hidden
+          />
+        )
+      })}
+      {Array.from({ length: columnCount + 1 }, (_, col) => {
+        const colLeft = FLOW_ORIGIN_X + col * COL_WIDTH
+        const screen = flowToScreen(colLeft, 0, viewport)
+        return (
+          <div
+            key={`col-line-${col}`}
+            className="pointer-events-none absolute top-0 w-px border-l border-dashed border-primary/40"
+            style={{ left: screen.x, height }}
+            aria-hidden
+          />
+        )
+      })}
+    </>
+  )
+}
+
+function MobileSystemCell({
+  col,
+  entry,
+  left,
+  width,
+}: {
+  col: number
+  entry: ColumnSystemEntry
+  left: number
+  width: number
+}) {
+  const href = entry.url?.trim()
+  const display = entry.label || "—"
+
+  return (
+    <div
+      className="absolute top-0 flex items-center justify-center px-1 text-center text-[10px] leading-snug"
+      style={{ left, width, height: SYSTEM_ROW_HEIGHT }}
+    >
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex max-w-full items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+          title={href}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink className="size-2.5 shrink-0" />
+          <span className="line-clamp-2">{display}</span>
+        </a>
+      ) : (
+        <span className="line-clamp-2 text-foreground" title={display}>
+          {display}
+        </span>
+      )}
+      <span className="absolute left-1 top-0.5 text-[8px] text-muted-foreground">列{col + 1}</span>
+    </div>
+  )
+}
+
+/** スマホ向け: 担当チーム行ラベル（右端・ビューポート同期） */
+export function MobileTeamAxis({
+  lanes,
+  nodes,
+  viewport,
+  activeLane,
+}: {
+  lanes: string[]
+  nodes: FlowNode[]
+  viewport: FlowViewport
+  activeLane?: string
+}) {
+  const rowMetrics = computeLaneRowMetrics(nodes, lanes)
+
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-0 z-30 w-16 overflow-hidden" aria-hidden>
+      {lanes.map((lane, i) => {
+        const metric = rowMetrics[i] ?? { top: FLOW_ORIGIN_Y + i * LANE_ROW_HEIGHT, height: LANE_ROW_HEIGHT }
+        const screen = flowToScreen(0, metric.top, viewport)
+        const rowH = metric.height * viewport.zoom
+        const isActive = activeLane === lane
+        if (rowH < 14) return null
+        return (
+          <div
+            key={`${lane}-${i}`}
+            className={`absolute right-1 flex max-w-[3.75rem] items-center justify-end rounded-l-md border-y border-l px-1 py-0.5 text-right text-[9px] font-semibold leading-tight shadow-xs ${
+              isActive
+                ? "border-primary/50 bg-primary-subtle text-primary"
+                : "border-border/60 bg-background/85 text-muted-foreground"
+            }`}
+            style={{ top: screen.y, height: rowH, minHeight: 20 }}
+          >
+            <span className="line-clamp-3">{lane}</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -248,32 +410,39 @@ function SystemCell({
 /** フローキャンバス内: 行・列ガイド */
 export function LaneGuideOverlay({
   lanes,
+  nodes,
   layoutMeta,
 }: {
   lanes: string[]
+  nodes: FlowNode[]
   layoutMeta?: FlowLayoutMeta
 }) {
   const columnCount = layoutMeta?.columnCount ?? 1
   const { width } = gridDimensions(lanes.length, columnCount)
   const guideW = width - FLOW_ORIGIN_X
+  const rowMetrics = computeLaneRowMetrics(nodes, lanes)
+  const guideH =
+    rowMetrics.length > 0
+      ? Math.max(...rowMetrics.map((m) => m.top + m.height)) - FLOW_ORIGIN_Y + 8
+      : lanes.length * LANE_ROW_HEIGHT + 8
 
   return (
     <svg
       className="pointer-events-none absolute left-0 top-0"
       style={{
         width: guideW + FLOW_ORIGIN_X,
-        height: FLOW_ORIGIN_Y + lanes.length * LANE_ROW_HEIGHT + 8,
+        height: FLOW_ORIGIN_Y + guideH,
         overflow: "visible",
       }}
     >
       <g transform={`translate(${FLOW_ORIGIN_X}, ${FLOW_ORIGIN_Y})`}>
-        {lanes.map((_, i) => (
+        {rowMetrics.map((metric, i) => (
           <rect
             key={`row-${i}`}
             x={0}
-            y={i * LANE_ROW_HEIGHT}
+            y={metric.top - FLOW_ORIGIN_Y}
             width={guideW}
-            height={LANE_ROW_HEIGHT}
+            height={metric.height}
             fill={i % 2 === 0 ? "var(--muted)" : "transparent"}
             fillOpacity={i % 2 === 0 ? 0.35 : 0}
           />
@@ -284,20 +453,20 @@ export function LaneGuideOverlay({
             x1={col * COL_WIDTH}
             y1={0}
             x2={col * COL_WIDTH}
-            y2={lanes.length * LANE_ROW_HEIGHT}
+            y2={guideH}
             stroke="var(--border)"
             strokeWidth={1}
             strokeDasharray="4 6"
             opacity={0.45}
           />
         ))}
-        {lanes.map((_, i) => (
+        {rowMetrics.map((metric, i) => (
           <line
             key={`hline-${i}`}
             x1={0}
-            y1={i * LANE_ROW_HEIGHT}
+            y1={metric.top - FLOW_ORIGIN_Y}
             x2={guideW}
-            y2={i * LANE_ROW_HEIGHT}
+            y2={metric.top - FLOW_ORIGIN_Y}
             stroke="var(--border)"
             strokeWidth={1}
             opacity={0.55}
