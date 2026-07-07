@@ -160,7 +160,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     [proposal, flow],
   )
 
-  const flowBounds = useMemo(() => flowContentBounds(previewFlow), [previewFlow])
+  /** 選択状態の変化では再計算しない(タップ時の fitView 再発火を防ぐ) */
+  const flowLayoutKey = useMemo(() => {
+    const nodes = (proposal ? proposal.preview(flow) : flow).nodes
+    return nodes.map((n) => `${n.id}:${n.position.x},${n.position.y}`).join("|")
+  }, [flow, proposal])
+
+  const flowBounds = useMemo(
+    () => flowContentBounds(previewFlow),
+    [flowLayoutKey, previewFlow],
+  )
   const panXRange = useMemo(
     () => flowPanXRange(flowBounds, canvasWidth, viewport.zoom),
     [flowBounds, canvasWidth, viewport.zoom],
@@ -224,6 +233,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     })
   }, [isMobile, clampViewport])
 
+  const restoreViewport = useCallback((vp: FlowViewport) => {
+    requestAnimationFrame(() => {
+      rfRef.current?.setViewport(vp)
+      setViewport(vp)
+      requestAnimationFrame(() => {
+        rfRef.current?.setViewport(vp)
+        setViewport(vp)
+      })
+    })
+  }, [])
+
   const didFitRef = useRef(false)
 
   /* プロジェクトへ保存(自動保存) */
@@ -251,13 +271,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     if (didFitRef.current || flow.nodes.length === 0) return
     didFitRef.current = true
     fitCanvas()
-  }, [flow.nodes.length, fitCanvas])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 初回表示のみ
+  }, [flow.nodes.length])
 
+  const prevIsMobileRef = useRef(isMobile)
   useEffect(() => {
-    if (flow.nodes.length === 0) return
+    if (prevIsMobileRef.current === isMobile || flow.nodes.length === 0) {
+      prevIsMobileRef.current = isMobile
+      return
+    }
+    prevIsMobileRef.current = isMobile
     const t = window.setTimeout(() => fitCanvas(), 150)
     return () => clearTimeout(t)
-  }, [isMobile, fitCanvas])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- モバイル切替時のみ
+  }, [isMobile])
 
   /* Undo用スナップショットを積んでから状態を更新する */
   const commit = useCallback(
@@ -449,12 +476,21 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         if (effective.length === 0) return
       }
 
+      const selectionOnly = effective.length > 0 && effective.every((c) => c.type === "select")
+
       if (effective.some((c) => c.type === "select")) {
         bumpMobileTeamAxis()
       }
 
-      const preserveViewport = isLocked && effective.every((c) => c.type === "select")
-      const vpBefore = preserveViewport ? rfRef.current?.getViewport() : null
+      if (selectionOnly) {
+        const vpBefore = rfRef.current?.getViewport()
+        setFlow((prev) => ({
+          ...prev,
+          nodes: applyNodeChanges(effective, prev.nodes) as FlowState["nodes"],
+        }))
+        if (vpBefore) restoreViewport(vpBefore)
+        return
+      }
 
       const dragStart = effective.some((c) => c.type === "position" && c.dragging)
       if (dragStart && !dragSnapshot.current) {
@@ -506,15 +542,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         setUndoStack((s) => [...s.slice(-49), snap])
         setRedoStack([])
       }
-
-      if (vpBefore) {
-        queueMicrotask(() => {
-          rfRef.current?.setViewport(vpBefore)
-          setViewport(vpBefore)
-        })
-      }
     },
-    [flow, persist, isEditingDisabled, isLocked, bumpMobileTeamAxis],
+    [flow, persist, isEditingDisabled, bumpMobileTeamAxis, restoreViewport],
   )
 
   const onEdgesChange = useCallback(
@@ -523,6 +552,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       if (isEditingDisabled) {
         effective = changes.filter((c) => c.type === "select")
         if (effective.length === 0) return
+      }
+
+      const selectionOnly = effective.length > 0 && effective.every((c) => c.type === "select")
+      if (selectionOnly) {
+        const vpBefore = rfRef.current?.getViewport()
+        setFlow((prev) => ({
+          ...prev,
+          edges: applyEdgeChanges(effective, prev.edges) as FlowState["edges"],
+        }))
+        if (vpBefore) restoreViewport(vpBefore)
+        return
       }
 
       const hasRemove = effective.some((c) => c.type === "remove")
@@ -536,7 +576,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         return next
       })
     },
-    [flow, persist, isEditingDisabled],
+    [flow, persist, isEditingDisabled, restoreViewport],
   )
 
   const onConnect = useCallback(
@@ -869,14 +909,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                     rfRef.current = inst
                     setViewport(inst.getViewport())
                   }}
-                  onMove={(_, vp) => {
-                    setViewport(vp)
+                  viewport={viewport}
+                  onViewportChange={(vp) => {
                     bumpMobileTeamAxis()
-                  }}
-                  onMoveEnd={(_, vp) => {
-                    const clamped = clampViewport(vp)
-                    if (clamped.x !== vp.x) rfRef.current?.setViewport(clamped)
-                    setViewport(clamped)
+                    setViewport(clampViewport(vp))
                   }}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
