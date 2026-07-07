@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import type { Project, View } from "@/lib/types"
 import { INITIAL_PROJECTS, type AccentId } from "@/lib/mock-data"
+import { loadAccent, saveAccent } from "@/lib/accent-storage"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PwaUpdatePrompt } from "@/components/PwaUpdatePrompt"
 import { Sidebar } from "@/components/layout/Sidebar"
@@ -15,8 +16,13 @@ import { DashboardPage } from "@/pages/DashboardPage"
 export default function App() {
   const [view, setView] = useState<View>({ name: "projects" })
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS)
-  const [accent, setAccent] = useState<AccentId>("red")
+  const [accent, setAccentState] = useState<AccentId>(() => loadAccent())
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const setAccent = useCallback((next: AccentId) => {
+    setAccentState(next)
+    saveAccent(next)
+  }, [])
 
   useEffect(() => {
     document.documentElement.setAttribute("data-accent", accent)
