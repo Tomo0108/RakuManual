@@ -11,6 +11,8 @@ export interface ManualOutlineMajor {
 export interface ManualOutlineMedium {
   key: string
   number: string
+  /** 中項目の業務概要(例: 新規申請) */
+  title?: string
   sections: ManualSection[]
 }
 
@@ -81,7 +83,7 @@ export function toSlideSectionNumber(mediumNumber?: string, index = 0): string |
 /** セクション一覧を大項目→中項目→小項目(スライド)の階層に整理 */
 export function buildManualOutline(
   sections: ManualSection[],
-  options?: { majorTitle?: string },
+  options?: { defaultMajorTitle?: string },
 ): ManualOutlineMajor[] {
   const sorted = [...sections].sort((a, b) =>
     compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
@@ -98,15 +100,27 @@ export function buildManualOutline(
       majorMap.set(major, {
         key: major,
         number: major,
-        title: options?.majorTitle,
+        title: section.majorTitle?.trim() || (major === "1" ? options?.defaultMajorTitle : undefined),
         mediums: [],
       })
     }
     const majorGroup = majorMap.get(major)!
+    if (!majorGroup.title && section.majorTitle?.trim()) {
+      majorGroup.title = section.majorTitle.trim()
+    }
+
     let mediumGroup = majorGroup.mediums.find((m) => m.key === medium)
     if (!mediumGroup) {
-      mediumGroup = { key: medium, number: medium, sections: [] }
+      mediumGroup = {
+        key: medium,
+        number: medium,
+        title: section.mediumTitle?.trim(),
+        sections: [],
+      }
       majorGroup.mediums.push(mediumGroup)
+    }
+    if (!mediumGroup.title && section.mediumTitle?.trim()) {
+      mediumGroup.title = section.mediumTitle.trim()
     }
     mediumGroup.sections.push(section)
   }
