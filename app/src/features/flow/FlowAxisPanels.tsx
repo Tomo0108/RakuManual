@@ -262,16 +262,25 @@ export function MobileTeamAxis({
   nodes,
   viewport,
   activeLane,
+  visible,
 }: {
   lanes: string[]
   nodes: FlowNode[]
   viewport: FlowViewport
   activeLane?: string
+  visible: boolean
 }) {
   const rowMetrics = computeLaneRowMetrics(nodes, lanes)
+  const labelWidth = Math.max(48, ...lanes.map((lane) => lane.length * 10 + 20))
 
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 z-30 w-16 overflow-hidden" aria-hidden>
+    <div
+      className={`pointer-events-none absolute inset-y-0 right-0 z-30 overflow-hidden transition-opacity duration-300 ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+      style={{ width: labelWidth }}
+      aria-hidden={!visible}
+    >
       {lanes.map((lane, i) => {
         const metric = rowMetrics[i] ?? { top: FLOW_ORIGIN_Y + i * LANE_ROW_HEIGHT, height: LANE_ROW_HEIGHT }
         const screen = flowToScreen(0, metric.top, viewport)
@@ -281,14 +290,14 @@ export function MobileTeamAxis({
         return (
           <div
             key={`${lane}-${i}`}
-            className={`absolute right-1 flex max-w-[3.75rem] items-center justify-end rounded-l-md border-y border-l px-1 py-0.5 text-right text-[9px] font-semibold leading-tight shadow-xs ${
+            className={`absolute right-1 flex items-center justify-end rounded-l-md border-y border-l px-1.5 py-0.5 text-right text-[9px] font-semibold leading-tight shadow-xs ${
               isActive
-                ? "border-primary/50 bg-primary-subtle text-primary"
+                ? "border-primary/50 bg-primary-subtle/95 text-primary"
                 : "border-border/60 bg-background/85 text-muted-foreground"
             }`}
-            style={{ top: screen.y, height: rowH, minHeight: 20 }}
+            style={{ top: screen.y, height: rowH, minHeight: 20, width: labelWidth - 4 }}
           >
-            <span className="line-clamp-3">{lane}</span>
+            <span className="line-clamp-3 whitespace-nowrap">{lane}</span>
           </div>
         )
       })}

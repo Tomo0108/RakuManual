@@ -71,7 +71,7 @@ export function colFromX(x: number, nodeWidth: number): number {
   return Math.max(0, Math.round((center - FLOW_ORIGIN_X - COL_WIDTH / 2) / COL_WIDTH))
 }
 
-/** ドラッグ終了時: 行・列スナップ + 担当チーム更新(同行重なりは列をずらす) */
+/** ドラッグ終了時: 行・列スナップ + 担当チーム更新(同列重なりは縦に積む) */
 export function snapNodePosition(
   node: FlowNode,
   laneCount: number,
@@ -81,26 +81,83 @@ export function snapNodePosition(
   const kind = node.data.kind
   const dims = dimForKind(kind === "start" || kind === "end" || kind === "decision" ? kind : "process")
   const li = nearestLaneIndex(node.position.y, dims.h, laneCount)
-  let col = colFromX(node.position.x, dims.w)
+  const col = colFromX(node.position.x, dims.w)
   const lane = lanes[li] ?? lanes[lanes.length - 1] ?? "担当者"
 
-  while (
-    others.some((n) => {
+  const nodeDims = (n: FlowNode) =>
+    dimForKind(
+      n.data.kind === "start" || n.data.kind === "end" || n.data.kind === "decision"
+        ? n.data.kind
+        : "process",
+    )
+
+  const peersInCol = others
+    .filter((n) => {
       if (n.id === node.id || n.data.lane !== lane) return false
-      const od = dimForKind(n.data.kind)
-      return colFromX(n.position.x, od.w) === col
+      return colFromX(n.position.x, nodeDims(n).w) === col
     })
-  ) {
-    col += 1
+    .sort((a, b) => a.position.y - b.position.y)
+
+  const stackInLane = peersInCol.length > 0
+  let slot = 0
+  if (stackInLane) {
+    const ordered = [...peersInCol, node].sort((a, b) => {
+      if (a.id === node.id) return node.position.y - b.position.y
+      if (b.id === node.id) return a.position.y - node.position.y
+      return a.position.y - b.position.y
+    })
+    slot = ordered.findIndex((n) => n.id === node.id)
   }
 
   return {
     position: {
       x: nodeXInCol(col, dims.w),
-      y: nodeYInLane(li, dims.h),
+      y: stackInLane ? stackedYInLane(li, slot, dims.h) : nodeYInLane(li, dims.h),
     },
     lane,
   }
+}
+
+/** 同一担当チーム・同一列のノードを縦に整列し直す */
+export function restackLaneColumnNodes(nodes: FlowNode[], lanes: string[]): FlowNode[] {
+  const nodeDims = (n: FlowNode) =>
+    dimForKind(
+      n.data.kind === "start" || n.data.kind === "end" || n.data.kind === "decision"
+        ? n.data.kind
+        : "process",
+    )
+
+  const groups = new Map<string, FlowNode[]>()
+  for (const n of nodes) {
+    const li = lanes.indexOf(n.data.lane)
+    if (li < 0) continue
+    const col = colFromX(n.position.x, nodeDims(n).w)
+    const key = `${n.data.lane}:${col}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(n)
+  }
+
+  const positionById = new Map<string, { x: number; y: number }>()
+  for (const [key, group] of groups) {
+    if (group.length <= 1) continue
+    const lane = key.split(":")[0]!
+    const li = lanes.indexOf(lane)
+    const col = colFromX(group[0].position.x, nodeDims(group[0]).w)
+    const sorted = [...group].sort((a, b) => a.position.y - b.position.y)
+    sorted.forEach((n, slot) => {
+      const dims = nodeDims(n)
+      positionById.set(n.id, {
+        x: nodeXInCol(col, dims.w),
+        y: stackedYInLane(li, slot, dims.h),
+      })
+    })
+  }
+
+  if (positionById.size === 0) return nodes
+  return nodes.map((n) => {
+    const pos = positionById.get(n.id)
+    return pos ? { ...n, position: pos } : n
+  })
 }
 
 /** 旧 string[] 形式との互換 */

@@ -218,7 +218,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   if (kind === "decision") {
     return (
       <div
-        className="group/step relative flex items-center justify-center"
+        className="group/step relative flex items-center justify-center rounded-sm border-2 border-amber-500/70 bg-amber-50/20 shadow-sm"
         style={{ width: dims.w, height: dims.h }}
         onDoubleClick={startEdit}
       >
@@ -247,7 +247,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
         </span>
         <div
           className={cn(
-            "absolute inset-0 border-2 border-amber-400 bg-amber-50/90 shadow-sm",
+            "absolute inset-0 border-2 border-amber-500 bg-amber-50/90",
             selected && "ring-2 ring-primary ring-offset-1",
             diffClass,
           )}
