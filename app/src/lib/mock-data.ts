@@ -219,7 +219,9 @@ export const INITIAL_PROJECTS: Project[] = [
     sections: [
       {
         id: "s1",
-        title: "1. 申請の受付と入力",
+        sectionNumber: "1.1.1",
+        stepId: "n2",
+        title: "経費精算システムに入力",
         status: "approved",
         version: 3,
         updatedAt: "2026-06-28",
@@ -228,12 +230,24 @@ export const INITIAL_PROJECTS: Project[] = [
           { id: "b2", type: "step", text: "社内ポータルから「楽々精算クラウド」を開き、「新規申請」をクリックします。", image: { id: "img-b2", caption: "楽々精算クラウドのトップ画面。右上の「新規申請」ボタンをクリック", color: "#dbeafe" } },
           { id: "b3", type: "step", text: "費目を選択し、金額・利用日・利用目的を入力します。" },
           { id: "b4", type: "note", text: "交際費と会議費の区別に注意してください。1人あたり5,000円以下の飲食は会議費になります。" },
-          { id: "b5", type: "step", text: "領収書をスマートフォンで撮影し、画像を添付して申請ボタンを押します。", image: { id: "img-b5", caption: "領収書添付画面。金額・日付・宛名が読める画像を添付", color: "#fce7f3" } },
         ],
       },
       {
         id: "s2",
-        title: "2. 承認フロー",
+        sectionNumber: "1.2.1",
+        stepId: "n3",
+        title: "領収書画像を添付して申請",
+        status: "approved",
+        version: 2,
+        updatedAt: "2026-06-28",
+        blocks: [
+          { id: "b5", type: "step", text: "領収書をスマートフォンで撮影し、画像を添付して申請ボタンを押します。", image: { id: "img-b5", caption: "領収書添付画面。金額・日付・宛名が読める画像を添付", color: "#fce7f3" } },
+        ],
+      },
+      {
+        id: "s3",
+        sectionNumber: "1.3.1",
+        title: "承認フロー",
         status: "approved",
         version: 2,
         updatedAt: "2026-06-28",
@@ -245,8 +259,10 @@ export const INITIAL_PROJECTS: Project[] = [
         ],
       },
       {
-        id: "s3",
-        title: "3. 経理確認と振込",
+        id: "s4",
+        sectionNumber: "1.6.1",
+        stepId: "n7",
+        title: "経理が内容を確認・仕訳",
         status: "approved",
         version: 2,
         updatedAt: "2026-07-01",
@@ -258,10 +274,10 @@ export const INITIAL_PROJECTS: Project[] = [
       },
     ],
     history: [
-      { id: "h1", date: "2026-07-01 10:24", user: "田中 花子", action: "セクション3を更新(v2)・公開" },
+      { id: "h1", date: "2026-07-01 10:24", user: "田中 花子", action: "セクション4を更新(v2)・公開" },
       { id: "h2", date: "2026-06-28 15:02", user: "田中 花子", action: "全セクションを承認・初回公開" },
       { id: "h3", date: "2026-06-25 11:40", user: "佐藤 太郎", action: "フロー図: ステップ「課長が承認」を手動修正" },
-      { id: "h4", date: "2026-06-24 09:15", user: "田中 花子", action: "マニュアル生成(全3セクション)" },
+      { id: "h4", date: "2026-06-24 09:15", user: "田中 花子", action: "マニュアル生成(全4セクション)" },
     ],
   },
   {
@@ -301,7 +317,9 @@ export const INITIAL_PROJECTS: Project[] = [
     sections: [
       {
         id: "s1",
-        title: "1. PC・アカウントの手配",
+        sectionNumber: "1.1.1",
+        stepId: "n2",
+        title: "PC・アカウントの手配",
         status: "review",
         version: 1,
         updatedAt: "2026-07-03",
@@ -314,7 +332,9 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s2",
-        title: "2. キッティング(初期設定)",
+        sectionNumber: "1.2.1",
+        stepId: "n3",
+        title: "キッティング(初期設定)",
         status: "draft",
         version: 1,
         updatedAt: "2026-07-03",
@@ -325,7 +345,9 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s3",
-        title: "3. 引き渡しと初回ログイン確認",
+        sectionNumber: "1.3.1",
+        stepId: "n4",
+        title: "引き渡しと初回ログイン確認",
         status: "draft",
         version: 1,
         updatedAt: "2026-07-03",
