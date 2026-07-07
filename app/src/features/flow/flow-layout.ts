@@ -237,7 +237,7 @@ export function ensureDecisionEdgeLabel(
   return "はい"
 }
 
-/** エッジラベルから分岐の出口を判定(はい=上、いいえ=下) */
+/** エッジラベルから分岐の出口を判定(はい=右、いいえ=下) */
 export function decisionSourceHandle(label: string | undefined, isBack: boolean): "yes" | "no" {
   const text = label ?? ""
   if (/いいえ|不要|否|×|偽|no/i.test(text)) return "no"
