@@ -137,6 +137,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(0)
   const [canvasHeight, setCanvasHeight] = useState(0)
+  const [rfReady, setRfReady] = useState(false)
 
   const zoomBy = useCallback((factor: number) => {
     const inst = rfRef.current
@@ -278,10 +279,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   }, [project.id])
 
   useEffect(() => {
-    if (didFitRef.current || flow.nodes.length === 0 || !rfRef.current || canvasWidth <= 0) return
+    if (didFitRef.current || flow.nodes.length === 0 || !rfReady || canvasWidth <= 0) return
     didFitRef.current = true
     fitCanvas()
-  }, [flow.nodes.length, canvasWidth, canvasHeight, fitCanvas])
+  }, [flow.nodes.length, canvasWidth, canvasHeight, fitCanvas, rfReady])
 
   const prevIsMobileRef = useRef(isMobile)
   useEffect(() => {
@@ -919,7 +920,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   edges={previewFlow.edges}
                   onInit={(inst) => {
                     rfRef.current = inst
-                    setViewport(inst.getViewport())
+                    setRfReady(true)
                   }}
                   viewport={viewport}
                   onViewportChange={(vp) => {
