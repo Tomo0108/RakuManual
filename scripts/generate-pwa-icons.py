@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""icon_rakumanual.png から PWA・favicon・アプリ内ロゴを生成する"""
+"""icon_rakumanual.png（透過・角丸）から PWA・favicon・アプリ内ロゴを生成する"""
 from pathlib import Path
 from PIL import Image
 
@@ -7,7 +7,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "app" / "public" / "icon_rakumanual.png"
 OUT_PUBLIC = ROOT / "app" / "public"
 OUT_LOGO = ROOT / "app" / "src" / "assets" / "logo.png"
-BG = (255, 255, 255)
 
 
 def load_logo() -> Image.Image:
@@ -16,38 +15,34 @@ def load_logo() -> Image.Image:
     return Image.open(SRC).convert("RGBA")
 
 
-def composite_icon(logo: Image.Image, size: int, logo_ratio: float, filename: Path) -> None:
-    canvas = Image.new("RGB", (size, size), BG)
-    logo_size = int(size * logo_ratio)
+def resize_icon(logo: Image.Image, size: int, filename: Path, scale: float = 1.0) -> None:
+    """透過背景を保持したままリサイズ（白背景は合成しない）"""
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    logo_size = max(1, int(size * scale))
     scaled = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
     offset = ((size - logo_size) // 2, (size - logo_size) // 2)
     canvas.paste(scaled, offset, scaled)
     canvas.save(filename, "PNG", optimize=True)
 
 
-def save_logo(logo: Image.Image, size: int, filename: Path) -> None:
-    filename.parent.mkdir(parents=True, exist_ok=True)
-    resized = logo.resize((size, size), Image.Resampling.LANCZOS)
-    # UI ロゴは透過を保持（角丸アイコンをそのまま表示）
-    resized.save(filename, "PNG", optimize=True)
-
-
 def main() -> None:
     logo = load_logo()
 
-    composite_icon(logo, 32, 0.82, OUT_PUBLIC / "favicon.png")
-    composite_icon(logo, 48, 0.82, OUT_PUBLIC / "favicon-48.png")
-    composite_icon(logo, 180, 0.78, OUT_PUBLIC / "apple-touch-icon.png")
-    composite_icon(logo, 192, 0.72, OUT_PUBLIC / "pwa-192.png")
-    composite_icon(logo, 512, 0.72, OUT_PUBLIC / "pwa-512.png")
-    # maskable: セーフゾーン内に収める（中央80%）
-    composite_icon(logo, 192, 0.58, OUT_PUBLIC / "pwa-192-maskable.png")
-    composite_icon(logo, 512, 0.58, OUT_PUBLIC / "pwa-512-maskable.png")
-    composite_icon(logo, 512, 0.72, OUT_PUBLIC / "icon.png")
+    # 角丸アイコンをそのまま各サイズに縮小
+    resize_icon(logo, 32, OUT_PUBLIC / "favicon.png")
+    resize_icon(logo, 48, OUT_PUBLIC / "favicon-48.png")
+    resize_icon(logo, 180, OUT_PUBLIC / "apple-touch-icon.png")
+    resize_icon(logo, 192, OUT_PUBLIC / "pwa-192.png")
+    resize_icon(logo, 512, OUT_PUBLIC / "pwa-512.png")
+    resize_icon(logo, 512, OUT_PUBLIC / "icon.png")
+    # maskable: 円形マスク対策でわずかに縮小（透過は維持）
+    resize_icon(logo, 192, OUT_PUBLIC / "pwa-192-maskable.png", scale=0.88)
+    resize_icon(logo, 512, OUT_PUBLIC / "pwa-512-maskable.png", scale=0.88)
 
-    save_logo(logo, 256, OUT_LOGO)
+    OUT_LOGO.parent.mkdir(parents=True, exist_ok=True)
+    resize_icon(logo, 256, OUT_LOGO)
 
-    print("Generated icons:")
+    print("Generated transparent icons:")
     for path in sorted(OUT_PUBLIC.glob("*.png")):
         if path.name != "icon_rakumanual.png":
             print(f"  {path.relative_to(ROOT)}")
