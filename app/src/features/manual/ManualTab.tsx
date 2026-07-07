@@ -20,6 +20,13 @@ import type { ManualBlock, ManualSection, Project, ProjectTab } from "@/lib/type
 import { SECTION_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now, today, uid } from "@/lib/project-utils"
+import {
+  buildManualOutline,
+  displaySectionTitle,
+  resolveSectionNumber,
+  sectionNumberChain,
+  toSlideSectionNumber,
+} from "@/lib/manual-outline"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -69,11 +76,12 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
       updateProject(project.id, (p) => {
         const nodeMap = new Map(p.flow.nodes.map((n) => [n.id, n]))
         const generated: ManualSection[] = p.deepdive.map((d) => {
-          const num = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
+          const mediumNum = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
+          const slideNum = toSlideSectionNumber(mediumNum, 0)
           return {
             id: uid("s"),
-            title: num ? `${num} ${d.stepLabel}` : d.stepLabel,
-            sectionNumber: num,
+            title: d.stepLabel,
+            sectionNumber: slideNum,
             stepId: d.stepId,
             status: "draft",
             version: 1,
@@ -90,7 +98,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                     {
                       id: uid("b"),
                       type: "paragraph" as const,
-                      text: `項番 ${num ?? "—"} のセクションです。深掘りヒアリングが未完了のため、プレースホルダ表示です。`,
+                      text: `項番 ${slideNum ?? "—"} のセクションです。深掘りヒアリングが未完了のため、プレースホルダ表示です。`,
                     },
                   ],
           }
@@ -218,8 +226,10 @@ function SectionListPanel({
   onSelect: (id: string) => void
   className?: string
 }) {
+  const outline = buildManualOutline(sections)
+
   return (
-    <aside className={cn("flex w-72 shrink-0 flex-col border-r bg-muted/20", className)}>
+    <aside className={cn("flex w-80 shrink-0 flex-col border-r bg-muted/20", className)}>
       <div className="page-header border-b px-4 py-3">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           <ListTree className="size-4 text-muted-foreground" />
@@ -229,40 +239,87 @@ function SectionListPanel({
           {sections.filter((s) => s.status === "approved").length} / {sections.length} 承認済み
         </div>
       </div>
-      <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="flex flex-col gap-1.5">
-          {sections.map((s) => {
-            const confirms = s.blocks.filter((b) => b.needsConfirm).length
-            return (
-              <button
-                key={s.id}
-                onClick={() => onSelect(s.id)}
-                className={cn(
-                  "min-h-14 rounded-md border bg-background px-3 py-3 text-left transition-colors md:min-h-0 md:py-2.5",
-                  selectedId === s.id
-                    ? "border-primary/60 ring-2 ring-primary/15"
-                    : "hover:border-primary/30 active:bg-muted/50",
-                )}
-              >
-                <div className="text-[13px] leading-snug font-medium">{s.title}</div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[s.status])}>
-                    {SECTION_LABEL[s.status]}
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground">v{s.version}</span>
-                  {confirms > 0 && (
-                    <span className="ml-auto flex items-center gap-0.5 text-[10px] font-medium text-amber-600">
-                      <AlertTriangle className="size-3" />
-                      要確認 {confirms}
-                    </span>
-                  )}
-                </div>
-              </button>
-            )
-          })}
+      <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="flex flex-col gap-3">
+          {outline.map((major) => (
+            <div key={major.key} className="overflow-hidden rounded-lg border bg-card/80">
+              <div className="border-b bg-muted/50 px-3 py-2">
+                <span className="font-mono text-xs font-bold tabular-nums text-primary">{major.number}</span>
+              </div>
+              <div className="flex flex-col gap-2 p-2">
+                {major.mediums.map((medium) => (
+                  <div key={medium.key} className="rounded-md border border-border/60 bg-background/60">
+                    <div className="border-b border-border/50 bg-muted/30 px-2.5 py-1.5">
+                      <span className="font-mono text-[10px] font-semibold tabular-nums text-muted-foreground">
+                        {medium.number}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1 p-1.5">
+                      {medium.sections.map((s) => (
+                        <SectionListItem
+                          key={s.id}
+                          section={s}
+                          selected={selectedId === s.id}
+                          onSelect={() => onSelect(s.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </aside>
+  )
+}
+
+function SectionListItem({
+  section,
+  selected,
+  onSelect,
+}: {
+  section: ManualSection
+  selected: boolean
+  onSelect: () => void
+}) {
+  const num = resolveSectionNumber(section)
+  const title = displaySectionTitle(section)
+  const confirms = section.blocks.filter((b) => b.needsConfirm).length
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "rounded-md border px-2.5 py-2.5 text-left transition-colors",
+        selected
+          ? "border-primary/60 bg-primary-subtle/40 ring-2 ring-primary/15"
+          : "border-transparent bg-background hover:border-primary/25 hover:bg-muted/30",
+      )}
+    >
+      <div className="flex items-start gap-2">
+        {num && (
+          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-primary">
+            {num}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 text-[12px] leading-snug font-medium">{title}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-0.5">
+        <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
+          {SECTION_LABEL[section.status]}
+        </Badge>
+        <span className="text-[10px] text-muted-foreground">v{section.version}</span>
+        {confirms > 0 && (
+          <span className="ml-auto flex items-center gap-0.5 text-[10px] font-medium text-amber-600">
+            <AlertTriangle className="size-3" />
+            {confirms}
+          </span>
+        )}
+      </div>
+    </button>
   )
 }
 
@@ -319,6 +376,9 @@ function SectionEditor({
   }
 
   let stepNo = 0
+  const sectionNum = resolveSectionNumber(section)
+  const sectionTitle = displaySectionTitle(section)
+  const breadcrumbs = sectionNum ? sectionNumberChain(sectionNum) : []
 
   const actionButtons = (
     <>
@@ -384,14 +444,33 @@ function SectionEditor({
         )}
 
         <div className={cn("flex gap-4", isMobile ? "flex-col" : "items-start justify-between")}>
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold tracking-tight md:text-xl">{section.title}</h2>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
-                {SECTION_LABEL[section.status]}
-              </Badge>
-              <span>v{section.version}</span>
-              <span>最終更新 {section.updatedAt}</span>
+          <div className="min-w-0 flex-1">
+            {breadcrumbs.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                {breadcrumbs.map((crumb, i) => (
+                  <span key={crumb} className="flex items-center gap-1">
+                    {i > 0 && <span className="text-border">›</span>}
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono tabular-nums">{crumb}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-start gap-3">
+              {sectionNum && (
+                <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
+                  {sectionNum}
+                </span>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold tracking-tight md:text-xl">{sectionTitle}</h2>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
+                    {SECTION_LABEL[section.status]}
+                  </Badge>
+                  <span>v{section.version}</span>
+                  <span>最終更新 {section.updatedAt}</span>
+                </div>
+              </div>
             </div>
           </div>
           {!isMobile && desktopActions}
@@ -404,7 +483,13 @@ function SectionEditor({
           </div>
         )}
 
-        <div className="mt-5 flex flex-col gap-1 md:mt-6">
+        <div className="mt-5 rounded-xl border-2 border-border/80 bg-card shadow-sm md:mt-6">
+          <div className="border-b bg-muted/30 px-4 py-2.5 md:px-5">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              {sectionNum ? `項番 ${sectionNum}` : "セクション本文"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5 px-2 py-2 md:px-3 md:py-3">
           {section.blocks.map((block) => {
             if (block.type === "step") stepNo += 1
             return (
@@ -439,6 +524,7 @@ function SectionEditor({
               />
             )
           })}
+          </div>
         </div>
       </div>
 

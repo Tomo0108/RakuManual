@@ -1,6 +1,8 @@
 import { useState } from "react"
 import { Check, Download, FileText, Presentation } from "lucide-react"
 import type { Project } from "@/lib/types"
+import { exportManualPptx } from "@/lib/export-pptx"
+import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -33,13 +35,33 @@ export function ExportTab({ project }: Props) {
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState(false)
 
-  const doExport = () => {
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  const sortedSections = [...project.sections].sort((a, b) =>
+    compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
+  )
+
+  const targetSections =
+    range === "all" ? sortedSections : sortedSections.filter((s) => s.id === range)
+
+  const doExport = async () => {
     setExporting(true)
     setExported(false)
-    window.setTimeout(() => {
-      setExporting(false)
+    setExportError(null)
+    try {
+      if (format === "pptx") {
+        await exportManualPptx(project, targetSections, {
+          includeImages: imageMode !== "none",
+        })
+      } else {
+        await new Promise((r) => window.setTimeout(r, 800))
+      }
       setExported(true)
-    }, 1400)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "出力に失敗しました")
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -55,7 +77,7 @@ export function ExportTab({ project }: Props) {
           {(
             [
               { id: "pdf", icon: FileText, title: "PDF", desc: "閲覧・印刷用。フロー図と画像を含められます" },
-              { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "編集可能な pptx。セクション=スライド構成" },
+              { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "1セクション = 1スライドで出力" },
             ] as const
           ).map((f) => (
             <Card
@@ -116,14 +138,29 @@ export function ExportTab({ project }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">マニュアル全体({project.sections.length}セクション)</SelectItem>
-                  {project.sections.map((s) => (
+                  {sortedSections.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.title} のみ
+                      {resolveSectionNumber(s) ? `${resolveSectionNumber(s)} ` : ""}
+                      {displaySectionTitle(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {format === "pptx" && (
+              <div className="flex items-center justify-between gap-4">
+                <Label className="text-[13px]">画像の扱い</Label>
+                <Select value={imageMode} onValueChange={setImageMode}>
+                  <SelectTrigger size="sm" className="w-64 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="expand">スライド内に画像を含める</SelectItem>
+                    <SelectItem value="none">画像なし</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {format === "pdf" && (
               <div className="flex items-center justify-between gap-4">
                 <Label className="text-[13px]">画像の扱い</Label>
@@ -157,11 +194,20 @@ export function ExportTab({ project }: Props) {
           {project.sections.length === 0 && (
             <span className="text-xs text-muted-foreground">マニュアルを生成すると出力できます</span>
           )}
-          {exported && (
+          {exported && format === "pptx" && (
             <span className="flex items-center gap-1 text-sm text-emerald-600">
               <Check className="size-4" />
-              {project.name}.{format} を出力しました(デモのためダウンロードは行われません)
+              {targetSections.length} スライドの {project.name}.pptx をダウンロードしました
             </span>
+          )}
+          {exported && format === "pdf" && (
+            <span className="flex items-center gap-1 text-sm text-emerald-600">
+              <Check className="size-4" />
+              {project.name}.pdf を出力しました(デモのためダウンロードは行われません)
+            </span>
+          )}
+          {exportError && (
+            <span className="text-sm text-destructive">{exportError}</span>
           )}
         </div>
       </div>
