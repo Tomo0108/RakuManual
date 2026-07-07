@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef, useState } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
-import { CircleDot, Flag, Hand, Info } from "lucide-react"
+import { CircleDot, Flag, Hand, Info, Plus } from "lucide-react"
 import type { FlowNode, StepKind } from "@/lib/types"
 import { NODE_DIMS } from "./flow-layout"
+import { getFlowInteractionContext } from "./flow-interaction-context"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -115,6 +116,29 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
           ? "!border-amber-400 !bg-amber-50 border-dashed"
           : ""
 
+  const addAfterButton =
+    !ctx.locked && kind !== "end" ? (
+      <button
+        type="button"
+        className={cn(
+          "nodrag nopan absolute top-1/2 -right-3 z-30 flex size-5 -translate-y-1/2 items-center justify-center",
+          "rounded-full border-2 border-primary bg-background text-primary shadow-sm",
+          "opacity-0 transition-all group-hover/step:opacity-100 hover:scale-110 hover:bg-primary hover:text-primary-foreground",
+          selected && "opacity-100",
+        )}
+        aria-label="この後にコネクタを追加"
+        onClick={(e) => {
+          e.stopPropagation()
+          getFlowInteractionContext().onRequestInsert(
+            { mode: "after", nodeId: id, targetKind: kind },
+            { x: e.clientX, y: e.clientY },
+          )
+        }}
+      >
+        <Plus className="size-3" strokeWidth={2.5} />
+      </button>
+    ) : null
+
   const labelBlock = editing ? (
     <textarea
       ref={inputRef}
@@ -154,8 +178,9 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
 
   if (kind === "start") {
     return (
-      <div className="relative" style={{ width: dims.w }} onDoubleClick={startEdit}>
+      <div className="group/step relative" style={{ width: dims.w }} onDoubleClick={startEdit}>
         <FourWayHandles targets={false} />
+        {addAfterButton}
         <div
           className={cn(
             "flex flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-50 px-2 py-1.5 shadow-sm",
@@ -193,10 +218,11 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   if (kind === "decision") {
     return (
       <div
-        className="relative flex items-center justify-center"
+        className="group/step relative flex items-center justify-center"
         style={{ width: dims.w, height: dims.h }}
         onDoubleClick={startEdit}
       >
+        {addAfterButton}
         <FourWayHandles
           hideSourceSides={[Position.Right]}
           rightSources={[
@@ -230,8 +256,9 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   }
 
   return (
-    <div className="relative" style={{ width: dims.w }} onDoubleClick={startEdit}>
+    <div className="group/step relative" style={{ width: dims.w }} onDoubleClick={startEdit}>
       <FourWayHandles />
+      {addAfterButton}
       <div
         className={cn(
           "rounded-md border-2 border-slate-300 bg-card px-2.5 py-1.5 shadow-sm",
