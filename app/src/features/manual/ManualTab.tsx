@@ -80,12 +80,16 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
     window.setTimeout(() => {
       updateProject(project.id, (p) => {
         const nodeMap = new Map(p.flow.nodes.map((n) => [n.id, n]))
+        const businessName = p.hearingAnswers.find((a) => a.questionId === "q1" && a.value.trim())?.value.trim()
         const generated: ManualSection[] = p.deepdive.map((d) => {
           const sectionNum = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
+          const majorNum = sectionNum?.split(".")[0]
           return {
             id: uid("s"),
             title: d.stepLabel,
             sectionNumber: sectionNum,
+            majorTitle: d.majorTitle ?? (majorNum === "1" ? businessName : undefined),
+            mediumTitle: d.mediumTitle,
             stepId: d.stepId,
             status: "draft",
             version: 1,
@@ -171,7 +175,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
     }))
   }
 
-  const outline = buildManualOutline(sections, { majorTitle })
+  const outline = buildManualOutline(sections, { defaultMajorTitle: majorTitle })
 
   return (
     <div className="flex h-full">
@@ -210,22 +214,32 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                 </div>
               </header>
               {major.mediums.map((medium) => (
-                <div key={medium.key} className="flex flex-col gap-6">
-                  {medium.sections.map((section) => (
-                    <article
-                      key={section.id}
-                      id={sectionAnchorId(section.id)}
-                      className="scroll-mt-4"
-                    >
-                      <SectionEditor
-                        section={section}
-                        embedded
-                        isMobile={isMobile}
-                        onUpdate={(updater) => updateSection(section.id, updater)}
-                        onLog={logAction}
-                      />
-                    </article>
-                  ))}
+                <div key={medium.key} className="mb-8 flex flex-col gap-4 last:mb-0">
+                  <div className="flex items-baseline gap-2 border-b border-border/60 pb-2">
+                    <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-primary">
+                      {medium.number}
+                    </span>
+                    <h2 className="text-base font-semibold tracking-tight md:text-lg">
+                      {medium.title ?? "—"}
+                    </h2>
+                  </div>
+                  <div className="flex flex-col gap-6">
+                    {medium.sections.map((section) => (
+                      <article
+                        key={section.id}
+                        id={sectionAnchorId(section.id)}
+                        className="scroll-mt-4"
+                      >
+                        <SectionEditor
+                          section={section}
+                          embedded
+                          isMobile={isMobile}
+                          onUpdate={(updater) => updateSection(section.id, updater)}
+                          onLog={logAction}
+                        />
+                      </article>
+                    ))}
+                  </div>
                 </div>
               ))}
             </section>
@@ -273,14 +287,34 @@ function SectionTocPanel({
               <div className="flex flex-col gap-1 p-2">
                 {major.mediums.map((medium) => (
                   <div key={medium.key} className="flex flex-col gap-0.5">
-                    {medium.sections.map((s) => (
-                      <TocItem
-                        key={s.id}
-                        section={s}
-                        active={activeSectionId === s.id}
-                        onNavigate={() => onNavigate(s.id)}
-                      />
-                    ))}
+                    <button
+                      type="button"
+                      onClick={() => medium.sections[0] && onNavigate(medium.sections[0].id)}
+                      className={cn(
+                        "w-full rounded-md border px-1.5 py-1.5 text-left transition-colors",
+                        medium.sections.some((s) => s.id === activeSectionId)
+                          ? "border-primary/50 bg-primary-subtle/30"
+                          : "border-transparent hover:bg-muted/40",
+                      )}
+                    >
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-mono text-[10px] font-semibold tabular-nums text-muted-foreground">
+                          {medium.number}
+                        </span>
+                        <span className="text-[10px] font-medium leading-snug text-foreground/80">
+                          {medium.title}
+                        </span>
+                      </div>
+                    </button>
+                    {medium.sections.length > 1 &&
+                      medium.sections.map((s) => (
+                        <TocItem
+                          key={s.id}
+                          section={s}
+                          active={activeSectionId === s.id}
+                          onNavigate={() => onNavigate(s.id)}
+                        />
+                      ))}
                   </div>
                 ))}
               </div>
@@ -301,29 +335,35 @@ function SectionTocBar({
   activeSectionId: string | null
   onNavigate: (id: string) => void
 }) {
-  const items = outline.flatMap((major) => major.mediums.flatMap((medium) => medium.sections))
+  const items = outline.flatMap((major) =>
+    major.mediums
+      .filter((medium) => medium.sections[0])
+      .map((medium) => ({
+        id: medium.sections[0]!.id,
+        number: medium.number,
+        title: medium.title,
+      })),
+  )
 
   return (
     <div className="sticky top-0 z-10 -mx-4 mb-4 border-b bg-background/95 px-4 py-2 backdrop-blur-sm md:-mx-8 md:px-8">
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {items.map((s) => {
-          const num = resolveSectionNumber(s)
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onNavigate(s.id)}
-              className={cn(
-                "shrink-0 rounded-full border px-2.5 py-1 font-mono text-[10px] font-semibold tabular-nums transition-colors",
-                activeSectionId === s.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-muted/50 text-muted-foreground",
-              )}
-            >
-              {num || "—"}
-            </button>
-          )
-        })}
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onNavigate(item.id)}
+            title={item.title}
+            className={cn(
+              "shrink-0 rounded-full border px-2.5 py-1 font-mono text-[10px] font-semibold tabular-nums transition-colors",
+              activeSectionId === item.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-muted/50 text-muted-foreground",
+            )}
+          >
+            {item.number}
+          </button>
+        ))}
       </div>
     </div>
   )

@@ -109,6 +109,10 @@ export interface DeepDiveItem {
   stepLabel: string
   /** フロー図の項番(例: 1.1) */
   sectionNumber?: string
+  /** 大項目の業務名(例: 経費精算業務) */
+  majorTitle?: string
+  /** 中項目の業務概要(例: 新規申請) */
+  mediumTitle?: string
   importance: "high" | "normal" | "low"
   status: DeepDiveStatus
   answers: { question: string; answer: string }[]
@@ -149,6 +153,10 @@ export interface ManualSection {
   title: string
   /** フロー図ステップとの対応項番 */
   sectionNumber?: string
+  /** 大項目の業務名(例: 経費精算業務) */
+  majorTitle?: string
+  /** 中項目の業務概要(例: 新規申請) */
+  mediumTitle?: string
   /** 紐づくフローステップID */
   stepId?: string
   status: SectionStatus
