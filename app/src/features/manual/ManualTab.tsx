@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -6,11 +6,13 @@ import {
   Check,
   ChevronDown,
   Image as ImageIcon,
+  ImagePlus,
   ListTree,
   Pencil,
   RefreshCw,
   Sparkles,
   StickyNote,
+  Trash2,
   X,
   Workflow,
 } from "lucide-react"
@@ -18,8 +20,10 @@ import type { ManualBlock, ManualSection, Project, ProjectTab } from "@/lib/type
 import { SECTION_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now, today, uid } from "@/lib/project-utils"
+import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -422,6 +426,16 @@ function SectionEditor({
                 }}
                 onCancel={() => setEditingBlockId(null)}
                 onResolveConfirm={() => updateBlock(block.id, (b) => ({ ...b, needsConfirm: false }))}
+                onAttachImage={async (file) => {
+                  const image = await readImageFile(file)
+                  updateBlock(block.id, (b) => ({ ...b, image }))
+                }}
+                onRemoveImage={() => updateBlock(block.id, (b) => ({ ...b, image: undefined }))}
+                onUpdateImageCaption={(caption) =>
+                  updateBlock(block.id, (b) =>
+                    b.image ? { ...b, image: { ...b.image, caption } } : b,
+                  )
+                }
               />
             )
           })}
@@ -455,6 +469,9 @@ function BlockView({
   onSave,
   onCancel,
   onResolveConfirm,
+  onAttachImage,
+  onRemoveImage,
+  onUpdateImageCaption,
 }: {
   block: ManualBlock
   stepNo?: number
@@ -466,8 +483,48 @@ function BlockView({
   onSave: () => void
   onCancel: () => void
   onResolveConfirm: () => void
+  onAttachImage: (file: File) => Promise<void>
+  onRemoveImage: () => void
+  onUpdateImageCaption: (caption: string) => void
 }) {
-  const [imageOpen, setImageOpen] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [imageOpen, setImageOpen] = useState(Boolean(block.image?.url))
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [captionDraft, setCaptionDraft] = useState(block.image?.caption ?? "")
+  const [uploading, setUploading] = useState(false)
+
+  const pickImage = () => {
+    setImageError(null)
+    fileRef.current?.click()
+  }
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    const validationError = validateImageFile(file)
+    if (validationError) {
+      setImageError(validationError)
+      return
+    }
+
+    setUploading(true)
+    setImageError(null)
+    try {
+      await onAttachImage(file)
+      setImageOpen(true)
+      setCaptionDraft(file.name.replace(/\.[^.]+$/, ""))
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "画像の添付に失敗しました")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const saveCaption = () => {
+    onUpdateImageCaption(captionDraft.trim() || "画像")
+  }
 
   return (
     <div
@@ -537,32 +594,20 @@ function BlockView({
                 </div>
               )}
 
-              {/* 画像(ヘルプボタン方式 F-5): 本文レイアウトを崩さず展開 */}
-              {block.image && (
-                <div className="mt-2">
-                  <button
-                    onClick={() => setImageOpen((v) => !v)}
-                    className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/5"
-                  >
-                    <ImageIcon className="size-3" />
-                    画像を見る
-                    <ChevronDown className={cn("size-3 transition-transform", imageOpen && "rotate-180")} />
-                  </button>
-                  {imageOpen && (
-                    <figure className="mt-2 overflow-hidden rounded-lg border">
-                      <div
-                        className="flex h-40 items-center justify-center text-xs text-muted-foreground"
-                        style={{ background: block.image.color }}
-                      >
-                        <span className="rounded bg-white/70 px-3 py-1.5">スクリーンショット(サンプル画像)</span>
-                      </div>
-                      <figcaption className="border-t bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
-                        {block.image.caption}
-                      </figcaption>
-                    </figure>
-                  )}
-                </div>
-              )}
+              <BlockImageSection
+                block={block}
+                imageOpen={imageOpen}
+                setImageOpen={setImageOpen}
+                captionDraft={captionDraft}
+                setCaptionDraft={setCaptionDraft}
+                imageError={imageError}
+                uploading={uploading}
+                fileRef={fileRef}
+                onFileChange={onFileChange}
+                onPickImage={pickImage}
+                onRemoveImage={onRemoveImage}
+                onSaveCaption={saveCaption}
+              />
             </div>
 
             {/* ホバーで編集ボタン */}
@@ -580,6 +625,137 @@ function BlockView({
             )}
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+function BlockImageSection({
+  block,
+  imageOpen,
+  setImageOpen,
+  captionDraft,
+  setCaptionDraft,
+  imageError,
+  uploading,
+  fileRef,
+  onFileChange,
+  onPickImage,
+  onRemoveImage,
+  onSaveCaption,
+}: {
+  block: ManualBlock
+  imageOpen: boolean
+  setImageOpen: (open: boolean) => void
+  captionDraft: string
+  setCaptionDraft: (v: string) => void
+  imageError: string | null
+  uploading: boolean
+  fileRef: React.RefObject<HTMLInputElement | null>
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onPickImage: () => void
+  onRemoveImage: () => void
+  onSaveCaption: () => void
+}) {
+  const image = block.image
+
+  return (
+    <div className="mt-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        className="hidden"
+        onChange={onFileChange}
+      />
+
+      {image ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setImageOpen(!imageOpen)}
+              className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/5"
+            >
+              <ImageIcon className="size-3" />
+              {image.url ? "画像を見る" : "プレースホルダ"}
+              <ChevronDown className={cn("size-3 transition-transform", imageOpen && "rotate-180")} />
+            </button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2 text-[11px]"
+              onClick={onPickImage}
+              disabled={uploading}
+            >
+              <ImagePlus className="size-3" />
+              {uploading ? "読込中…" : image.url ? "変更" : "画像を添付"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 px-2 text-[11px] text-muted-foreground"
+              onClick={onRemoveImage}
+            >
+              <Trash2 className="size-3" />
+              削除
+            </Button>
+          </div>
+          {imageOpen && (
+            <figure className="mt-2 overflow-hidden rounded-lg border">
+              {image.url ? (
+                <img
+                  src={image.url}
+                  alt={image.caption}
+                  className="max-h-80 w-full bg-muted/30 object-contain"
+                />
+              ) : (
+                <div
+                  className="flex h-40 items-center justify-center text-xs text-muted-foreground"
+                  style={{ background: image.color ?? "var(--muted)" }}
+                >
+                  <span className="rounded bg-white/70 px-3 py-1.5 dark:bg-black/40">
+                    画像未添付（「画像を添付」から追加）
+                  </span>
+                </div>
+              )}
+              <figcaption className="border-t bg-muted/30 px-3 py-2">
+                <Input
+                  value={captionDraft}
+                  onChange={(e) => setCaptionDraft(e.target.value)}
+                  onBlur={onSaveCaption}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      onSaveCaption()
+                      ;(e.target as HTMLInputElement).blur()
+                    }
+                  }}
+                  placeholder="キャプション"
+                  className="h-8 border-0 bg-transparent px-0 text-[11px] shadow-none focus-visible:ring-0"
+                />
+              </figcaption>
+            </figure>
+          )}
+        </>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 text-[11px]"
+          onClick={onPickImage}
+          disabled={uploading}
+        >
+          <ImagePlus className="size-3.5" />
+          {uploading ? "読込中…" : "画像を添付"}
+        </Button>
+      )}
+
+      {imageError && (
+        <p className="mt-1.5 text-[11px] text-destructive">{imageError}</p>
       )}
     </div>
   )

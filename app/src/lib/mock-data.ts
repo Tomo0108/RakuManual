@@ -225,10 +225,10 @@ export const INITIAL_PROJECTS: Project[] = [
         updatedAt: "2026-06-28",
         blocks: [
           { id: "b1", type: "paragraph", text: "本セクションでは、従業員が経費精算を申請するまでの手順を説明します。" },
-          { id: "b2", type: "step", text: "社内ポータルから「楽々精算クラウド」を開き、「新規申請」をクリックします。", image: { caption: "楽々精算クラウドのトップ画面。右上の「新規申請」ボタンをクリック", color: "#dbeafe" } },
+          { id: "b2", type: "step", text: "社内ポータルから「楽々精算クラウド」を開き、「新規申請」をクリックします。", image: { id: "img-b2", caption: "楽々精算クラウドのトップ画面。右上の「新規申請」ボタンをクリック", color: "#dbeafe" } },
           { id: "b3", type: "step", text: "費目を選択し、金額・利用日・利用目的を入力します。" },
           { id: "b4", type: "note", text: "交際費と会議費の区別に注意してください。1人あたり5,000円以下の飲食は会議費になります。" },
-          { id: "b5", type: "step", text: "領収書をスマートフォンで撮影し、画像を添付して申請ボタンを押します。", image: { caption: "領収書添付画面。金額・日付・宛名が読める画像を添付", color: "#fce7f3" } },
+          { id: "b5", type: "step", text: "領収書をスマートフォンで撮影し、画像を添付して申請ボタンを押します。", image: { id: "img-b5", caption: "領収書添付画面。金額・日付・宛名が読める画像を添付", color: "#fce7f3" } },
         ],
       },
       {
@@ -307,7 +307,7 @@ export const INITIAL_PROJECTS: Project[] = [
         updatedAt: "2026-07-03",
         blocks: [
           { id: "b1", type: "paragraph", text: "人事から入社情報を受領したら、入社日の2週間前までにPCとアカウントの手配を開始します。" },
-          { id: "b2", type: "step", text: "資産管理システムで在庫を確認し、貸与するPCを選定・登録します。", image: { caption: "資産管理システムの在庫一覧画面", color: "#dcfce7" } },
+          { id: "b2", type: "step", text: "資産管理システムで在庫を確認し、貸与するPCを選定・登録します。", image: { id: "img-pc-b2", caption: "資産管理システムの在庫一覧画面", color: "#dcfce7" } },
           { id: "b3", type: "step", text: "Active Directory 管理コンソールでユーザーアカウントを作成します。", needsConfirm: true },
           { id: "b4", type: "note", text: "アカウント命名規則は「姓.名」形式です。同姓同名がいる場合は数字を付与します。", needsConfirm: true },
         ],

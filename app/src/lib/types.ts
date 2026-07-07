@@ -123,6 +123,17 @@ export const SECTION_LABEL: Record<SectionStatus, string> = {
   approved: "承認済み",
 }
 
+export interface ManualImage {
+  id: string
+  /** data URL など。未設定時は color プレースホルダを表示 */
+  url?: string
+  caption: string
+  mimeType?: string
+  name?: string
+  /** サンプル用プレースホルダ色 */
+  color?: string
+}
+
 export interface ManualBlock {
   id: string
   type: "paragraph" | "step" | "note"
@@ -130,7 +141,7 @@ export interface ManualBlock {
   /** AIが推測で補完した「要確認」箇所 */
   needsConfirm?: boolean
   /** 画像添付(ヘルプボタン方式で展開表示) */
-  image?: { caption: string; color: string }
+  image?: ManualImage
 }
 
 export interface ManualSection {
