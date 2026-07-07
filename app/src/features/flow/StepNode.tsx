@@ -230,19 +230,19 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
           position={Position.Right}
           id="yes"
           className={handleClass}
-          style={{ top: "36%" }}
+          style={{ top: "50%", zIndex: 40 }}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="no"
           className={handleClass}
-          style={{ left: "66%" }}
+          style={{ left: "50%", zIndex: 40 }}
         />
-        <span className="pointer-events-none absolute -right-7 top-[36%] z-20 -translate-y-1/2 text-[9px] font-semibold text-primary">
+        <span className="pointer-events-none absolute -right-10 top-1/2 z-30 -translate-y-1/2 rounded border border-primary/40 bg-background/95 px-1.5 py-0.5 text-[9px] font-semibold text-primary shadow-xs">
           はい
         </span>
-        <span className="pointer-events-none absolute left-[66%] -bottom-5 z-20 -translate-x-1/2 text-[9px] font-semibold text-rose-600">
+        <span className="pointer-events-none absolute bottom-[-1.35rem] left-1/2 z-30 -translate-x-1/2 rounded border border-rose-300 bg-background/95 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 shadow-xs">
           いいえ
         </span>
         <div
