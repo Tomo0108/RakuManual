@@ -39,10 +39,9 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { StepNode, setStepNodeContext } from "./StepNode"
-import { SystemAxisPanel, TeamAxisPanel, LaneGuideOverlay, FlowCanvasHeader, type FlowViewport } from "./FlowAxisPanels"
+import { SystemAxisPanel, TeamAxisPanel, LaneGuideOverlay, FlowCanvasHeader, MobileSystemAxisPanel, MobileTeamAxis, type FlowViewport } from "./FlowAxisPanels"
 import { FlowPanBar } from "./FlowPanBar"
 import { FlowMobileControls } from "./FlowMobileControls"
-import { MobileSystemStrip } from "./MobileSystemStrip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   autoLayout,
@@ -784,7 +783,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             />
           )}
           {!isMobile && (
-            <TeamAxisPanel lanes={flow.lanes} viewport={viewport} activeLane={activeLane} />
+            <TeamAxisPanel lanes={flow.lanes} nodes={previewFlow.nodes} viewport={viewport} activeLane={activeLane} />
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {!isMobile && <FlowCanvasHeader />}
@@ -801,7 +800,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                       transformOrigin: "0 0",
                     }}
                   >
-                    <LaneGuideOverlay lanes={flow.lanes} layoutMeta={flow.layoutMeta} />
+                    <LaneGuideOverlay lanes={flow.lanes} nodes={previewFlow.nodes} layoutMeta={flow.layoutMeta} />
                   </div>
                 </div>
                 <ReactFlow
@@ -892,9 +891,18 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                     className="top-2"
                   />
                 )}
+                {isMobile && (
+                  <MobileTeamAxis
+                    lanes={flow.lanes}
+                    nodes={previewFlow.nodes}
+                    viewport={viewport}
+                    activeLane={activeLane}
+                  />
+                )}
                 {isMobile && activeLane && (
-                  <div className="pointer-events-none absolute left-[3.25rem] top-2 z-40 max-w-[calc(100%-12rem)] truncate rounded-full border border-primary-muted bg-primary-subtle px-2.5 py-1 text-[10px] font-medium text-primary shadow-xs">
-                    {activeLane}
+                  <div className="pointer-events-none absolute right-2 top-2 z-40 max-w-[calc(100%-5rem)] rounded-lg border border-primary/40 bg-primary-subtle/95 px-2.5 py-1.5 shadow-sm backdrop-blur-sm">
+                    <span className="block text-[8px] font-medium uppercase tracking-wide text-primary/70">担当部署</span>
+                    <span className="block truncate text-[11px] font-semibold text-primary">{activeLane}</span>
                   </div>
                 )}
                 {/* ReactFlow は overflow:hidden のため MiniMap はキャンバス内に重ねて配置 */}
@@ -918,7 +926,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   {isLocked
                     ? "ロック中 — 編集するにはツールバーのロックを解除"
                     : isMobile
-                      ? "ピンチで拡大 / ＋でコネクタ追加 / 下部バーで移動"
+                      ? "ピンチで拡大 / ＋でコネクタ追加 / 下部バーで左右移動"
                       : "左パネル・線の＋・右クリックでコネクタ追加 / ダブルクリックで編集"}
                 </div>
               )}
@@ -959,7 +967,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           </div>
         </div>
         {isMobile ? (
-          <MobileSystemStrip columnSystems={columnSystems} />
+          <MobileSystemAxisPanel columnSystems={columnSystems} viewport={viewport} />
         ) : (
           <SystemAxisPanel
             columnSystems={columnSystems}

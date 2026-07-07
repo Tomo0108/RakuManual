@@ -21,8 +21,9 @@ export function FlowPanBar({ viewport, contentWidth, viewWidth, panMinX, panMaxX
   const trackW = Math.max(1, viewWidth - 48)
   const thumbW = Math.max(48, Math.min(trackW, (viewWidth / scaledW) * trackW))
   const panRange = panMaxX - panMinX
+  // 左に動かすとフローも左へ（直感的な操作方向）
   const thumbLeft =
-    panRange <= 0 ? (trackW - thumbW) / 2 : ((viewport.x - panMinX) / panRange) * (trackW - thumbW)
+    panRange <= 0 ? (trackW - thumbW) / 2 : ((panMaxX - viewport.x) / panRange) * (trackW - thumbW)
 
   const panFromClientX = useCallback(
     (clientX: number) => {
@@ -30,7 +31,7 @@ export function FlowPanBar({ viewport, contentWidth, viewWidth, panMinX, panMaxX
       if (!track || panRange <= 0) return
       const rect = track.getBoundingClientRect()
       const ratio = Math.max(0, Math.min(1, (clientX - rect.left - thumbW / 2) / (rect.width - thumbW)))
-      onPanX(panMinX + ratio * panRange)
+      onPanX(panMaxX - ratio * panRange)
     },
     [onPanX, panMinX, panRange, thumbW],
   )
@@ -47,7 +48,7 @@ export function FlowPanBar({ viewport, contentWidth, viewWidth, panMinX, panMaxX
     const track = trackRef.current
     if (!track) return
     const ratio = dx / (track.clientWidth - thumbW)
-    const nextX = dragRef.current.startVpX + ratio * panRange
+    const nextX = dragRef.current.startVpX - ratio * panRange
     onPanX(Math.max(panMinX, Math.min(panMaxX, nextX)))
   }
 

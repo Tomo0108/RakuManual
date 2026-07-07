@@ -508,6 +508,44 @@ export function gridDimensions(laneCount: number, columnCount: number) {
   }
 }
 
+export interface LaneRowMetric {
+  top: number
+  height: number
+}
+
+/**
+ * 担当チーム行の表示高さを算出。
+ * 同一列に縦並びのコネクタがある場合は行を伸ばしてラベル領域を確保する。
+ */
+export function computeLaneRowMetrics(nodes: FlowNode[], lanes: string[]): LaneRowMetric[] {
+  const metrics: LaneRowMetric[] = lanes.map((_, i) => ({
+    top: FLOW_ORIGIN_Y + i * LANE_ROW_HEIGHT,
+    height: LANE_ROW_HEIGHT,
+  }))
+
+  for (const n of nodes) {
+    const li = lanes.indexOf(n.data.lane)
+    if (li < 0) continue
+    const kind = n.data.kind
+    const dims = dimForKind(kind === "start" || kind === "end" || kind === "decision" ? kind : "process")
+    const nodeTop = n.position.y
+    const nodeBottom = n.position.y + dims.h
+    const row = metrics[li]
+    const rowBottom = row.top + row.height
+
+    if (nodeBottom > rowBottom - 6) {
+      row.height = nodeBottom - row.top + 10
+    }
+    if (nodeTop < row.top) {
+      const delta = row.top - nodeTop
+      row.top -= delta
+      row.height += delta
+    }
+  }
+
+  return metrics
+}
+
 export function flowToScreen(
   flowX: number,
   flowY: number,
