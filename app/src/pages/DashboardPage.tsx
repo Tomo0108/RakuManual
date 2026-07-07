@@ -53,15 +53,13 @@ export function DashboardPage({ projects }: Props) {
             <Card key={k.label} className="gap-0 py-4">
               <CardContent>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <k.icon className="size-3.5 shrink-0" />
-                    <span className="line-clamp-2 leading-snug">{k.label}</span>
-                  </div>
+                  <k.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                   {k.good && (
                     <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="目標達成" />
                   )}
                 </div>
-                <div className="mt-2 text-2xl font-bold tracking-tight">{k.value}</div>
+                <p className="mt-2 text-xs leading-snug text-muted-foreground">{k.label}</p>
+                <div className="mt-1 text-2xl font-bold tracking-tight">{k.value}</div>
               </CardContent>
             </Card>
           ))}
