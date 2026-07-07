@@ -25,7 +25,6 @@ import {
   displaySectionTitle,
   resolveSectionNumber,
   sectionNumberChain,
-  toSlideSectionNumber,
 } from "@/lib/manual-outline"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { Badge } from "@/components/ui/badge"
@@ -76,12 +75,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
       updateProject(project.id, (p) => {
         const nodeMap = new Map(p.flow.nodes.map((n) => [n.id, n]))
         const generated: ManualSection[] = p.deepdive.map((d) => {
-          const mediumNum = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
-          const slideNum = toSlideSectionNumber(mediumNum, 0)
+          const sectionNum = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
           return {
             id: uid("s"),
             title: d.stepLabel,
-            sectionNumber: slideNum,
+            sectionNumber: sectionNum,
             stepId: d.stepId,
             status: "draft",
             version: 1,
@@ -98,7 +96,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                     {
                       id: uid("b"),
                       type: "paragraph" as const,
-                      text: `項番 ${slideNum ?? "—"} のセクションです。深掘りヒアリングが未完了のため、プレースホルダ表示です。`,
+                      text: `項番 ${sectionNum ?? "—"} のセクションです。深掘りヒアリングが未完了のため、プレースホルダ表示です。`,
                     },
                   ],
           }

@@ -211,6 +211,10 @@ export const INITIAL_PROJECTS: Project[] = [
         { question: "使用するファイルは?", answer: "領収書のスマホ撮影画像(JPEG/PNG、10MBまで)" },
         { question: "注意点は?", answer: "金額・日付・宛名が読める解像度で撮影すること" },
       ]},
+      { stepId: "n4", stepLabel: "承認フロー", sectionNumber: "1.3", importance: "normal", status: "done", answers: [
+        { question: "承認者の判断基準は?", answer: "申請金額が5万円以上なら部長、未満なら課長が承認する" },
+        { question: "承認の期限は?", answer: "申請から3営業日以内" },
+      ]},
       { stepId: "n7", stepLabel: "経理が内容を確認・仕訳", sectionNumber: "1.6", importance: "high", status: "done", answers: [
         { question: "判断基準は?", answer: "費目と領収書の整合性、稟議番号の有無を確認" },
         { question: "所要時間は?", answer: "1件あたり3〜5分" },
@@ -219,7 +223,7 @@ export const INITIAL_PROJECTS: Project[] = [
     sections: [
       {
         id: "s1",
-        sectionNumber: "1.1.1",
+        sectionNumber: "1.1",
         stepId: "n2",
         title: "経費精算システムに入力",
         status: "approved",
@@ -234,7 +238,7 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s2",
-        sectionNumber: "1.2.1",
+        sectionNumber: "1.2",
         stepId: "n3",
         title: "領収書画像を添付して申請",
         status: "approved",
@@ -246,7 +250,8 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s3",
-        sectionNumber: "1.3.1",
+        sectionNumber: "1.3",
+        stepId: "n4",
         title: "承認フロー",
         status: "approved",
         version: 2,
@@ -260,7 +265,7 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s4",
-        sectionNumber: "1.6.1",
+        sectionNumber: "1.6",
         stepId: "n7",
         title: "経理が内容を確認・仕訳",
         status: "approved",
@@ -302,22 +307,22 @@ export const INITIAL_PROJECTS: Project[] = [
     ],
     flow: pcSetupFlow,
     deepdive: [
-      { stepId: "n2", stepLabel: "PC・アカウントを手配", importance: "high", status: "done", answers: [
+      { stepId: "n2", stepLabel: "PC・アカウントを手配", sectionNumber: "1.1", importance: "high", status: "done", answers: [
         { question: "使用するシステムは?", answer: "資産管理システム + Active Directory 管理コンソール" },
         { question: "操作手順は?", answer: "在庫確認 → 貸与登録 → ADでアカウント作成 → メールボックス発行" },
       ]},
-      { stepId: "n3", stepLabel: "キッティング(初期設定)", importance: "high", status: "in-progress", answers: [
+      { stepId: "n3", stepLabel: "キッティング(初期設定)", sectionNumber: "1.2", importance: "high", status: "in-progress", answers: [
         { question: "使用するファイルは?", answer: "キッティング手順書 v2.1(共有ドライブ > 情シス > 手順書)" },
       ]},
-      { stepId: "n4", stepLabel: "受入部署に引き渡し", importance: "normal", status: "not-started", answers: [] },
-      { stepId: "n5", stepLabel: "初回ログイン確認", importance: "low", status: "recheck", answers: [
+      { stepId: "n4", stepLabel: "受入部署に引き渡し", sectionNumber: "1.3", importance: "normal", status: "not-started", answers: [] },
+      { stepId: "n5", stepLabel: "初回ログイン確認", sectionNumber: "1.4", importance: "low", status: "recheck", answers: [
         { question: "確認項目は?", answer: "パスワード変更・VPN接続・プリンタ設定" },
       ]},
     ],
     sections: [
       {
         id: "s1",
-        sectionNumber: "1.1.1",
+        sectionNumber: "1.1",
         stepId: "n2",
         title: "PC・アカウントの手配",
         status: "review",
@@ -332,7 +337,7 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s2",
-        sectionNumber: "1.2.1",
+        sectionNumber: "1.2",
         stepId: "n3",
         title: "キッティング(初期設定)",
         status: "draft",
@@ -345,9 +350,9 @@ export const INITIAL_PROJECTS: Project[] = [
       },
       {
         id: "s3",
-        sectionNumber: "1.3.1",
+        sectionNumber: "1.3",
         stepId: "n4",
-        title: "引き渡しと初回ログイン確認",
+        title: "受入部署に引き渡し",
         status: "draft",
         version: 1,
         updatedAt: "2026-07-03",
@@ -355,9 +360,22 @@ export const INITIAL_PROJECTS: Project[] = [
           { id: "b1", type: "paragraph", text: "このセクションは深掘りヒアリングが未完了のため、プレースホルダ表示です。深掘りヒアリング完了後に生成できます。" },
         ],
       },
+      {
+        id: "s4",
+        sectionNumber: "1.4",
+        stepId: "n5",
+        title: "初回ログイン確認",
+        status: "draft",
+        version: 1,
+        updatedAt: "2026-07-03",
+        blocks: [
+          { id: "b1", type: "paragraph", text: "入社者と一緒に初回ログインを行い、パスワード変更・VPN接続・プリンタ設定を確認します。" },
+          { id: "b2", type: "step", text: "Windowsにログインし、初期パスワードの変更を促します。", needsConfirm: true },
+        ],
+      },
     ],
     history: [
-      { id: "h1", date: "2026-07-03 14:30", user: "佐藤 太郎", action: "セクション1〜2を生成" },
+      { id: "h1", date: "2026-07-03 14:30", user: "佐藤 太郎", action: "セクション1〜4を生成" },
       { id: "h2", date: "2026-07-02 16:45", user: "佐藤 太郎", action: "フロー図を確定" },
     ],
   },
@@ -382,9 +400,9 @@ export const INITIAL_PROJECTS: Project[] = [
     ],
     flow: invoiceFlow,
     deepdive: [
-      { stepId: "n2", stepLabel: "販売管理システムで請求データ作成", importance: "high", status: "not-started", answers: [] },
-      { stepId: "n3", stepLabel: "金額・宛先の相互チェック", importance: "high", status: "not-started", answers: [] },
-      { stepId: "n6", stepLabel: "請求書PDFを発行・送付", importance: "normal", status: "not-started", answers: [] },
+      { stepId: "n2", stepLabel: "販売管理システムで請求データ作成", sectionNumber: "1.1", importance: "high", status: "not-started", answers: [] },
+      { stepId: "n3", stepLabel: "金額・宛先の相互チェック", sectionNumber: "1.2", importance: "high", status: "not-started", answers: [] },
+      { stepId: "n6", stepLabel: "請求書PDFを発行・送付", sectionNumber: "1.5", importance: "normal", status: "not-started", answers: [] },
     ],
     sections: [],
     history: [
@@ -431,19 +449,19 @@ export const QA_PATTERNS: QAPattern[] = [
     keywords: ["経費", "精算", "領収書", "立替"],
     answer:
       "経費精算は「楽々精算クラウド」から申請します。費目を選択して金額・利用日・目的を入力し、領収書画像を添付して申請してください。金額が5万円以上の場合は部長承認、未満の場合は課長承認となります。",
-    source: { projectId: "P-001", projectName: "経費精算業務マニュアル", section: "1. 申請の受付と入力" },
+    source: { projectId: "P-001", projectName: "経費精算業務マニュアル", section: "1.1 経費精算システムに入力" },
   },
   {
     keywords: ["承認", "5万", "部長", "課長"],
     answer:
       "申請金額が5万円以上の場合は部長承認、5万円未満の場合は課長承認です。承認は申請から3営業日以内に行うルールになっています。",
-    source: { projectId: "P-001", projectName: "経費精算業務マニュアル", section: "2. 承認フロー" },
+    source: { projectId: "P-001", projectName: "経費精算業務マニュアル", section: "1.3 承認フロー" },
   },
   {
     keywords: ["pc", "パソコン", "入社", "キッティング", "アカウント"],
     answer:
       "新入社員のPCは入社日の2週間前までに手配を開始します。資産管理システムで在庫確認・貸与登録を行い、Active Directory でアカウントを作成します。",
-    source: { projectId: "P-002", projectName: "新入社員PC受入マニュアル", section: "1. PC・アカウントの手配" },
+    source: { projectId: "P-002", projectName: "新入社員PC受入マニュアル", section: "1.1 PC・アカウントの手配" },
   },
   {
     keywords: ["請求", "インボイス", "25日"],
