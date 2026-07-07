@@ -223,17 +223,26 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
         onDoubleClick={startEdit}
       >
         {addAfterButton}
-        <FourWayHandles
-          hideSourceSides={[Position.Right]}
-          rightSources={[
-            { id: "yes", top: "28%" },
-            { id: "no", top: "72%" },
-          ]}
+        {/* 分岐は出口を固定: 右=はい / 下=いいえ */}
+        <FourWayHandles sources={false} />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="yes"
+          className={handleClass}
+          style={{ top: "36%" }}
         />
-        <span className="pointer-events-none absolute -right-7 top-[28%] z-20 -translate-y-1/2 text-[9px] font-semibold text-primary">
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="no"
+          className={handleClass}
+          style={{ left: "66%" }}
+        />
+        <span className="pointer-events-none absolute -right-7 top-[36%] z-20 -translate-y-1/2 text-[9px] font-semibold text-primary">
           はい
         </span>
-        <span className="pointer-events-none absolute -right-7 top-[72%] z-20 -translate-y-1/2 text-[9px] font-semibold text-rose-600">
+        <span className="pointer-events-none absolute left-[66%] -bottom-5 z-20 -translate-x-1/2 text-[9px] font-semibold text-rose-600">
           いいえ
         </span>
         <div
