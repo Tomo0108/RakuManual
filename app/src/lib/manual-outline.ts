@@ -66,13 +66,13 @@ export function displaySectionTitle(section: ManualSection): string {
   return title || section.title
 }
 
-/** フロー中項目(1.1)からスライド用小項目項番(1.1.1)を生成 */
+/** 中項目を細分化する場合のスライド項番を生成 (例: 1.1 + index0 → 1.1.1) */
 export function toSlideSectionNumber(mediumNumber?: string, index = 0): string | undefined {
   if (!mediumNumber?.trim()) return undefined
   const parts = sectionNumberParts(mediumNumber)
   if (parts.length >= 3) return mediumNumber
   if (parts.length === 2) return `${mediumNumber}.${index + 1}`
-  if (parts.length === 1) return `${mediumNumber}.1.${index + 1}`
+  if (parts.length === 1) return index === 0 ? `${mediumNumber}.1` : `${mediumNumber}.1.${index + 1}`
   return undefined
 }
 
