@@ -18,12 +18,11 @@ import {
   ArrowLeft,
   Check,
   ChevronUp,
-  Diamond,
   Focus,
+  Layers,
   ListChecks,
   Lock,
   LockOpen,
-  Plus,
   Redo2,
   Sparkles,
   Trash2,
@@ -51,16 +50,14 @@ import {
   interpretInstruction,
   makeNode,
   regeneratePreservingManual,
+  insertConnectorBetween,
+  insertConnectorAfter,
+  appendConnector,
   type NlProposal,
 } from "./flow-logic"
 import {
-  COL_WIDTH,
   FLOW_MINIMAP_HEIGHT,
   FLOW_MINIMAP_WIDTH,
-  FLOW_ORIGIN_X,
-  FLOW_ORIGIN_Y,
-  LANE_ROW_HEIGHT,
-  NODE_DIMS,
   enrichEdges,
   flowContentBounds,
   flowPanXRange,
@@ -71,6 +68,8 @@ import {
   normalizeColumnSystems,
   snapNodePosition,
   syncLayoutMeta,
+  nearestLaneIndex,
+  dimForKind,
 } from "./flow-layout"
 import { assignSectionNumbers } from "./flow-numbering"
 import { cn } from "@/lib/utils"
@@ -82,8 +81,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FlowAddEdge } from "./FlowAddEdge"
+import { FlowConnectorPanel, FlowConnectorPanelBody } from "./FlowConnectorPanel"
+import { ConnectorPicker } from "./ConnectorPicker"
+import {
+  setFlowInteractionContext,
+  type ConnectorInsertTarget,
+} from "./flow-interaction-context"
+import { connectorById, type FlowConnector } from "./flow-connectors"
 
 const nodeTypes = { step: StepNode }
+const edgeTypes = { flowAdd: FlowAddEdge }
 
 /** 軸パネル・エッジ表示・項番をノード配置と同期 */
 function polishFlow(state: FlowState): FlowState {
@@ -116,6 +124,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
+  const [connectorPanelOpen, setConnectorPanelOpen] = useState(true)
+  const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
+  const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
   const [viewport, setViewport] = useState<FlowViewport>({ x: 0, y: 0, zoom: 1 })
   const dragSnapshot = useRef<FlowState | null>(null)
   const rfRef = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
@@ -305,6 +316,105 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     })
   }, [flow.lanes, commit, isEditingDisabled])
 
+  const selectedNodes = flow.nodes.filter((n) => n.selected)
+  const selectedEdges = flow.edges.filter((e) => e.selected)
+  const activeLane = selectedNodes.length === 1 ? selectedNodes[0].data.lane : undefined
+
+  const handleInsertConnector = useCallback(
+    (connector: FlowConnector, target: ConnectorInsertTarget) => {
+      commit((s) => {
+        if (target.mode === "between" && target.sourceId && target.targetId) {
+          return polishFlow(
+            insertConnectorBetween(
+              s,
+              target.sourceId,
+              target.targetId,
+              connector.kind,
+              connector.defaultLabel,
+            ),
+          )
+        }
+        if (target.mode === "after" && target.nodeId) {
+          return polishFlow(
+            insertConnectorAfter(s, target.nodeId, connector.kind, connector.defaultLabel),
+          )
+        }
+        return polishFlow(
+          appendConnector(s, connector.kind, connector.defaultLabel, target.nodeId),
+        )
+      })
+      setInsertTarget(null)
+      setConnectorSheetOpen(false)
+      fitCanvas()
+    },
+    [commit, fitCanvas],
+  )
+
+  const handlePanelConnectorSelect = useCallback(
+    (connector: FlowConnector) => {
+      const anchor = selectedNodes[0]
+      if (anchor) {
+        handleInsertConnector(connector, { mode: "after", nodeId: anchor.id, targetKind: anchor.data.kind })
+      } else {
+        handleInsertConnector(connector, { mode: "append" })
+      }
+    },
+    [handleInsertConnector, selectedNodes],
+  )
+
+  const onConnectorDragStart = useCallback((e: React.DragEvent, connector: FlowConnector) => {
+    e.dataTransfer.setData("application/flow-connector", JSON.stringify({ id: connector.id }))
+    e.dataTransfer.effectAllowed = "move"
+  }, [])
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+  }, [])
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      if (isEditingDisabled) return
+      const raw = e.dataTransfer.getData("application/flow-connector")
+      if (!raw || !rfRef.current) return
+      let id: string
+      try {
+        id = JSON.parse(raw).id
+      } catch {
+        return
+      }
+      const connector = connectorById(id)
+      if (!connector) return
+      const position = rfRef.current.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      commit((s) => {
+        const laneCount = s.lanes.length || 1
+        const dims = dimForKind(connector.kind === "decision" ? "decision" : "process")
+        const li = nearestLaneIndex(position.y, dims.h, laneCount)
+        const lane = s.lanes[li] ?? s.lanes[0] ?? "担当者"
+        const node = makeNode(connector.defaultLabel, lane, connector.kind, position)
+        return polishFlow({
+          ...s,
+          lanes: s.lanes.length > 0 ? s.lanes : [lane],
+          nodes: [...s.nodes, node],
+        })
+      })
+      fitCanvas()
+    },
+    [commit, fitCanvas, isEditingDisabled],
+  )
+
+  useEffect(() => {
+    setFlowInteractionContext({
+      locked: isEditingDisabled,
+      onRequestInsert: (target) => {
+        if (isEditingDisabled) return
+        setInsertTarget(target)
+      },
+      onInsertConnector: handleInsertConnector,
+    })
+  }, [isEditingDisabled, handleInsertConnector])
+
   /* React Flow のドラッグ等の変更 */
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -398,25 +508,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   )
 
   /* ツールバー操作 */
-  const selectedNodes = flow.nodes.filter((n) => n.selected)
-  const selectedEdges = flow.edges.filter((e) => e.selected)
-  const activeLane = selectedNodes.length === 1 ? selectedNodes[0].data.lane : undefined
-
-  const addStep = (kind: "process" | "decision") => {
-    const lane = selectedNodes[0]?.data.lane ?? flow.lanes[0] ?? "担当者"
-    const li = Math.max(0, flow.lanes.indexOf(lane))
-    const pos = {
-      x: FLOW_ORIGIN_X + (flow.layoutMeta?.columnCount ?? 1) * COL_WIDTH,
-      y: FLOW_ORIGIN_Y + li * LANE_ROW_HEIGHT + (LANE_ROW_HEIGHT - NODE_DIMS.process.h) / 2,
-    }
-    commit((s) =>
-      polishFlow({
-        ...s,
-        lanes: s.lanes.length > 0 ? s.lanes : [lane],
-        nodes: [...s.nodes, makeNode(kind === "decision" ? "条件分岐?" : "新しいステップ", lane, kind, pos)],
-      }),
-    )
-  }
+  const openConnectorPicker = useCallback(() => {
+    if (isMobile) setConnectorSheetOpen(true)
+    else setConnectorPanelOpen(true)
+  }, [isMobile])
 
   const deleteSelected = () => {
     if (selectedNodes.length === 0 && selectedEdges.length === 0) return
@@ -609,14 +704,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     <div className="flex h-full flex-col">
       {/* ツールバー */}
       <div className="scrollbar-none scroll-touch flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1.5 md:gap-1.5 md:px-4 md:py-2">
-        <ToolButton label="ステップを追加" onClick={() => addStep("process")} iconOnly={isMobile} disabled={isEditingDisabled}>
-          <Plus className="size-4" />
-          {!isMobile && "ステップ"}
-        </ToolButton>
-        <ToolButton label="条件分岐を追加" onClick={() => addStep("decision")} iconOnly={isMobile} disabled={isEditingDisabled}>
-          <Diamond className="size-4" />
-          {!isMobile && "分岐"}
-        </ToolButton>
+        {(isMobile || !connectorPanelOpen) && (
+          <ToolButton
+            label="コネクタを追加"
+            onClick={openConnectorPicker}
+            disabled={isEditingDisabled}
+            iconOnly={isMobile}
+          >
+            <Layers className="size-4" />
+            {!isMobile && "コネクタ"}
+          </ToolButton>
+        )}
         {!isMobile && <Separator orientation="vertical" className="mx-1 !h-5" />}
         <ToolButton
           label="選択中の要素を削除(Delete)"
@@ -673,9 +771,18 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         </div>
       </div>
 
-      {/* キャンバス: 担当チーム(左) + フロー(中央) + 利用システム(下) */}
+      {/* キャンバス: コネクタ(左) + 担当チーム + フロー(中央) + 利用システム(下) */}
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
+          {!isMobile && (
+            <FlowConnectorPanel
+              collapsed={!connectorPanelOpen}
+              onToggleCollapse={() => setConnectorPanelOpen((v) => !v)}
+              onSelect={handlePanelConnectorSelect}
+              onDragStart={onConnectorDragStart}
+              disabled={isEditingDisabled}
+            />
+          )}
           {!isMobile && (
             <TeamAxisPanel lanes={flow.lanes} viewport={viewport} activeLane={activeLane} />
           )}
@@ -714,7 +821,33 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   onNodesChange={isEditingDisabled ? undefined : onNodesChange}
                   onEdgesChange={isEditingDisabled ? undefined : onEdgesChange}
                   onConnect={isEditingDisabled ? undefined : onConnect}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop}
+                  onPaneContextMenu={(e) => {
+                    e.preventDefault()
+                    if (isEditingDisabled) return
+                    setInsertTarget({ mode: "append" })
+                  }}
+                  onNodeContextMenu={(e, node) => {
+                    e.preventDefault()
+                    if (isEditingDisabled) return
+                    setInsertTarget({
+                      mode: "after",
+                      nodeId: node.id,
+                      targetKind: node.data.kind,
+                    })
+                  }}
+                  onEdgeContextMenu={(e, edge) => {
+                    e.preventDefault()
+                    if (isEditingDisabled) return
+                    setInsertTarget({
+                      mode: "between",
+                      sourceId: edge.source,
+                      targetId: edge.target,
+                    })
+                  }}
                   nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
                   nodesDraggable={!isEditingDisabled}
                   nodesConnectable={!isEditingDisabled}
                   elementsSelectable={!isEditingDisabled}
@@ -785,8 +918,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   {isLocked
                     ? "ロック中 — 編集するにはツールバーのロックを解除"
                     : isMobile
-                      ? "ピンチで拡大 / ドラッグで移動 / 下部バーで移動"
-                      : "左→右に進行 / ダブルクリックで編集 / 下部バーで移動"}
+                      ? "ピンチで拡大 / ＋でコネクタ追加 / 下部バーで移動"
+                      : "左パネル・線の＋・右クリックでコネクタ追加 / ダブルクリックで編集"}
                 </div>
               )}
 
@@ -836,6 +969,52 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           />
         )}
       </div>
+
+      {/* コネクタ選択(キャンバス上の＋・右クリック) */}
+      <Dialog open={!!insertTarget} onOpenChange={(open) => !open && setInsertTarget(null)}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle className="text-sm">コネクタを追加</DialogTitle>
+            <DialogDescription className="text-xs">
+              {insertTarget?.mode === "between"
+                ? "この結線の間に挿入するコネクタを選んでください"
+                : insertTarget?.mode === "after"
+                  ? "このステップの後に追加するコネクタを選んでください"
+                  : "追加するコネクタを選んでください"}
+            </DialogDescription>
+          </DialogHeader>
+          {insertTarget && (
+            <ConnectorPicker
+              mode={insertTarget.mode}
+              targetKind={insertTarget.targetKind}
+              onSelect={(c) => handleInsertConnector(c, insertTarget)}
+              className="max-h-[min(60vh,420px)]"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* モバイル: コネクタパネル */}
+      <Dialog open={connectorSheetOpen} onOpenChange={setConnectorSheetOpen}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle className="text-sm">コネクタを追加</DialogTitle>
+            <DialogDescription className="text-xs">
+              追加するコネクタを選んでください
+            </DialogDescription>
+          </DialogHeader>
+          <FlowConnectorPanelBody
+            onSelect={(c) => {
+              const anchor = selectedNodes[0]
+              if (anchor) {
+                handleInsertConnector(c, { mode: "after", nodeId: anchor.id, targetKind: anchor.data.kind })
+              } else {
+                handleInsertConnector(c, { mode: "append" })
+              }
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* 再生成の確認ダイアログ(破壊的操作の確認 4-A) */}
       <Dialog open={regenConfirmOpen} onOpenChange={setRegenConfirmOpen}>

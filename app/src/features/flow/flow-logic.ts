@@ -160,10 +160,16 @@ function midpoint(a: FlowNode, b: FlowNode) {
   }
 }
 
-function previewInsertBetween(s: FlowState, aId: string, bId: string, label: string): FlowState {
+function previewInsertBetween(
+  s: FlowState,
+  aId: string,
+  bId: string,
+  label: string,
+  kind: FlowNode["data"]["kind"] = "process",
+): FlowState {
   const a = s.nodes.find((n) => n.id === aId)!
   const b = s.nodes.find((n) => n.id === bId)!
-  const node = makeNode(label, a.data.lane, "process", midpoint(a, b), { diff: "add" })
+  const node = makeNode(label, a.data.lane, kind, midpoint(a, b), { diff: "add" })
   const origEdge = s.edges.find((e) => e.source === aId && e.target === bId)
   const origLabel = typeof origEdge?.label === "string" ? origEdge.label : undefined
   return {
@@ -183,14 +189,88 @@ function previewInsertBetween(s: FlowState, aId: string, bId: string, label: str
   }
 }
 
-function insertBetween(s: FlowState, aId: string, bId: string, label: string): FlowState {
-  const preview = previewInsertBetween(s, aId, bId, label)
+function insertBetween(
+  s: FlowState,
+  aId: string,
+  bId: string,
+  label: string,
+  kind: FlowNode["data"]["kind"] = "process",
+): FlowState {
+  const preview = previewInsertBetween(s, aId, bId, label, kind)
   const cleaned = {
     ...preview,
     nodes: preview.nodes.map((n) => ({ ...n, data: { ...n.data, diff: undefined } })),
     edges: preview.edges.map((e) => ({ ...e, animated: false })),
   }
   return autoLayout(cleaned)
+}
+
+/** 2ステップの間にコネクタ(ステップ種別)を挿入する */
+export function insertConnectorBetween(
+  state: FlowState,
+  sourceId: string,
+  targetId: string,
+  kind: FlowNode["data"]["kind"],
+  label?: string,
+): FlowState {
+  const defaults: Record<FlowNode["data"]["kind"], string> = {
+    start: "開始",
+    process: "新しいステップ",
+    decision: "条件分岐?",
+    end: "完了",
+  }
+  return insertBetween(state, sourceId, targetId, label ?? defaults[kind], kind)
+}
+
+/** ノードの直後(主経路)にコネクタを挿入する */
+export function insertConnectorAfter(
+  state: FlowState,
+  nodeId: string,
+  kind: FlowNode["data"]["kind"],
+  label?: string,
+): FlowState {
+  const outgoing = state.edges.filter((e) => e.source === nodeId)
+  const primary =
+    outgoing.find((e) => {
+      const lbl = typeof e.label === "string" ? e.label : ""
+      return !/いいえ|no/i.test(lbl)
+    }) ?? outgoing[0]
+  if (primary) return insertConnectorBetween(state, nodeId, primary.target, kind, label)
+  return appendConnector(state, kind, label, nodeId)
+}
+
+/** フロー末尾(または指定ノードの後)にコネクタを追加する */
+export function appendConnector(
+  state: FlowState,
+  kind: FlowNode["data"]["kind"],
+  label?: string,
+  afterNodeId?: string,
+): FlowState {
+  const defaults: Record<FlowNode["data"]["kind"], string> = {
+    start: "開始",
+    process: "新しいステップ",
+    decision: "条件分岐?",
+    end: "完了",
+  }
+  const actualLabel = label ?? defaults[kind]
+  const anchor =
+    (afterNodeId ? state.nodes.find((n) => n.id === afterNodeId) : undefined) ??
+    state.nodes.filter((n) => n.data.kind !== "end").at(-1) ??
+    state.nodes[state.nodes.length - 1]
+  const lane = anchor?.data.lane ?? state.lanes[0] ?? "担当者"
+  const pos = anchor
+    ? { x: anchor.position.x + 120, y: anchor.position.y }
+    : { x: 60, y: 40 }
+  const node = makeNode(actualLabel, lane, kind, pos)
+  const edges = anchor
+    ? [...state.edges, { id: uid("e"), source: anchor.id, target: node.id }]
+    : state.edges
+  return autoLayout({
+    ...state,
+    lanes: state.lanes.length > 0 ? state.lanes : [lane],
+    nodes: [...state.nodes, node],
+    edges,
+  })
 }
 
 function previewAppend(s: FlowState, label: string): FlowState {

@@ -336,35 +336,29 @@ export function enrichEdges(state: FlowState): FlowEdge[] {
     const branchLabels =
       srcKind === "decision" || isBranchLabel(label) ? branchLabelStyle(label) : null
 
+    const base = { ...e, label, ...handles, ...(branchLabels ?? {}) }
+
     if (isBack) {
       return {
-        ...e,
-        label,
-        ...handles,
-        ...(branchLabels ?? {}),
-        type: "smoothstep",
-        pathOptions: { offset: 40, borderRadius: 12 },
+        ...base,
+        type: "flowAdd",
+        data: { pathOptions: { offset: 40, borderRadius: 12 }, showAdd: true },
         style: { strokeWidth: 1.5, stroke: "var(--muted-foreground)", strokeDasharray: "6 4", opacity: 0.65 },
         labelStyle: branchLabels?.labelStyle ?? { fontSize: 10, fill: "var(--muted-foreground)" },
       }
     }
     if (!sameLane) {
       return {
-        ...e,
-        label,
-        ...handles,
-        ...(branchLabels ?? {}),
-        type: "smoothstep",
-        pathOptions: { borderRadius: 16 },
+        ...base,
+        type: "flowAdd",
+        data: { pathOptions: { borderRadius: 16 }, showAdd: true },
         style: { strokeWidth: 1.5, stroke: "var(--primary)", opacity: 0.7 },
       }
     }
     return {
-      ...e,
-      label,
-      ...handles,
-      ...(branchLabels ?? {}),
-      type: "smoothstep",
+      ...base,
+      type: "flowAdd",
+      data: { showAdd: true },
       style: { strokeWidth: 1.5, stroke: "var(--foreground)", opacity: 0.55 },
     }
   })
