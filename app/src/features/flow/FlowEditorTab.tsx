@@ -62,6 +62,7 @@ import {
   flowContentBounds,
   flowPanXRange,
   clampFlowPanX,
+  clampFlowPanY,
   ensureDecisionEdgeLabel,
   DECISION_HANDLE,
   needsInitialLayout,
@@ -125,7 +126,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
-  const [connectorPanelOpen, setConnectorPanelOpen] = useState(true)
+  const [connectorPanelOpen, setConnectorPanelOpen] = useState(false)
   const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
   const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
   const [viewport, setViewport] = useState<FlowViewport>({ x: 0, y: 0, zoom: 1 })
@@ -135,6 +136,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const rfRef = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(0)
+  const [canvasHeight, setCanvasHeight] = useState(0)
 
   const zoomBy = useCallback((factor: number) => {
     const inst = rfRef.current
@@ -147,9 +149,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   useEffect(() => {
     const el = canvasRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setCanvasWidth(el.clientWidth))
+    const ro = new ResizeObserver(() => {
+      setCanvasWidth(el.clientWidth)
+      setCanvasHeight(el.clientHeight)
+    })
     ro.observe(el)
     setCanvasWidth(el.clientWidth)
+    setCanvasHeight(el.clientHeight)
     return () => ro.disconnect()
   }, [flow.nodes.length])
 
@@ -199,10 +205,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   const clampViewport = useCallback(
     (vp: FlowViewport): FlowViewport => {
-      if (canvasWidth <= 0) return vp
-      return { ...vp, x: clampFlowPanX(vp.x, flowBounds, canvasWidth, vp.zoom) }
+      if (canvasWidth <= 0 || canvasHeight <= 0) return vp
+      return {
+        ...vp,
+        x: clampFlowPanX(vp.x, flowBounds, canvasWidth, vp.zoom),
+        y: clampFlowPanY(vp.y, flowBounds, canvasHeight, vp.zoom),
+      }
     },
-    [canvasWidth, flowBounds],
+    [canvasWidth, canvasHeight, flowBounds],
   )
 
   const panFlowX = useCallback(
@@ -227,7 +237,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       const vp = rfRef.current?.getViewport()
       if (vp) {
         const clamped = clampViewport(vp)
-        if (clamped.x !== vp.x) rfRef.current?.setViewport(clamped)
+        if (clamped.x !== vp.x || clamped.y !== vp.y) rfRef.current?.setViewport(clamped)
         setViewport(clamped)
       }
     })
@@ -795,43 +805,42 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   return (
     <div className="flex h-full flex-col">
       {/* ツールバー */}
-      <div className="scrollbar-none scroll-touch flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1.5 md:gap-1.5 md:px-4 md:py-2">
+      <div className="scrollbar-none scroll-touch flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1.5 md:gap-1 md:px-3 md:py-1.5">
         {(isMobile || !connectorPanelOpen) && (
           <ToolButton
             label="コネクタを追加"
             onClick={openConnectorPicker}
             disabled={isEditingDisabled}
-            iconOnly={isMobile}
           >
             <Layers className="size-4" />
-            {!isMobile && "コネクタ"}
           </ToolButton>
         )}
-        {!isMobile && <Separator orientation="vertical" className="mx-1 !h-5" />}
+        {!isMobile && <Separator orientation="vertical" className="mx-0.5 !h-5" />}
         <ToolButton
           label="選択中の要素を削除(Delete)"
           onClick={deleteSelected}
           disabled={isEditingDisabled || (selectedNodes.length === 0 && selectedEdges.length === 0)}
-          iconOnly={isMobile}
         >
           <Trash2 className="size-4" />
         </ToolButton>
-        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0} iconOnly={isMobile}>
+        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0}>
           <Undo2 className="size-4" />
         </ToolButton>
-        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0} iconOnly={isMobile}>
+        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0}>
           <Redo2 className="size-4" />
         </ToolButton>
         {!isMobile && (
           <>
-            <Separator orientation="vertical" className="mx-1 !h-5" />
+            <Separator orientation="vertical" className="mx-0.5 !h-5" />
             <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout} disabled={isEditingDisabled}>
               <AlignCenterVertical className="size-4" />
-              自動整列
             </ToolButton>
-            <ToolButton label="ヒアリング回答からフロー図を再生成(手動修正は保護)" onClick={() => setRegenConfirmOpen(true)} disabled={isEditingDisabled}>
+            <ToolButton
+              label="ヒアリング回答からフロー図を再生成(手動修正は保護)"
+              onClick={() => setRegenConfirmOpen(true)}
+              disabled={isEditingDisabled}
+            >
               <Sparkles className="size-4" />
-              再生成
             </ToolButton>
           </>
         )}
@@ -841,26 +850,22 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           </ToolButton>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-2 pl-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
           <FlowHelpButton isMobile={isMobile} isLocked={isLocked} />
           <ToolButton
             label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
             onClick={() => setIsLocked((v) => !v)}
             disabled={!!proposal}
-            iconOnly={isMobile}
           >
             {isLocked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
-            {!isMobile && (isLocked ? "編集" : "ロック")}
           </ToolButton>
-          {!isMobile && (
-            <span className="hidden text-[11px] text-muted-foreground lg:inline">
-              {isLocked ? "閲覧モード" : "編集内容は自動保存されます"}
-            </span>
-          )}
-          <Button size="sm" className="h-8 gap-1.5 px-2.5 whitespace-nowrap md:px-3" onClick={confirmFlow}>
+          <ToolButton
+            label={isMobile ? "確定" : "フロー図を確定して深掘りへ"}
+            onClick={confirmFlow}
+            variant="default"
+          >
             <ListChecks className="size-4" />
-            {isMobile ? "確定" : "フロー図を確定して深掘りへ"}
-          </Button>
+          </ToolButton>
         </div>
       </div>
 
@@ -914,7 +919,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   viewport={viewport}
                   onViewportChange={(vp) => {
                     bumpMobileTeamAxis()
-                    setViewport(isMobile ? clampViewport(vp) : vp)
+                    setViewport(clampViewport(vp))
                   }}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
@@ -949,7 +954,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   nodesDraggable={!isEditingDisabled}
                   nodesConnectable={!isEditingDisabled}
                   elementsSelectable={!proposal}
-                  translateExtent={isMobile ? translateExtent : undefined}
+                  translateExtent={translateExtent}
                   minZoom={0.12}
                   maxZoom={2.5}
                   zoomOnPinch
@@ -1142,8 +1147,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         <div className="shrink-0 border-t bg-background">
           {nlOpen ? (
             <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium">ことばで修正</span>
+              <div className="mb-2 flex items-center justify-end">
                 <Button variant="ghost" size="icon" className="size-8" onClick={() => setNlOpen(false)} aria-label="閉じる">
                   <ChevronUp className="size-4" />
                 </Button>
@@ -1160,46 +1164,52 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   }}
                 />
                 <Button
-                  size="sm"
-                  className="h-10 shrink-0"
+                  size="icon"
+                  className="size-10 shrink-0"
                   onClick={askAi}
                   disabled={!instruction.trim() || !!proposal || aiThinking}
+                  aria-label={aiThinking ? "解析中" : "修正案を作成"}
                 >
                   <Sparkles className="size-4" />
                 </Button>
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              className="flex w-full items-center justify-center gap-2 px-3 py-2.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs text-muted-foreground"
-              onClick={() => setNlOpen(true)}
-            >
-              <Wand2 className="size-3.5 text-primary" />
-              ことばで修正を指示…
-            </button>
+            <div className="flex justify-center px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10"
+                onClick={() => setNlOpen(true)}
+                aria-label="AI修正"
+              >
+                <Wand2 className="size-4 text-primary" />
+              </Button>
+            </div>
           )}
         </div>
       ) : (
-        <div className="border-t bg-background px-4 py-3">
+        <div className="shrink-0 border-t bg-background px-4 py-2.5">
           <div className="mx-auto flex max-w-3xl items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-primary">
-              <Wand2 className="size-4" />
-            </div>
             <Input
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
-              placeholder='ことばで修正を指示できます。例:「経費精算システムに入力」と「領収書画像を添付して申請」の間に「上長への事前相談」を追加'
-              className="flex-1"
+              placeholder="修正内容を入力…"
+              className="h-9 flex-1"
               disabled={!!proposal || aiThinking}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) askAi()
               }}
             />
-            <Button onClick={askAi} disabled={!instruction.trim() || !!proposal || aiThinking} className="gap-1.5">
+            <ToolButton
+              label={aiThinking ? "解析中…" : "修正案を作成"}
+              onClick={askAi}
+              disabled={!instruction.trim() || !!proposal || aiThinking}
+              variant="default"
+            >
               <Sparkles className="size-4" />
-              {aiThinking ? "解析中…" : "修正案を作成"}
-            </Button>
+            </ToolButton>
           </div>
         </div>
       )}

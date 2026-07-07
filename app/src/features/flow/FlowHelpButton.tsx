@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
 
 interface Props {
   isMobile: boolean
@@ -39,13 +38,12 @@ export function FlowHelpButton({ isMobile, isLocked }: Props) {
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className={cn("h-8 shrink-0 gap-1.5 px-2", isMobile && "size-8 px-0")}
+            size="icon"
+            className="size-9 shrink-0"
             onClick={() => setOpen(true)}
             aria-label="操作のヒント"
           >
             <CircleHelp className="size-4" />
-            {!isMobile && <span className="text-xs">ヘルプ</span>}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">操作のヒント</TooltipContent>
