@@ -1,7 +1,6 @@
 import { useRef, useState } from "react"
 import {
   AlertTriangle,
-  ArrowLeft,
   BadgeCheck,
   Check,
   ChevronDown,
@@ -13,8 +12,8 @@ import {
   Sparkles,
   StickyNote,
   Trash2,
-  X,
   Workflow,
+  X,
 } from "lucide-react"
 import type { ManualBlock, ManualSection, Project, ProjectTab } from "@/lib/types"
 import { SECTION_LABEL } from "@/lib/types"
@@ -24,7 +23,6 @@ import {
   buildManualOutline,
   displaySectionTitle,
   resolveSectionNumber,
-  sectionNumberChain,
 } from "@/lib/manual-outline"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { Badge } from "@/components/ui/badge"
@@ -41,6 +39,15 @@ const SECTION_STYLE = {
   approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
 } as const
 
+function resolveMajorTitle(project: Project): string {
+  const businessName = project.hearingAnswers.find((a) => a.questionId === "q1" && a.value.trim())?.value.trim()
+  return businessName || project.name
+}
+
+function sectionAnchorId(sectionId: string) {
+  return `manual-section-${sectionId}`
+}
+
 interface Props {
   project: Project
   updateProject: UpdateProject
@@ -50,15 +57,14 @@ interface Props {
 export function ManualTab({ project, updateProject, setTab }: Props) {
   const isMobile = useIsMobile()
   const sections = project.sections
-  const [selectedId, setSelectedId] = useState<string | null>(sections[0]?.id ?? null)
-  const [mobileView, setMobileView] = useState<"list" | "detail">("list")
+  const majorTitle = resolveMajorTitle(project)
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null)
   const [generating, setGenerating] = useState(false)
+  const documentRef = useRef<HTMLDivElement>(null)
 
-  const selected = sections.find((s) => s.id === selectedId) ?? null
-
-  const selectSection = (id: string) => {
-    setSelectedId(id)
-    if (isMobile) setMobileView("detail")
+  const scrollToSection = (id: string) => {
+    setActiveSectionId(id)
+    document.getElementById(sectionAnchorId(id))?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   const updateSection = (sectionId: string, updater: (s: ManualSection) => ManualSection) => {
@@ -158,80 +164,97 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
     )
   }
 
-  if (isMobile && mobileView === "list") {
-    return (
-      <SectionListPanel
-        sections={sections}
-        selectedId={selectedId}
-        onSelect={selectSection}
-        className="h-full w-full border-r-0"
-      />
-    )
+  const logAction = (action: string) => {
+    updateProject(project.id, (p) => ({
+      ...p,
+      history: [{ id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action }, ...p.history],
+    }))
   }
 
-  if (isMobile && mobileView === "detail" && selected) {
-    return (
-      <div className="flex h-full flex-col">
-        <SectionEditor
-          key={selected.id}
-          section={selected}
-          isMobile
-          onBack={() => setMobileView("list")}
-          onUpdate={(updater) => updateSection(selected.id, updater)}
-          onLog={(action) =>
-            updateProject(project.id, (p) => ({
-              ...p,
-              history: [{ id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action }, ...p.history],
-            }))
-          }
-        />
-      </div>
-    )
-  }
+  const outline = buildManualOutline(sections, { majorTitle })
 
   return (
     <div className="flex h-full">
-      <SectionListPanel sections={sections} selectedId={selectedId} onSelect={selectSection} />
-      <div className="scroll-touch min-w-0 flex-1 overflow-y-auto">
-        {selected && (
-          <SectionEditor
-            key={selected.id}
-            section={selected}
-            onUpdate={(updater) => updateSection(selected.id, updater)}
-            onLog={(action) =>
-              updateProject(project.id, (p) => ({
-                ...p,
-                history: [{ id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action }, ...p.history],
-              }))
-            }
-          />
-        )}
+      {!isMobile && (
+        <SectionTocPanel
+          outline={outline}
+          sections={sections}
+          activeSectionId={activeSectionId}
+          onNavigate={scrollToSection}
+        />
+      )}
+      <div ref={documentRef} className="scroll-touch min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-8 md:py-6">
+          {isMobile && (
+            <SectionTocBar
+              outline={outline}
+              activeSectionId={activeSectionId}
+              onNavigate={scrollToSection}
+            />
+          )}
+          {outline.map((major) => (
+            <section key={major.key} className="mb-10 last:mb-4">
+              <header className="mb-6 border-b pb-4">
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
+                    {major.number}
+                  </span>
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-bold tracking-tight md:text-2xl">
+                      {major.title ?? majorTitle}
+                    </h1>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {sections.filter((s) => s.status === "approved").length} / {sections.length} セクション承認済み
+                    </p>
+                  </div>
+                </div>
+              </header>
+              {major.mediums.map((medium) => (
+                <div key={medium.key} className="flex flex-col gap-6">
+                  {medium.sections.map((section) => (
+                    <article
+                      key={section.id}
+                      id={sectionAnchorId(section.id)}
+                      className="scroll-mt-4"
+                    >
+                      <SectionEditor
+                        section={section}
+                        embedded
+                        isMobile={isMobile}
+                        onUpdate={(updater) => updateSection(section.id, updater)}
+                        onLog={logAction}
+                      />
+                    </article>
+                  ))}
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-/* ================= セクション一覧 ================= */
+/* ================= 目次（サイドバー） ================= */
 
-function SectionListPanel({
+function SectionTocPanel({
+  outline,
   sections,
-  selectedId,
-  onSelect,
-  className,
+  activeSectionId,
+  onNavigate,
 }: {
+  outline: ReturnType<typeof buildManualOutline>
   sections: ManualSection[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  className?: string
+  activeSectionId: string | null
+  onNavigate: (id: string) => void
 }) {
-  const outline = buildManualOutline(sections)
-
   return (
-    <aside className={cn("flex w-80 shrink-0 flex-col border-r bg-muted/20", className)}>
+    <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/20">
       <div className="page-header border-b px-4 py-3">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           <ListTree className="size-4 text-muted-foreground" />
-          セクション
+          目次
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
           {sections.filter((s) => s.status === "approved").length} / {sections.length} 承認済み
@@ -242,26 +265,22 @@ function SectionListPanel({
           {outline.map((major) => (
             <div key={major.key} className="overflow-hidden rounded-lg border bg-card/80">
               <div className="border-b bg-muted/50 px-3 py-2">
-                <span className="font-mono text-xs font-bold tabular-nums text-primary">{major.number}</span>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-xs font-bold tabular-nums text-primary">{major.number}</span>
+                  <span className="min-w-0 text-[11px] font-semibold leading-snug">{major.title}</span>
+                </div>
               </div>
-              <div className="flex flex-col gap-2 p-2">
+              <div className="flex flex-col gap-1 p-2">
                 {major.mediums.map((medium) => (
-                  <div key={medium.key} className="rounded-md border border-border/60 bg-background/60">
-                    <div className="border-b border-border/50 bg-muted/30 px-2.5 py-1.5">
-                      <span className="font-mono text-[10px] font-semibold tabular-nums text-muted-foreground">
-                        {medium.number}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1 p-1.5">
-                      {medium.sections.map((s) => (
-                        <SectionListItem
-                          key={s.id}
-                          section={s}
-                          selected={selectedId === s.id}
-                          onSelect={() => onSelect(s.id)}
-                        />
-                      ))}
-                    </div>
+                  <div key={medium.key} className="flex flex-col gap-0.5">
+                    {medium.sections.map((s) => (
+                      <TocItem
+                        key={s.id}
+                        section={s}
+                        active={activeSectionId === s.id}
+                        onNavigate={() => onNavigate(s.id)}
+                      />
+                    ))}
                   </div>
                 ))}
               </div>
@@ -273,50 +292,73 @@ function SectionListPanel({
   )
 }
 
-function SectionListItem({
+function SectionTocBar({
+  outline,
+  activeSectionId,
+  onNavigate,
+}: {
+  outline: ReturnType<typeof buildManualOutline>
+  activeSectionId: string | null
+  onNavigate: (id: string) => void
+}) {
+  const items = outline.flatMap((major) => major.mediums.flatMap((medium) => medium.sections))
+
+  return (
+    <div className="sticky top-0 z-10 -mx-4 mb-4 border-b bg-background/95 px-4 py-2 backdrop-blur-sm md:-mx-8 md:px-8">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {items.map((s) => {
+          const num = resolveSectionNumber(s)
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onNavigate(s.id)}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-1 font-mono text-[10px] font-semibold tabular-nums transition-colors",
+                activeSectionId === s.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-muted/50 text-muted-foreground",
+              )}
+            >
+              {num || "—"}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function TocItem({
   section,
-  selected,
-  onSelect,
+  active,
+  onNavigate,
 }: {
   section: ManualSection
-  selected: boolean
-  onSelect: () => void
+  active: boolean
+  onNavigate: () => void
 }) {
   const num = resolveSectionNumber(section)
-  const title = displaySectionTitle(section)
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
 
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={onNavigate}
       className={cn(
-        "rounded-md border px-2.5 py-2.5 text-left transition-colors",
-        selected
+        "flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
+        active
           ? "border-primary/60 bg-primary-subtle/40 ring-2 ring-primary/15"
           : "border-transparent bg-background hover:border-primary/25 hover:bg-muted/30",
       )}
     >
-      <div className="flex items-start gap-2">
-        {num && (
-          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-primary">
-            {num}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 text-[12px] leading-snug font-medium">{title}</span>
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-0.5">
-        <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
-          {SECTION_LABEL[section.status]}
-        </Badge>
-        <span className="text-[10px] text-muted-foreground">v{section.version}</span>
-        {confirms > 0 && (
-          <span className="ml-auto flex items-center gap-0.5 text-[10px] font-medium text-amber-600">
-            <AlertTriangle className="size-3" />
-            {confirms}
-          </span>
-        )}
-      </div>
+      <span className="shrink-0 font-mono text-[10px] font-bold tabular-nums text-primary">{num || "—"}</span>
+      <Badge variant="outline" className={cn("ml-auto h-5 shrink-0 text-[9px]", SECTION_STYLE[section.status])}>
+        {SECTION_LABEL[section.status]}
+      </Badge>
+      {confirms > 0 && (
+        <AlertTriangle className="size-3 shrink-0 text-amber-600" />
+      )}
     </button>
   )
 }
@@ -328,13 +370,13 @@ function SectionEditor({
   onUpdate,
   onLog,
   isMobile,
-  onBack,
+  embedded,
 }: {
   section: ManualSection
   onUpdate: (updater: (s: ManualSection) => ManualSection) => void
   onLog: (action: string) => void
   isMobile?: boolean
-  onBack?: () => void
+  embedded?: boolean
 }) {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [blockDraft, setBlockDraft] = useState("")
@@ -376,7 +418,6 @@ function SectionEditor({
   let stepNo = 0
   const sectionNum = resolveSectionNumber(section)
   const sectionTitle = displaySectionTitle(section)
-  const breadcrumbs = sectionNum ? sectionNumberChain(sectionNum) : []
 
   const actionButtons = (
     <>
@@ -432,36 +473,24 @@ function SectionEditor({
   )
 
   return (
-    <div className={cn("flex h-full flex-col", !isMobile && "scroll-touch overflow-y-auto")}>
-      <div className={cn("mx-auto w-full max-w-3xl flex-1 px-4 py-4 md:px-8 md:py-8", isMobile && "scroll-touch overflow-y-auto pb-4")}>
-        {isMobile && onBack && (
-          <Button variant="ghost" size="sm" className="-ml-2 mb-2 h-9 gap-1 px-2" onClick={onBack}>
-            <ArrowLeft className="size-4" />
-            セクション一覧
-          </Button>
-        )}
-
+    <div className={cn(!embedded && "flex h-full flex-col scroll-touch overflow-y-auto")}>
+      <div className={cn(!embedded && "mx-auto w-full max-w-3xl flex-1 px-4 py-4 md:px-8 md:py-8", embedded && "pb-2", isMobile && !embedded && "scroll-touch overflow-y-auto pb-4")}>
         <div className={cn("flex gap-4", isMobile ? "flex-col" : "items-start justify-between")}>
           <div className="min-w-0 flex-1">
-            {breadcrumbs.length > 0 && (
-              <div className="mb-2 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-                {breadcrumbs.map((crumb, i) => (
-                  <span key={crumb} className="flex items-center gap-1">
-                    {i > 0 && <span className="text-border">›</span>}
-                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono tabular-nums">{crumb}</span>
-                  </span>
-                ))}
-              </div>
-            )}
             <div className="flex items-start gap-3">
               {sectionNum && (
-                <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
+                <span className={cn(
+                  "shrink-0 rounded-lg bg-primary/10 font-mono font-bold tabular-nums text-primary",
+                  embedded ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-sm",
+                )}>
                   {sectionNum}
                 </span>
               )}
               <div className="min-w-0">
-                <h2 className="text-lg font-bold tracking-tight md:text-xl">{sectionTitle}</h2>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {!embedded && (
+                  <h2 className="text-lg font-bold tracking-tight md:text-xl">{sectionTitle}</h2>
+                )}
+                <div className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground", !embedded && "mt-1.5")}>
                   <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
                     {SECTION_LABEL[section.status]}
                   </Badge>
@@ -472,6 +501,9 @@ function SectionEditor({
             </div>
           </div>
           {!isMobile && desktopActions}
+          {isMobile && embedded && (
+            <div className="flex gap-2">{actionButtons}</div>
+          )}
         </div>
 
         {confirms > 0 && (
@@ -481,10 +513,10 @@ function SectionEditor({
           </div>
         )}
 
-        <div className="mt-5 rounded-xl border-2 border-border/80 bg-card shadow-sm md:mt-6">
+        <div className={cn("rounded-xl border-2 border-border/80 bg-card shadow-sm", embedded ? "mt-3" : "mt-5 md:mt-6")}>
           <div className="border-b bg-muted/30 px-4 py-2.5 md:px-5">
             <span className="text-[11px] font-medium text-muted-foreground">
-              {sectionNum ? `項番 ${sectionNum}` : "セクション本文"}
+              {embedded && sectionTitle ? sectionTitle : sectionNum ? `項番 ${sectionNum}` : "セクション本文"}
             </span>
           </div>
           <div className="flex flex-col gap-0.5 px-2 py-2 md:px-3 md:py-3">
@@ -526,7 +558,7 @@ function SectionEditor({
         </div>
       </div>
 
-      {isMobile && (
+      {isMobile && !embedded && (
         <div className="shrink-0 border-t bg-card/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
           <div className="flex gap-2">{actionButtons}</div>
           {confirms > 0 && (
