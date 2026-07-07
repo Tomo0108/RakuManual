@@ -179,7 +179,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     if (!isMobile) return
     setMobileTeamAxisVisible(true)
     if (mobileTeamAxisTimer.current) clearTimeout(mobileTeamAxisTimer.current)
-    mobileTeamAxisTimer.current = setTimeout(() => setMobileTeamAxisVisible(false), 3000)
+    mobileTeamAxisTimer.current = setTimeout(() => setMobileTeamAxisVisible(false), 1800)
   }, [isMobile])
 
   useEffect(() => {
@@ -453,6 +453,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         bumpMobileTeamAxis()
       }
 
+      const preserveViewport = isLocked && effective.every((c) => c.type === "select")
+      const vpBefore = preserveViewport ? rfRef.current?.getViewport() : null
+
       const dragStart = effective.some((c) => c.type === "position" && c.dragging)
       if (dragStart && !dragSnapshot.current) {
         dragSnapshot.current = flow
@@ -503,8 +506,15 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         setUndoStack((s) => [...s.slice(-49), snap])
         setRedoStack([])
       }
+
+      if (vpBefore) {
+        queueMicrotask(() => {
+          rfRef.current?.setViewport(vpBefore)
+          setViewport(vpBefore)
+        })
+      }
     },
-    [flow, persist, isEditingDisabled, bumpMobileTeamAxis],
+    [flow, persist, isEditingDisabled, isLocked, bumpMobileTeamAxis],
   )
 
   const onEdgesChange = useCallback(
@@ -902,11 +912,6 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   nodesConnectable={!isEditingDisabled}
                   elementsSelectable={!proposal}
                   translateExtent={translateExtent}
-                  fitViewOptions={{
-                    padding: isMobile ? 0.06 : 0.15,
-                    maxZoom: isMobile ? 1.35 : 1,
-                    minZoom: 0.1,
-                  }}
                   minZoom={0.12}
                   maxZoom={2.5}
                   zoomOnPinch

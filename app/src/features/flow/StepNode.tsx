@@ -218,12 +218,11 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   if (kind === "decision") {
     return (
       <div
-        className="group/step relative flex items-center justify-center rounded-sm border-2 border-amber-500/70 bg-amber-50/20 shadow-sm"
+        className="group/step relative flex items-center justify-center"
         style={{ width: dims.w, height: dims.h }}
         onDoubleClick={startEdit}
       >
         {addAfterButton}
-        {/* 分岐は出口を固定: 右=はい / 下=いいえ */}
         <FourWayHandles sources={false} />
         <Handle
           type="source"
@@ -245,14 +244,24 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
         <span className="pointer-events-none absolute bottom-[-1.35rem] left-1/2 z-30 -translate-x-1/2 rounded border border-rose-300 bg-background/95 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 shadow-xs">
           いいえ
         </span>
-        <div
-          className={cn(
-            "absolute inset-0 border-2 border-amber-500 bg-amber-50/90",
-            selected && "ring-2 ring-primary ring-offset-1",
-            diffClass,
-          )}
-          style={{ clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" }}
-        />
+        <svg
+          className="absolute inset-0 overflow-visible"
+          viewBox={`0 0 ${dims.w} ${dims.h}`}
+          aria-hidden
+        >
+          <polygon
+            points={`${dims.w / 2},1 ${dims.w - 1},${dims.h / 2} ${dims.w / 2},${dims.h - 1} 1,${dims.h / 2}`}
+            className={cn(
+              "fill-amber-50/90 stroke-amber-500",
+              selected && "stroke-primary",
+              diffClass.includes("emerald") && "fill-emerald-50 stroke-emerald-400",
+              diffClass.includes("red") && "fill-red-50 stroke-red-300",
+              diffClass.includes("amber") && "fill-amber-50 stroke-amber-400",
+            )}
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
         <div className="relative z-10 max-w-[90px] px-1 text-center">
           {data.sectionNumber && (
             <div className="mb-0.5 text-[9px] font-bold tabular-nums text-primary">{data.sectionNumber}</div>

@@ -14,6 +14,8 @@ export const AXIS_HEADER_HEIGHT = 32
 export const FLOW_MINIMAP_WIDTH = 132
 export const FLOW_MINIMAP_HEIGHT = 88
 export const LANE_ROW_HEIGHT = 112
+export const LANE_STACK_GAP = 14
+export const LANE_PADDING = 12
 export const COL_WIDTH = 240
 export const SYSTEM_ROW_HEIGHT = 44
 export const FLOW_PADDING_LEFT = 16
@@ -27,7 +29,16 @@ export function dimForKind(kind: string) {
   return NODE_DIMS.process
 }
 
-export function laneCenterY(laneIndex: number): number {
+function nodeDims(n: FlowNode) {
+  const k = n.data.kind
+  return dimForKind(k === "start" || k === "end" || k === "decision" ? k : "process")
+}
+
+export function laneCenterY(laneIndex: number, metrics?: LaneRowMetric[]): number {
+  if (metrics?.[laneIndex]) {
+    const m = metrics[laneIndex]
+    return m.top + m.height / 2
+  }
   return FLOW_ORIGIN_Y + laneIndex * LANE_ROW_HEIGHT + LANE_ROW_HEIGHT / 2
 }
 
@@ -35,16 +46,35 @@ export function colCenterX(col: number): number {
   return FLOW_ORIGIN_X + col * COL_WIDTH + COL_WIDTH / 2
 }
 
+/** 単一ノードを担当行の中央に配置 */
+export function nodeYInLaneMetric(metric: LaneRowMetric, nodeHeight: number): number {
+  return metric.top + (metric.height - nodeHeight) / 2
+}
+
+/** 同一列に縦並びするノード用のY座標 */
+export function stackedYInLaneMetric(metric: LaneRowMetric, slot: number, nodeHeight: number): number {
+  return metric.top + LANE_PADDING + slot * (nodeHeight + LANE_STACK_GAP)
+}
+
+export function yInLaneForStack(
+  metric: LaneRowMetric,
+  slot: number,
+  stackCount: number,
+  nodeHeight: number,
+): number {
+  if (stackCount <= 1) return nodeYInLaneMetric(metric, nodeHeight)
+  return stackedYInLaneMetric(metric, slot, nodeHeight)
+}
+
 export function nodeYInLane(laneIndex: number, nodeHeight: number, slot = 0): number {
   const slotOffset = slot * (LANE_ROW_HEIGHT * 0.55)
   return laneCenterY(laneIndex) - nodeHeight / 2 + slotOffset
 }
 
-/** 同一列に縦並びするノード用のY座標 */
+/** @deprecated layoutAllLaneNodes 経由の metric ベース配置を推奨 */
 export function stackedYInLane(laneIndex: number, slot: number, nodeHeight: number): number {
   const rowTop = FLOW_ORIGIN_Y + laneIndex * LANE_ROW_HEIGHT
-  const gap = 14
-  return rowTop + 12 + slot * (nodeHeight + gap)
+  return rowTop + LANE_PADDING + slot * (nodeHeight + LANE_STACK_GAP)
 }
 
 export function nodeXInCol(col: number, nodeWidth: number): number {
@@ -52,11 +82,17 @@ export function nodeXInCol(col: number, nodeWidth: number): number {
 }
 
 /** ノード中心Yから最寄り担当行インデックス */
-export function nearestLaneIndex(y: number, nodeHeight: number, laneCount: number): number {
+export function nearestLaneIndex(
+  y: number,
+  nodeHeight: number,
+  laneCount: number,
+  metrics?: LaneRowMetric[],
+): number {
   let best = 0
   let bestDist = Infinity
   for (let i = 0; i < laneCount; i++) {
-    const dist = Math.abs(y + nodeHeight / 2 - laneCenterY(i))
+    const center = laneCenterY(i, metrics)
+    const dist = Math.abs(y + nodeHeight / 2 - center)
     if (dist < bestDist) {
       bestDist = dist
       best = i
@@ -80,16 +116,12 @@ export function snapNodePosition(
 ): { position: { x: number; y: number }; lane: string } {
   const kind = node.data.kind
   const dims = dimForKind(kind === "start" || kind === "end" || kind === "decision" ? kind : "process")
-  const li = nearestLaneIndex(node.position.y, dims.h, laneCount)
+  const allNodes = [...others.filter((n) => n.id !== node.id), node]
+  const metrics = computeLaneRowMetrics(allNodes, lanes)
+  const li = nearestLaneIndex(node.position.y, dims.h, laneCount, metrics)
   const col = colFromX(node.position.x, dims.w)
   const lane = lanes[li] ?? lanes[lanes.length - 1] ?? "担当者"
-
-  const nodeDims = (n: FlowNode) =>
-    dimForKind(
-      n.data.kind === "start" || n.data.kind === "end" || n.data.kind === "decision"
-        ? n.data.kind
-        : "process",
-    )
+  const metric = metrics[li] ?? { top: FLOW_ORIGIN_Y, height: LANE_ROW_HEIGHT }
 
   const peersInCol = others
     .filter((n) => {
@@ -98,9 +130,9 @@ export function snapNodePosition(
     })
     .sort((a, b) => a.position.y - b.position.y)
 
-  const stackInLane = peersInCol.length > 0
+  const stackCount = peersInCol.length + 1
   let slot = 0
-  if (stackInLane) {
+  if (peersInCol.length > 0) {
     const ordered = [...peersInCol, node].sort((a, b) => {
       if (a.id === node.id) return node.position.y - b.position.y
       if (b.id === node.id) return a.position.y - node.position.y
@@ -112,52 +144,52 @@ export function snapNodePosition(
   return {
     position: {
       x: nodeXInCol(col, dims.w),
-      y: stackInLane ? stackedYInLane(li, slot, dims.h) : nodeYInLane(li, dims.h),
+      y: yInLaneForStack(metric, slot, stackCount, dims.h),
     },
     lane,
   }
 }
 
-/** 同一担当チーム・同一列のノードを縦に整列し直す */
-export function restackLaneColumnNodes(nodes: FlowNode[], lanes: string[]): FlowNode[] {
-  const nodeDims = (n: FlowNode) =>
-    dimForKind(
-      n.data.kind === "start" || n.data.kind === "end" || n.data.kind === "decision"
-        ? n.data.kind
-        : "process",
-    )
+/** 担当行の累積レイアウトに合わせて全ノードのY座標を再配置 */
+export function layoutAllLaneNodes(nodes: FlowNode[], lanes: string[]): FlowNode[] {
+  if (nodes.length === 0) return nodes
 
-  const groups = new Map<string, FlowNode[]>()
+  const metrics = computeLaneRowMetrics(nodes, lanes)
+  const byLaneCol = new Map<string, FlowNode[]>()
+
   for (const n of nodes) {
     const li = lanes.indexOf(n.data.lane)
     if (li < 0) continue
     const col = colFromX(n.position.x, nodeDims(n).w)
     const key = `${n.data.lane}:${col}`
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(n)
+    if (!byLaneCol.has(key)) byLaneCol.set(key, [])
+    byLaneCol.get(key)!.push(n)
   }
 
-  const positionById = new Map<string, { x: number; y: number }>()
-  for (const [key, group] of groups) {
-    if (group.length <= 1) continue
-    const lane = key.split(":")[0]!
-    const li = lanes.indexOf(lane)
-    const col = colFromX(group[0].position.x, nodeDims(group[0]).w)
-    const sorted = [...group].sort((a, b) => a.position.y - b.position.y)
-    sorted.forEach((n, slot) => {
-      const dims = nodeDims(n)
-      positionById.set(n.id, {
-        x: nodeXInCol(col, dims.w),
-        y: stackedYInLane(li, slot, dims.h),
-      })
-    })
-  }
-
-  if (positionById.size === 0) return nodes
   return nodes.map((n) => {
-    const pos = positionById.get(n.id)
-    return pos ? { ...n, position: pos } : n
+    const li = lanes.indexOf(n.data.lane)
+    if (li < 0) return n
+    const dims = nodeDims(n)
+    const col = colFromX(n.position.x, dims.w)
+    const key = `${n.data.lane}:${col}`
+    const group = byLaneCol.get(key) ?? [n]
+    const sorted = [...group].sort((a, b) => a.position.y - b.position.y)
+    const slot = sorted.findIndex((x) => x.id === n.id)
+    const metric = metrics[li] ?? { top: FLOW_ORIGIN_Y, height: LANE_ROW_HEIGHT }
+
+    return {
+      ...n,
+      position: {
+        x: nodeXInCol(col, dims.w),
+        y: yInLaneForStack(metric, slot, sorted.length, dims.h),
+      },
+    }
   })
+}
+
+/** 同一担当チーム・同一列のノードを縦に整列し直す */
+export function restackLaneColumnNodes(nodes: FlowNode[], lanes: string[]): FlowNode[] {
+  return layoutAllLaneNodes(nodes, lanes)
 }
 
 /** 旧 string[] 形式との互換 */
@@ -570,10 +602,13 @@ export function autoLayout(state: FlowState): FlowState {
     ...state,
     lanes: laneList,
     layoutMeta: { columnCount: maxLayer + 1, columnSystems },
-    nodes: nodes.map((n) => ({
-      ...n,
-      position: positions.get(n.id) ?? n.position,
-    })),
+    nodes: layoutAllLaneNodes(
+      nodes.map((n) => ({
+        ...n,
+        position: positions.get(n.id) ?? n.position,
+      })),
+      laneList,
+    ),
   }
   return assignSectionNumbers({ ...laid, edges: enrichEdges(laid) })
 }
@@ -591,36 +626,38 @@ export interface LaneRowMetric {
 }
 
 /**
- * 担当チーム行の表示高さを算出。
- * 同一列に縦並びのコネクタがある場合は行を伸ばしてラベル領域を確保する。
+ * 担当チーム行の累積レイアウトを算出。
+ * 縦並びコネクタがある行は高さを拡張し、下の行を押し下げて潰れを防ぐ。
  */
 export function computeLaneRowMetrics(nodes: FlowNode[], lanes: string[]): LaneRowMetric[] {
-  const metrics: LaneRowMetric[] = lanes.map((_, i) => ({
-    top: FLOW_ORIGIN_Y + i * LANE_ROW_HEIGHT,
-    height: LANE_ROW_HEIGHT,
-  }))
+  const heights = lanes.map((lane) => {
+    const laneNodes = nodes.filter((n) => n.data.lane === lane)
+    if (laneNodes.length === 0) return LANE_ROW_HEIGHT
 
-  for (const n of nodes) {
-    const li = lanes.indexOf(n.data.lane)
-    if (li < 0) continue
-    const kind = n.data.kind
-    const dims = dimForKind(kind === "start" || kind === "end" || kind === "decision" ? kind : "process")
-    const nodeTop = n.position.y
-    const nodeBottom = n.position.y + dims.h
-    const row = metrics[li]
-    const rowBottom = row.top + row.height
-
-    if (nodeBottom > rowBottom - 6) {
-      row.height = nodeBottom - row.top + 10
+    const byCol = new Map<number, FlowNode[]>()
+    for (const n of laneNodes) {
+      const col = colFromX(n.position.x, nodeDims(n).w)
+      if (!byCol.has(col)) byCol.set(col, [])
+      byCol.get(col)!.push(n)
     }
-    if (nodeTop < row.top) {
-      const delta = row.top - nodeTop
-      row.top -= delta
-      row.height += delta
-    }
-  }
 
-  return metrics
+    let maxH = LANE_ROW_HEIGHT
+    for (const group of byCol.values()) {
+      if (group.length <= 1) continue
+      const stackH =
+        LANE_PADDING * 2 +
+        group.reduce((sum, n, i) => sum + nodeDims(n).h + (i > 0 ? LANE_STACK_GAP : 0), 0)
+      maxH = Math.max(maxH, stackH)
+    }
+    return maxH
+  })
+
+  let top = FLOW_ORIGIN_Y
+  return heights.map((height) => {
+    const metric = { top, height }
+    top += height
+    return metric
+  })
 }
 
 export function flowToScreen(

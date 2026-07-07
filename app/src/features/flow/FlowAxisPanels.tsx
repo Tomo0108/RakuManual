@@ -216,7 +216,6 @@ function ColumnBoundaryOverlay({
 }
 
 function MobileSystemCell({
-  col,
   entry,
   left,
   width,
@@ -251,7 +250,6 @@ function MobileSystemCell({
           {display}
         </span>
       )}
-      <span className="absolute left-1 top-0.5 text-[8px] text-muted-foreground">列{col + 1}</span>
     </div>
   )
 }
@@ -275,7 +273,7 @@ export function MobileTeamAxis({
 
   return (
     <div
-      className={`pointer-events-none absolute inset-y-0 right-0 z-30 overflow-hidden transition-opacity duration-300 ${
+      className={`pointer-events-none absolute inset-y-0 right-0 z-30 overflow-hidden transition-opacity duration-100 ${
         visible ? "opacity-100" : "opacity-0"
       }`}
       style={{ width: labelWidth }}
