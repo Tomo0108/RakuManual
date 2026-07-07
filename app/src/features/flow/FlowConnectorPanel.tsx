@@ -2,6 +2,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import type { FlowConnector } from "./flow-connectors"
 import { ConnectorPicker } from "./ConnectorPicker"
 import type { ConnectorInsertMode } from "./flow-interaction-context"
+import { AXIS_HEADER_HEIGHT } from "./flow-layout"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -22,16 +23,21 @@ export function FlowConnectorPanel({
 }: Props) {
   if (collapsed) {
     return (
-      <div className="flex w-10 shrink-0 flex-col items-center border-r bg-muted/30 py-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          onClick={onToggleCollapse}
-          aria-label="コネクタパネルを開く"
+      <div className="flex w-10 shrink-0 flex-col border-r bg-muted/30">
+        <div
+          className="flex shrink-0 items-center justify-center border-b bg-muted/50"
+          style={{ height: AXIS_HEADER_HEIGHT }}
         >
-          <PanelLeftOpen className="size-4" />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={onToggleCollapse}
+            aria-label="コネクタパネルを開く"
+          >
+            <PanelLeftOpen className="size-3.5" />
+          </Button>
+        </div>
       </div>
     )
   }
@@ -43,11 +49,11 @@ export function FlowConnectorPanel({
         disabled && "pointer-events-none opacity-50",
       )}
     >
-      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-        <div>
-          <h3 className="text-xs font-semibold">コネクタ</h3>
-          <p className="text-[10px] text-muted-foreground">ドラッグまたはクリックで追加</p>
-        </div>
+      <div
+        className="flex shrink-0 items-center justify-between border-b bg-muted/50 px-2"
+        style={{ height: AXIS_HEADER_HEIGHT }}
+      >
+        <h3 className="text-[10px] font-semibold text-muted-foreground">コネクタ</h3>
         <Button
           variant="ghost"
           size="icon"
