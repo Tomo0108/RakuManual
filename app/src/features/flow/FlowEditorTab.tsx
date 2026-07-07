@@ -876,16 +876,18 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               disabled={isEditingDisabled}
             />
           )}
-          {!isMobile && (
-            <TeamAxisPanel lanes={flow.lanes} nodes={previewFlow.nodes} viewport={viewport} activeLane={activeLane} />
-          )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {!isMobile && <FlowCanvasHeader />}
-            <div
-              ref={canvasRef}
-              className="relative min-h-0 flex-1"
-              onPointerDown={bumpMobileTeamAxis}
-            >
+            <div className="flex min-h-0 flex-1">
+              {!isMobile && (
+                <TeamAxisPanel lanes={flow.lanes} nodes={previewFlow.nodes} viewport={viewport} activeLane={activeLane} />
+              )}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {!isMobile && <FlowCanvasHeader />}
+                <div
+                  ref={canvasRef}
+                  className="relative min-h-0 flex-1"
+                  onPointerDown={bumpMobileTeamAxis}
+                >
               <ReactFlowProvider>
                 {/* 行・列ガイド(フロー座標系) */}
                 <div
@@ -912,7 +914,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   viewport={viewport}
                   onViewportChange={(vp) => {
                     bumpMobileTeamAxis()
-                    setViewport(clampViewport(vp))
+                    setViewport(isMobile ? clampViewport(vp) : vp)
                   }}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
@@ -947,7 +949,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   nodesDraggable={!isEditingDisabled}
                   nodesConnectable={!isEditingDisabled}
                   elementsSelectable={!proposal}
-                  translateExtent={translateExtent}
+                  translateExtent={isMobile ? translateExtent : undefined}
                   minZoom={0.12}
                   maxZoom={2.5}
                   zoomOnPinch
@@ -999,11 +1001,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 )}
                 {/* ReactFlow は overflow:hidden のため MiniMap はキャンバス内に重ねて配置 */}
                 <div
-                  className="pointer-events-auto absolute right-2 z-50 md:right-3 md:bottom-3"
+                  className={cn(
+                    "pointer-events-auto absolute z-50",
+                    isMobile ? "right-2 bottom-2" : "right-3 bottom-3",
+                  )}
                   style={{
                     width: isMobile ? 148 : FLOW_MINIMAP_WIDTH,
                     height: minimapH,
-                    bottom: isMobile ? 8 : undefined,
                   }}
                 >
                   <FlowMinimap
@@ -1046,18 +1050,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               panMaxX={panXRange.max}
               onPanX={panFlowX}
             />
+              </div>
+            </div>
+            {isMobile ? (
+              <MobileSystemAxisPanel columnSystems={columnSystems} viewport={viewport} />
+            ) : (
+              <SystemAxisPanel
+                columnSystems={columnSystems}
+                viewport={viewport}
+                onUpdateColumn={isEditingDisabled ? undefined : updateColumnSystem}
+                readOnly={isEditingDisabled}
+              />
+            )}
           </div>
         </div>
-        {isMobile ? (
-          <MobileSystemAxisPanel columnSystems={columnSystems} viewport={viewport} />
-        ) : (
-          <SystemAxisPanel
-            columnSystems={columnSystems}
-            viewport={viewport}
-            onUpdateColumn={isEditingDisabled ? undefined : updateColumnSystem}
-            readOnly={isEditingDisabled}
-          />
-        )}
       </div>
 
       {/* コネクタ選択(キャンバス上の＋・右クリック) */}
