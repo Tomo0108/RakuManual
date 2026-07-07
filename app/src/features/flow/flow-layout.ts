@@ -40,6 +40,13 @@ export function nodeYInLane(laneIndex: number, nodeHeight: number, slot = 0): nu
   return laneCenterY(laneIndex) - nodeHeight / 2 + slotOffset
 }
 
+/** 同一列に縦並びするノード用のY座標 */
+export function stackedYInLane(laneIndex: number, slot: number, nodeHeight: number): number {
+  const rowTop = FLOW_ORIGIN_Y + laneIndex * LANE_ROW_HEIGHT
+  const gap = 14
+  return rowTop + 12 + slot * (nodeHeight + gap)
+}
+
 export function nodeXInCol(col: number, nodeWidth: number): number {
   return FLOW_ORIGIN_X + col * COL_WIDTH + (COL_WIDTH - nodeWidth) / 2
 }
@@ -431,13 +438,20 @@ export function autoLayout(state: FlowState): FlowState {
   }
 
   const positions = new Map<string, { x: number; y: number }>()
-  let globalMaxCol = maxLayer
+  const verticallyStackedIds = new Set<string>()
 
   for (let col = 0; col <= maxLayer; col++) {
     const ids = [...(layerGroups[col] ?? [])].sort(
       (a, b) => (orderInLayer.get(a) ?? 0) - (orderInLayer.get(b) ?? 0),
     )
     const laneSlots = new Map<number, number>()
+    const laneNodes = new Map<number, string[]>()
+    const laneCounts = new Map<number, number>()
+
+    for (const id of ids) {
+      const li = laneIdx(nodeMap.get(id)!.data.lane)
+      laneCounts.set(li, (laneCounts.get(li) ?? 0) + 1)
+    }
 
     for (const id of ids) {
       const node = nodeMap.get(id)!
@@ -445,17 +459,22 @@ export function autoLayout(state: FlowState): FlowState {
       const li = laneIdx(node.data.lane)
       const slot = laneSlots.get(li) ?? 0
       laneSlots.set(li, slot + 1)
-      const effectiveCol = col + slot
-      globalMaxCol = Math.max(globalMaxCol, effectiveCol)
+      if (!laneNodes.has(li)) laneNodes.set(li, [])
+      laneNodes.get(li)!.push(id)
 
+      const stackInLane = (laneCounts.get(li) ?? 0) > 1
       positions.set(id, {
-        x: nodeXInCol(effectiveCol, dims.w),
-        y: nodeYInLane(li, dims.h),
+        x: nodeXInCol(col, dims.w),
+        y: stackInLane ? stackedYInLane(li, slot, dims.h) : nodeYInLane(li, dims.h),
       })
+    }
+
+    for (const nodeIds of laneNodes.values()) {
+      if (nodeIds.length > 1) nodeIds.forEach((nid) => verticallyStackedIds.add(nid))
     }
   }
 
-  const columnSystems: ColumnSystemEntry[] = Array.from({ length: globalMaxCol + 1 }, (_, col) => {
+  const columnSystems: ColumnSystemEntry[] = Array.from({ length: maxLayer + 1 }, (_, col) => {
     const systemsInCol = new Set<string>()
     for (const n of nodes) {
       const dims = dimForKind(n.data.kind)
@@ -467,7 +486,7 @@ export function autoLayout(state: FlowState): FlowState {
     return {
       label: [...systemsInCol].join(" / ") || "—",
       url: state.layoutMeta?.columnSystems?.[col]
-        ? normalizeColumnSystems(state.layoutMeta.columnSystems, globalMaxCol + 1)[col]?.url
+        ? normalizeColumnSystems(state.layoutMeta.columnSystems, maxLayer + 1)[col]?.url
         : undefined,
     }
   })
@@ -478,6 +497,7 @@ export function autoLayout(state: FlowState): FlowState {
     if (!src || !tgt || src.data.lane !== tgt.data.lane) continue
     if (layer.get(e.target)! !== layer.get(e.source)! + 1) continue
     if (tgt.data.kind === "decision") continue
+    if (verticallyStackedIds.has(tgt.id)) continue
 
     const sp = positions.get(e.source)!
     const tp = positions.get(e.target)!
@@ -492,7 +512,7 @@ export function autoLayout(state: FlowState): FlowState {
   const laid: FlowState = {
     ...state,
     lanes: laneList,
-    layoutMeta: { columnCount: globalMaxCol + 1, columnSystems },
+    layoutMeta: { columnCount: maxLayer + 1, columnSystems },
     nodes: nodes.map((n) => ({
       ...n,
       position: positions.get(n.id) ?? n.position,

@@ -41,6 +41,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { StepNode, setStepNodeContext } from "./StepNode"
 import { SystemAxisPanel, TeamAxisPanel, LaneGuideOverlay, FlowCanvasHeader, MobileSystemAxisPanel, MobileTeamAxis, type FlowViewport } from "./FlowAxisPanels"
 import { FlowPanBar } from "./FlowPanBar"
+import { FlowHelpButton } from "./FlowHelpButton"
 import { FlowMobileControls } from "./FlowMobileControls"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -749,13 +750,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-2 pl-1">
+          <FlowHelpButton isMobile={isMobile} isLocked={isLocked} />
           <ToolButton
             label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
             onClick={() => setIsLocked((v) => !v)}
             disabled={!!proposal}
             iconOnly={isMobile}
           >
-            {isLocked ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+            {isLocked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
             {!isMobile && (isLocked ? "編集" : "ロック")}
           </ToolButton>
           {!isMobile && (
@@ -920,16 +922,6 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   />
                 </div>
               </ReactFlowProvider>
-
-              {!proposal && (
-                <div className="pointer-events-none absolute bottom-2 left-2 z-40 max-w-[calc(100%-10rem)] rounded-md border bg-background/90 px-2.5 py-1 text-[10px] text-muted-foreground shadow-xs backdrop-blur md:max-w-[calc(100%-10rem)]">
-                  {isLocked
-                    ? "ロック中 — 編集するにはツールバーのロックを解除"
-                    : isMobile
-                      ? "ピンチで拡大 / ＋でコネクタ追加 / 下部バーで左右移動"
-                      : "左パネル・線の＋・右クリックでコネクタ追加 / ダブルクリックで編集"}
-                </div>
-              )}
 
               {proposal && (
                 <div className="absolute inset-x-0 top-12 z-20 flex justify-center px-4">
