@@ -8,27 +8,69 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const publicDir = resolve(root, "public")
 const source = resolve(publicDir, "icon_rakumanual.png")
 
-/** 角丸タイル付きのブランドアイコンを各サイズへ（透過を維持） */
-async function writeRoundedIcon(size, filename) {
-  const out = resolve(publicDir, filename)
-  await sharp(source)
-    .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+/** タイルの下地色（ソースの白タイルと揃える） */
+const TILE_BG = { r: 253, g: 253, b: 253, alpha: 1 }
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 }
+
+/**
+ * アイコンを生成する。
+ * - ratio: キャンバスに対するロゴの占有率（余白調整）
+ * - bg: 背景色（null で透過）
+ */
+async function makeIcon(size, filename, { ratio = 1, bg = null } = {}) {
+  const inner = Math.round(size * ratio)
+  const logo = await sharp(source)
+    .resize(inner, inner, { fit: "contain", background: TRANSPARENT })
     .png()
-    .toFile(out)
-  console.log(`Generated ${filename} (${size}x${size})`)
+    .toBuffer()
+
+  await sharp({
+    create: { width: size, height: size, channels: 4, background: bg ?? TRANSPARENT },
+  })
+    .composite([{ input: logo, gravity: "center" }])
+    .png()
+    .toFile(resolve(publicDir, filename))
+
+  console.log(`Generated ${filename} (${size}x${size}${bg ? " opaque" : " transparent"})`)
+}
+
+/** favicon.ico 用の不透過バッファ */
+async function opaqueBuffer(size, ratio) {
+  const inner = Math.round(size * ratio)
+  const logo = await sharp(source)
+    .resize(inner, inner, { fit: "contain", background: TRANSPARENT })
+    .png()
+    .toBuffer()
+  return sharp({
+    create: { width: size, height: size, channels: 4, background: TILE_BG },
+  })
+    .composite([{ input: logo, gravity: "center" }])
+    .png()
+    .toBuffer()
 }
 
 async function main() {
-  await writeRoundedIcon(32, "favicon.png")
-  await writeRoundedIcon(48, "favicon-48.png")
-  await writeRoundedIcon(180, "apple-touch-icon.png")
-  await writeRoundedIcon(192, "pwa-192.png")
-  await writeRoundedIcon(512, "pwa-512.png")
-  await writeRoundedIcon(512, "icon.png")
+  // ブラウザタブ（透過角丸そのまま）
+  await makeIcon(32, "favicon.png", { ratio: 1 })
+  await makeIcon(48, "favicon-48.png", { ratio: 1 })
 
+  // 一般 PWA アイコン（"any"）: 少し余白を持たせて通常サイズ感に
+  await makeIcon(192, "pwa-192.png", { ratio: 0.92 })
+  await makeIcon(512, "pwa-512.png", { ratio: 0.92 })
+  await makeIcon(512, "icon.png", { ratio: 0.92 })
+
+  // iOS ホーム画面（不透過・iOS 側で角丸マスク）
+  await makeIcon(180, "apple-touch-icon.png", { ratio: 0.86, bg: TILE_BG })
+
+  // maskable（Windows/Android が OS 側で角丸マスクを適用）
+  // セーフゾーン内（中央80%）にロゴを収め、四角タイル化を防ぐ
+  await makeIcon(192, "pwa-192-maskable.png", { ratio: 0.8, bg: TILE_BG })
+  await makeIcon(512, "pwa-512-maskable.png", { ratio: 0.8, bg: TILE_BG })
+
+  // Windows タスクバー等向け favicon.ico（不透過）
   const ico = await pngToIco([
-    resolve(publicDir, "favicon-48.png"),
-    resolve(publicDir, "pwa-192.png"),
+    await opaqueBuffer(48, 0.86),
+    await opaqueBuffer(256, 0.86),
   ])
   writeFileSync(resolve(publicDir, "favicon.ico"), ico)
   console.log("Generated favicon.ico")

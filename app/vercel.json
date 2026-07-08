@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets/|favicon\\.ico|favicon\\.png|favicon-48\\.png|apple-touch-icon\\.png|icon\\.png|icon_rakumanual\\.png|pwa-192\\.png|pwa-512\\.png|manifest\\.webmanifest|sw\\.js|workbox-).*)",
+      "source": "/((?!assets/|favicon\\.ico|favicon\\.png|favicon-48\\.png|apple-touch-icon\\.png|icon\\.png|icon_rakumanual\\.png|pwa-192\\.png|pwa-512\\.png|pwa-192-maskable\\.png|pwa-512-maskable\\.png|manifest\\.webmanifest|sw\\.js|workbox-).*)",
       "destination": "/index.html"
     }
   ],
