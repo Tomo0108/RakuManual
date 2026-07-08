@@ -11,6 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       includeAssets: [
+        "favicon.ico",
         "favicon.png",
         "favicon-48.png",
         "icon.png",
@@ -19,6 +20,7 @@ export default defineConfig({
         "pwa-512-maskable.png",
       ],
       manifest: {
+        id: "/",
         name: "RakuManual",
         short_name: "RakuManual",
         description: "業務フローからマニュアルを作成・管理するプラットフォーム",
