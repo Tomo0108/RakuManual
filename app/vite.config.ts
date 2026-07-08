@@ -16,8 +16,6 @@ export default defineConfig({
         "favicon-48.png",
         "icon.png",
         "apple-touch-icon.png",
-        "pwa-192-maskable.png",
-        "pwa-512-maskable.png",
       ],
       manifest: {
         id: "/",
@@ -44,18 +42,6 @@ export default defineConfig({
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
-          },
-          {
-            src: "pwa-192-maskable.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "maskable",
-          },
-          {
-            src: "pwa-512-maskable.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable",
           },
         ],
       },
