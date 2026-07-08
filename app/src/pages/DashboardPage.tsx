@@ -1,7 +1,7 @@
 import {
   CircleDollarSign,
+  CircleGauge,
   Clock,
-  Gauge,
   LayoutDashboard,
   Smile,
   TrendingUp,
@@ -28,7 +28,7 @@ interface Props {
 
 const KPIS = [
   { icon: Clock, label: "作成工数の削減率", value: "58%", good: true },
-  { icon: Gauge, label: "作成完了率", value: "83%", good: true },
+  { icon: CircleGauge, label: "作成完了率", value: "83%", good: true },
   { icon: TrendingUp, label: "フロー初回生成精度", value: "72%", good: true },
   { icon: Smile, label: "利用者満足度", value: "4.2", good: true },
 ]
@@ -53,7 +53,9 @@ export function DashboardPage({ projects }: Props) {
             <Card key={k.label} className="gap-0 py-4">
               <CardContent>
                 <div className="flex items-center justify-between gap-2">
-                  <k.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="inline-flex size-5 shrink-0 items-center justify-center overflow-visible">
+                    <k.icon className="size-4 text-muted-foreground" aria-hidden />
+                  </span>
                   {k.good && (
                     <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="目標達成" />
                   )}
