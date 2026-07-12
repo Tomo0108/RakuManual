@@ -518,11 +518,9 @@ function SectionEditor({
         <div className={cn("flex gap-4", isMobile ? "flex-col" : "items-start justify-between")}>
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-3">
-              {sectionNum && (
-                <span className={cn(
-                  "shrink-0 rounded-lg bg-primary/10 font-mono font-bold tabular-nums text-primary",
-                  embedded ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-sm",
-                )}>
+              {/* embedded 時は中項目見出し側に項番があるため、ここでは出さない(承認済み横の二重表示を防ぐ) */}
+              {sectionNum && !embedded && (
+                <span className="shrink-0 rounded-lg bg-primary/10 px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary">
                   {sectionNum}
                 </span>
               )}
