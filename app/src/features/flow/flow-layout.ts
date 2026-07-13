@@ -447,8 +447,12 @@ export function enrichEdges(state: FlowState): FlowEdge[] {
     const decisionSrc =
       srcKind === "decision" ? decisionSourceHandle(label, isBack) : undefined
     const autoHandles = pickEdgeHandles(src, tgt, { w: srcW, h: dimForKind(srcKind).h }, { w: tgtW, h: dimForKind(tgtKind).h }, decisionSrc)
+    /* 分岐はラベル変更にハンドルを追従させる(手動ラベル編集のため) */
     const handles = {
-      sourceHandle: resolveHandleId(e.sourceHandle, autoHandles.sourceHandle),
+      sourceHandle:
+        srcKind === "decision"
+          ? (decisionSrc ?? autoHandles.sourceHandle)
+          : resolveHandleId(e.sourceHandle, autoHandles.sourceHandle),
       targetHandle: resolveHandleId(e.targetHandle, autoHandles.targetHandle),
     }
 

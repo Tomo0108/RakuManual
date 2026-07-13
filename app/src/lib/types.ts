@@ -68,6 +68,10 @@ export interface StepData extends Record<string, unknown> {
   source?: string
   /** 自然言語修正の差分プレビュー用 */
   diff?: "add" | "remove" | "change"
+  /** グラフ検証エラー */
+  validationError?: boolean
+  /** グラフ検証警告 */
+  validationWarning?: boolean
 }
 
 export type FlowNode = Node<StepData>
