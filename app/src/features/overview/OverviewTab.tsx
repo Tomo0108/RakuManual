@@ -9,7 +9,6 @@ import {
   Workflow,
 } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
-import { PipelineStepper } from "@/components/PipelineStepper"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -86,10 +85,6 @@ export function OverviewTab({ project, setTab }: Props) {
             </div>
           )}
         </section>
-
-        <div className="mt-5 sm:hidden">
-          <PipelineStepper project={project} activeTab="overview" onSelect={setTab} compact />
-        </div>
 
         <section className="mt-6 md:mt-8">
           <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase md:mb-4">
