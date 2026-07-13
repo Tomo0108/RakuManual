@@ -38,20 +38,20 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
   return (
     <div className="flex h-full flex-col">
       {/* ヘッダー */}
-      <header className="page-header px-4 pt-3 md:px-6 md:pt-4">
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <header className="page-header px-4 pt-2 pb-2 md:px-6 md:pt-4 md:pb-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Button variant="ghost" size="sm" className="-ml-2 h-8 shrink-0 gap-1 px-2" onClick={onBack}>
             <ArrowLeft className="size-3.5" />
             <span className="hidden sm:inline">プロジェクト一覧</span>
             <span className="sm:hidden">戻る</span>
           </Button>
-          <ChevronRight className="size-3.5 shrink-0" />
-          <span className="min-w-0 truncate font-medium text-foreground">{project.name}</span>
-          <Badge variant="outline" className={cn("shrink-0", STATUS_BADGE[project.status])}>
+          <ChevronRight className="hidden size-3.5 shrink-0 sm:block" />
+          <span className="hidden min-w-0 truncate font-medium text-foreground sm:inline">{project.name}</span>
+          <Badge variant="outline" className={cn("ml-auto shrink-0 sm:ml-0", STATUS_BADGE[project.status])}>
             {STATUS_LABEL[project.status]}
           </Badge>
         </div>
-        <div className="mt-3 hidden sm:block">
+        <div className="mt-2 hidden sm:block md:mt-3">
           <PipelineStepper project={project} activeTab={tab} onSelect={setTab} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ProjectTab)} className="mt-2 md:mt-3">
