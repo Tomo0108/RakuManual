@@ -75,88 +75,94 @@ export function OverviewTab({ project, setTab }: Props) {
 
   return (
     <div className="scroll-touch h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-5 md:px-8 md:py-8">
-        <p className="text-sm leading-relaxed text-muted-foreground">{project.description}</p>
-        {project.reviewDeadline && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm">
-            <CalendarClock className="size-4 text-muted-foreground" />
-            <span className="text-muted-foreground">見直し期限:</span>
-            <Badge variant="secondary">{project.reviewDeadline}</Badge>
-          </div>
-        )}
+      <div className="mx-auto max-w-5xl px-4 py-5 md:px-8 md:py-8">
+        <section className="rounded-xl border border-border/80 bg-card p-5 shadow-sm md:p-6">
+          <p className="text-[15px] leading-relaxed text-foreground/90">{project.description}</p>
+          {project.reviewDeadline && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4 text-sm">
+              <CalendarClock className="size-4 text-muted-foreground" />
+              <span className="text-muted-foreground">見直し期限</span>
+              <Badge variant="secondary">{project.reviewDeadline}</Badge>
+            </div>
+          )}
+        </section>
 
         <div className="mt-5 sm:hidden">
           <PipelineStepper project={project} activeTab="overview" onSelect={setTab} compact />
         </div>
 
-        <div className="mt-5 grid gap-2.5 sm:mt-6 sm:gap-3">
-          {steps.map((s) => (
-            <Card
-              key={s.tab}
-              className={cn(
-                "cursor-pointer gap-0 py-0 transition-colors hover:border-primary/40",
-                s.done && "bg-muted/40",
-              )}
-              onClick={() => setTab(s.tab)}
-            >
-              <CardContent className="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-6 sm:py-4">
-                <div
-                  className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                    s.done ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
-                  )}
-                >
-                  <s.icon className="size-4.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold leading-snug">{s.title}</div>
-                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1 text-primary sm:hidden" aria-hidden>
-                  <ArrowRight className="size-4" />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="hidden gap-1 text-primary sm:inline-flex"
-                  tabIndex={-1}
-                  aria-hidden
-                >
-                  {s.done ? (
-                    <>
-                      <Eye className="size-3.5" />
-                      確認
-                    </>
-                  ) : (
-                    <>
-                      進む
-                      <ArrowRight className="size-3.5" />
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <section className="mt-6 md:mt-8">
+          <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase md:mb-4">
+            作成工程
+          </h2>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {steps.map((s) => (
+              <Card
+                key={s.tab}
+                className={cn(
+                  "cursor-pointer gap-0 py-0 transition-colors hover:border-primary/40",
+                  s.done && "bg-muted/40",
+                )}
+                onClick={() => setTab(s.tab)}
+              >
+                <CardContent className="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5 sm:py-4">
+                  <div
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                      s.done ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
+                    )}
+                  >
+                    <s.icon className="size-4.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold leading-snug">{s.title}</div>
+                    <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1 text-primary sm:hidden" aria-hidden>
+                    <ArrowRight className="size-4" />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="hidden shrink-0 gap-1 text-primary sm:inline-flex"
+                    tabIndex={-1}
+                    aria-hidden
+                  >
+                    {s.done ? (
+                      <>
+                        <Eye className="size-3.5" />
+                        確認
+                      </>
+                    ) : (
+                      <>
+                        進む
+                        <ArrowRight className="size-3.5" />
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
 
-        {/* 更新履歴 (F-6) */}
-        <Card className="mt-6 sm:mt-8">
-          <CardHeader className="px-4 sm:px-6">
+        <Card className="mt-6 gap-0 py-0 sm:mt-8">
+          <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-sm">
               <History className="size-4 text-muted-foreground" />
               更新履歴
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 sm:px-6">
+          <CardContent className="px-4 py-4 sm:px-6 sm:py-5">
             {project.history.length === 0 ? (
               <p className="text-sm text-muted-foreground">まだ履歴がありません</p>
             ) : (
-              <ol className="relative flex flex-col gap-4 border-l pl-5">
+              <ol className="relative flex flex-col gap-4 border-l border-border/80 pl-5">
                 {project.history.map((h) => (
                   <li key={h.id} className="relative">
-                    <span className="absolute top-1.5 -left-[26px] size-2 rounded-full bg-primary/60" />
-                    <div className="text-[13px]">{h.action}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <span className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-primary/60 ring-2 ring-card" />
+                    <div className="text-[13px] leading-relaxed">{h.action}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
                       {h.date} ・ {h.user}
                     </div>
                   </li>

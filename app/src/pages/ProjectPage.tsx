@@ -52,7 +52,9 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
           </Badge>
         </div>
         <div className="mt-2 hidden sm:block md:mt-3">
-          <PipelineStepper project={project} activeTab={tab} onSelect={setTab} />
+          {tab !== "overview" && (
+            <PipelineStepper project={project} activeTab={tab} onSelect={setTab} />
+          )}
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ProjectTab)} className="mt-2 md:mt-3">
           <TabScrollContainer>
