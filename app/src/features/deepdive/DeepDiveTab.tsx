@@ -4,6 +4,7 @@ import type { DeepDiveItem, DeepDiveStatus, Project, ProjectTab } from "@/lib/ty
 import { DEEPDIVE_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
+import { REVIEW_STATUS, WARNING_BOX, SUCCESS_BOX } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,10 +19,10 @@ import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const STATUS_STYLE: Record<DeepDiveStatus, string> = {
-  "not-started": "bg-muted text-muted-foreground border-transparent",
-  "in-progress": "bg-sky-50 text-sky-700 border-sky-200",
-  done: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  recheck: "bg-amber-50 text-amber-700 border-amber-200",
+  "not-started": REVIEW_STATUS["not-started"],
+  "in-progress": REVIEW_STATUS["in-progress"],
+  done: REVIEW_STATUS.done,
+  recheck: REVIEW_STATUS.recheck,
 }
 
 const IMPORTANCE_LABEL = { high: "重要度: 高", normal: "重要度: 中", low: "重要度: 低" } as const
@@ -353,7 +354,7 @@ function StepDetailPanel({
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {selected.status === "recheck" && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+            <div className={cn("flex items-start gap-2 px-4 py-3 text-[13px]", WARNING_BOX)}>
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <div>
                 フロー図が修正されたため、このステップの回答は「要確認」になっています。
@@ -361,7 +362,7 @@ function StepDetailPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="mt-2 h-7 gap-1 border-amber-300 bg-white text-xs"
+                  className="mt-2 h-7 gap-1 bg-background text-xs"
                   onClick={() => onUpdate((d) => ({ ...d, status: "done" }))}
                 >
                   <Check className="size-3.5" />
@@ -390,7 +391,7 @@ function StepDetailPanel({
           )}
 
           {!currentQuestion && selected.status === "done" && (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className={cn("flex items-center gap-2 px-4 py-3 text-sm", SUCCESS_BOX)}>
               <Check className="size-4" />
               このステップのヒアリングは完了しています
             </div>

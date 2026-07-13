@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { BookOpenText, MessageCircleQuestion, Send, ThumbsDown, ThumbsUp } from "lucide-react"
-import logo from "@/assets/logo.png"
 import { QA_PATTERNS } from "@/lib/mock-data"
 import { uid } from "@/lib/project-utils"
+import { SUCCESS_TEXT, DANGER_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { AiBubble, TypingIndicator, UserBubble } from "@/components/chat/AiBubble"
 import { cn } from "@/lib/utils"
 
 interface Message {
@@ -81,8 +82,12 @@ export function QAChatPage({ onOpenProject }: Props) {
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.length === 0 && (
             <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                業務に関する質問を入力してください。例えばこんな質問ができます:
+              <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary-subtle text-primary">
+                <MessageCircleQuestion className="size-6" />
+              </div>
+              <p className="mt-4 text-sm font-medium">業務に関する質問をどうぞ</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                公開済みマニュアルを根拠に回答します。例えばこんな質問ができます:
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
@@ -91,73 +96,52 @@ export function QAChatPage({ onOpenProject }: Props) {
                   </Button>
                 ))}
               </div>
-              <p className="mt-6 text-[11px] text-muted-foreground">
-                検証パターン: 出典あり回答(経費・PC・承認)/ 作成中マニュアルの案内(請求書)/ 根拠なし回答の拒否(有給休暇)
-              </p>
             </div>
           )}
 
           {messages.map((m) =>
             m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
-                <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-                  {m.text}
-                </div>
-              </div>
+              <UserBubble key={m.id}>{m.text}</UserBubble>
             ) : (
-              <div key={m.id} className="flex justify-start gap-3">
-                <img src={logo} alt="AI" className="size-8 shrink-0 rounded-xl shadow-xs" />
-                <div className="max-w-[85%]">
-                  <div
-                    className={cn(
-                      "rounded-2xl rounded-tl-sm border border-border/70 bg-card px-4 py-3 text-sm leading-relaxed shadow-xs",
-                      m.noSource && !m.source && "border-amber-200/80 bg-[oklch(0.96_0.04_85)]",
-                    )}
+              <div key={m.id} className="flex flex-col gap-1.5">
+                <AiBubble variant={m.noSource && !m.source ? "warning" : "default"}>
+                  {m.text}
+                  {m.source && (
+                    <button
+                      onClick={() => onOpenProject(m.source!.projectId)}
+                      className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-left text-xs transition-colors hover:border-primary-muted hover:bg-primary-subtle/50"
+                    >
+                      <BookOpenText className="size-3.5 shrink-0 text-primary" />
+                      <span>
+                        出典: <span className="font-medium">{m.source.projectName}</span>
+                        <span className="text-muted-foreground"> ─ {m.source.section}</span>
+                      </span>
+                    </button>
+                  )}
+                </AiBubble>
+                <div className="flex items-center gap-1 pl-11">
+                  <span className="text-[11px] text-muted-foreground">この回答は役に立ちましたか?</span>
+                  <button
+                    className={cn("rounded p-1 hover:bg-muted", m.feedback === "up" && SUCCESS_TEXT)}
+                    onClick={() => setFeedback(m.id, "up")}
+                    aria-label="役に立った"
                   >
-                    {m.text}
-                    {m.source && (
-                      <button
-                        onClick={() => onOpenProject(m.source!.projectId)}
-                        className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-left text-xs transition-colors hover:border-primary-muted hover:bg-primary-subtle/50"
-                      >
-                        <BookOpenText className="size-3.5 shrink-0 text-primary" />
-                        <span>
-                          出典: <span className="font-medium">{m.source.projectName}</span>
-                          <span className="text-muted-foreground"> ─ {m.source.section}</span>
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1 pl-1">
-                    <span className="text-[11px] text-muted-foreground">この回答は役に立ちましたか?</span>
-                    <button
-                      className={cn("rounded p-1 hover:bg-muted", m.feedback === "up" && "text-emerald-600")}
-                      onClick={() => setFeedback(m.id, "up")}
-                      aria-label="役に立った"
-                    >
-                      <ThumbsUp className="size-3.5" />
-                    </button>
-                    <button
-                      className={cn("rounded p-1 hover:bg-muted", m.feedback === "down" && "text-red-500")}
-                      onClick={() => setFeedback(m.id, "down")}
-                      aria-label="役に立たなかった"
-                    >
-                      <ThumbsDown className="size-3.5" />
-                    </button>
-                    {m.feedback && <span className="text-[11px] text-muted-foreground">フィードバックを記録しました(F-8集計)</span>}
-                  </div>
+                    <ThumbsUp className="size-3.5" />
+                  </button>
+                  <button
+                    className={cn("rounded p-1 hover:bg-muted", m.feedback === "down" && DANGER_TEXT)}
+                    onClick={() => setFeedback(m.id, "down")}
+                    aria-label="役に立たなかった"
+                  >
+                    <ThumbsDown className="size-3.5" />
+                  </button>
+                  {m.feedback && <span className="text-[11px] text-muted-foreground">フィードバックを記録しました</span>}
                 </div>
               </div>
             ),
           )}
 
-          {thinking && (
-            <div className="flex gap-1 pl-2">
-              <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
-              <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:120ms]" />
-              <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:240ms]" />
-            </div>
-          )}
+          {thinking && <TypingIndicator />}
         </div>
       </div>
 

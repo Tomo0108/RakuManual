@@ -33,6 +33,7 @@ import {
 import type { FlowNode, FlowEdge, FlowState, Project, ProjectTab, ColumnSystemEntry } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
+import { WARNING_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -783,7 +784,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             骨組みヒアリングの回答をもとに、担当者レーン・条件分岐を含む業務フロー図を自動生成します。生成後は自由に編集できます。
           </p>
           {!hearingDone && (
-            <p className="mt-3 text-xs text-amber-600">
+            <p className={cn("mt-3 text-xs", WARNING_TEXT)}>
               ヒアリングの回答がまだ少ないため、生成精度が下がる可能性があります
             </p>
           )}

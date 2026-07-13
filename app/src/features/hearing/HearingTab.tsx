@@ -8,15 +8,16 @@ import {
   SkipForward,
   Workflow,
 } from "lucide-react"
-import logo from "@/assets/logo.png"
 import type { AnswerStatus, HearingAnswer, Project, ProjectTab } from "@/lib/types"
 import { HEARING_QUESTIONS } from "@/lib/mock-data"
 import { now } from "@/lib/project-utils"
+import { WARNING_TEXT, SUCCESS_TEXT, SEMANTIC } from "@/lib/semantic-styles"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { AiBubble } from "@/components/chat/AiBubble"
 import { cn } from "@/lib/utils"
 
 interface Props {
@@ -95,7 +96,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
               {done ? "すべて回答済み" : `残り約 ${HEARING_QUESTIONS.length - answers.length} 問`}
             </span>
           </div>
-          <Progress value={done ? 100 : progress} className="mt-2 h-1.5" />
+          <Progress value={done ? 100 : progress} className="mt-2 h-2" />
         </div>
 
         {/* メッセージ */}
@@ -131,7 +132,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
 
             {thinking && (
               <AiBubble>
-                <span className="inline-flex gap-1">
+                <span className="inline-flex gap-1" aria-label="入力中">
                   <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
                   <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:120ms]" />
                   <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:240ms]" />
@@ -151,7 +152,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                     いただいた回答をもとに業務フロー図を生成できます。
                   </p>
                   {pendingList.length > 0 && (
-                    <p className="text-xs text-amber-600">
+                    <p className={cn("text-xs", WARNING_TEXT)}>
                       未回答が {pendingList.length} 件あります(右の回答一覧からいつでも追記できます)
                     </p>
                   )}
@@ -296,9 +297,9 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium">Q{i + 1}</span>
-                    {a?.status === "answered" && <Check className="size-3 text-emerald-600" />}
+                    {a?.status === "answered" && <Check className={cn("size-3", SUCCESS_TEXT)} />}
                     {a && a.status !== "answered" && (
-                      <Badge variant="outline" className="h-4 border-amber-300 bg-amber-50 px-1 text-[10px] text-amber-700">
+                      <Badge variant="outline" className={cn("h-4 px-1 text-[10px]", SEMANTIC.warning)}>
                         {STATUS_TEXT[a.status] || "未回答"}
                       </Badge>
                     )}
@@ -316,22 +317,6 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
           </div>
         </div>
       </aside>
-    </div>
-  )
-}
-
-/* ---------- バブル ---------- */
-
-function AiBubble({ children, hint }: { children: React.ReactNode; hint?: string }) {
-  return (
-    <div className="flex gap-3">
-      <img src={logo} alt="AI" className="size-8 shrink-0 rounded-xl shadow-xs" />
-      <div className="max-w-[85%]">
-        <div className="rounded-2xl rounded-tl-sm border bg-card px-4 py-3 text-sm leading-relaxed shadow-xs">
-          {children}
-        </div>
-        {hint && <div className="mt-1 pl-1 text-xs text-muted-foreground">{hint}</div>}
-      </div>
     </div>
   )
 }
@@ -373,7 +358,7 @@ function UserBubble({
                 修正を保存
               </Button>
             </div>
-            <p className="mt-2 text-[11px] text-amber-600">
+            <p className={cn("mt-2 text-[11px]", WARNING_TEXT)}>
               ※ 回答を修正すると、フロー図の再生成が必要になる場合があります
             </p>
           </div>

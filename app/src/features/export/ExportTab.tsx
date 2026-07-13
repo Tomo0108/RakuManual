@@ -3,6 +3,7 @@ import { Check, Download, FileText, Presentation } from "lucide-react"
 import type { Project } from "@/lib/types"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
+import { SUCCESS_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -195,13 +196,13 @@ export function ExportTab({ project }: Props) {
             <span className="text-xs text-muted-foreground">マニュアルを生成すると出力できます</span>
           )}
           {exported && format === "pptx" && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
+            <span className={cn("flex items-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
               {targetSections.length} スライドの {project.name}.pptx をダウンロードしました
             </span>
           )}
           {exported && format === "pdf" && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
+            <span className={cn("flex items-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
               {project.name}.pdf を出力しました(デモのためダウンロードは行われません)
             </span>
