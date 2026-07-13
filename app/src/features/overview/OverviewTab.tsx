@@ -75,31 +75,31 @@ export function OverviewTab({ project, setTab }: Props) {
 
   return (
     <div className="scroll-touch h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
-        <p className="text-sm text-muted-foreground">{project.description}</p>
+      <div className="mx-auto max-w-4xl px-4 py-5 md:px-8 md:py-8">
+        <p className="text-sm leading-relaxed text-muted-foreground">{project.description}</p>
         {project.reviewDeadline && (
-          <div className="mt-3 flex items-center gap-2 text-sm">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm">
             <CalendarClock className="size-4 text-muted-foreground" />
             <span className="text-muted-foreground">見直し期限:</span>
             <Badge variant="secondary">{project.reviewDeadline}</Badge>
           </div>
         )}
 
-        <div className="mt-6 sm:hidden">
+        <div className="mt-5 sm:hidden">
           <PipelineStepper project={project} activeTab="overview" onSelect={setTab} compact />
         </div>
 
-        <div className="mt-6 grid gap-3">
+        <div className="mt-5 grid gap-2.5 sm:mt-6 sm:gap-3">
           {steps.map((s) => (
             <Card
               key={s.tab}
               className={cn(
-                "cursor-pointer py-4 transition-colors hover:border-primary/40",
+                "cursor-pointer gap-0 py-0 transition-colors hover:border-primary/40",
                 s.done && "bg-muted/40",
               )}
               onClick={() => setTab(s.tab)}
             >
-              <CardContent className="flex items-center gap-4">
+              <CardContent className="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-6 sm:py-4">
                 <div
                   className={cn(
                     "flex size-9 shrink-0 items-center justify-center rounded-lg",
@@ -109,10 +109,19 @@ export function OverviewTab({ project, setTab }: Props) {
                   <s.icon className="size-4.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">{s.title}</div>
-                  <div className="text-xs text-muted-foreground">{s.stat}</div>
+                  <div className="text-sm font-semibold leading-snug">{s.title}</div>
+                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
                 </div>
-                <Button variant="ghost" size="sm" className="gap-1 text-primary">
+                <div className="flex shrink-0 items-center gap-1 text-primary sm:hidden" aria-hidden>
+                  <ArrowRight className="size-4" />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden gap-1 text-primary sm:inline-flex"
+                  tabIndex={-1}
+                  aria-hidden
+                >
                   {s.done ? (
                     <>
                       <Eye className="size-3.5" />
@@ -131,14 +140,14 @@ export function OverviewTab({ project, setTab }: Props) {
         </div>
 
         {/* 更新履歴 (F-6) */}
-        <Card className="mt-8">
-          <CardHeader>
+        <Card className="mt-6 sm:mt-8">
+          <CardHeader className="px-4 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-sm">
               <History className="size-4 text-muted-foreground" />
               更新履歴
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             {project.history.length === 0 ? (
               <p className="text-sm text-muted-foreground">まだ履歴がありません</p>
             ) : (

@@ -29,19 +29,34 @@ interface Props {
 
 export function PipelineStepper({ project, activeTab, onSelect, compact }: Props) {
   return (
-    <nav aria-label="作成パイプライン" className="w-full">
-      <ol className="flex items-center">
+    <nav
+      aria-label="作成パイプライン"
+      className={cn(
+        "w-full",
+        compact && "scrollbar-none scroll-touch -mx-1 overflow-x-auto px-1",
+      )}
+    >
+      <ol
+        className={cn(
+          "flex items-center",
+          compact ? "mx-auto w-max min-w-full justify-between gap-1" : "w-full",
+        )}
+      >
         {STEPS.map((step, i) => {
           const state = stepState(project, step.status)
           const isActive = activeTab === step.tab
           const Icon = step.icon
           const prevDone = i > 0 && stepState(project, STEPS[i - 1].status) === "done"
           return (
-            <li key={step.tab} className="flex min-w-0 flex-1 items-center">
+            <li
+              key={step.tab}
+              className={cn("flex items-center", compact ? "shrink-0" : "min-w-0 flex-1")}
+            >
               {i > 0 && (
                 <div
                   className={cn(
-                    "mx-0.5 h-0.5 min-w-2 flex-1 rounded-full md:mx-1",
+                    "h-0.5 rounded-full",
+                    compact ? "mx-0.5 w-2 shrink-0 sm:mx-1 sm:w-3" : "mx-0.5 min-w-2 flex-1 rounded-full md:mx-1",
                     prevDone || state === "done" || state === "current" ? "bg-primary/45" : "bg-border",
                   )}
                   aria-hidden
@@ -51,11 +66,13 @@ export function PipelineStepper({ project, activeTab, onSelect, compact }: Props
                 type="button"
                 onClick={() => onSelect(step.tab)}
                 className={cn(
-                  "group flex min-w-0 flex-col items-center gap-1.5 rounded-lg px-1 py-2 transition-colors",
+                  "group flex flex-col items-center gap-1 rounded-lg transition-colors",
+                  compact ? "min-w-[2.875rem] px-0 py-1.5 sm:min-w-[3.25rem]" : "min-w-0 px-1 py-2",
                   "hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isActive && "bg-primary-subtle",
                 )}
                 aria-current={isActive ? "step" : undefined}
+                aria-label={step.label}
               >
                 <span
                   className={cn(
@@ -74,7 +91,8 @@ export function PipelineStepper({ project, activeTab, onSelect, compact }: Props
                 </span>
                 <span
                   className={cn(
-                    "w-full truncate text-center text-[10px] font-medium leading-tight md:text-[11px]",
+                    "text-center text-[10px] font-medium leading-tight md:text-[11px]",
+                    compact ? "max-w-[4.25rem] whitespace-normal" : "w-full truncate",
                     isActive ? "text-primary" : state === "upcoming" ? "text-muted-foreground" : "text-foreground",
                   )}
                 >
