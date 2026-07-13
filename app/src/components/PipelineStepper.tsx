@@ -92,7 +92,7 @@ export function PipelineStepper({ project, activeTab, onSelect, compact }: Props
                 <span
                   className={cn(
                     "text-center text-[10px] font-medium leading-tight md:text-[11px]",
-                    compact ? "max-w-[4.25rem] whitespace-normal" : "w-full truncate",
+                    compact ? "max-w-[4.25rem] whitespace-normal" : "whitespace-nowrap",
                     isActive ? "text-primary" : state === "upcoming" ? "text-muted-foreground" : "text-foreground",
                   )}
                 >
