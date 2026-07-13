@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, ExternalLink, Pencil } from "lucide-react"
+import { Check, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react"
 import {
   COL_WIDTH,
   FLOW_ORIGIN_X,
@@ -21,7 +21,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export interface FlowViewport {
   x: number
@@ -35,13 +43,53 @@ export function TeamAxisPanel({
   nodes,
   viewport,
   activeLane,
+  editable = false,
+  onRenameLane,
+  onAddLane,
+  onDeleteLane,
 }: {
   lanes: string[]
   nodes: FlowNode[]
   viewport: FlowViewport
   activeLane?: string
+  editable?: boolean
+  onRenameLane?: (index: number, name: string) => void
+  onAddLane?: (name: string) => void
+  onDeleteLane?: (index: number, moveToLane?: string) => void
 }) {
   const rowMetrics = computeLaneRowMetrics(nodes, lanes)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [draft, setDraft] = useState("")
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
+  const [moveTo, setMoveTo] = useState("")
+
+  const startRename = (index: number, current: string) => {
+    if (!editable) return
+    setEditingIndex(index)
+    setDraft(current)
+  }
+
+  const commitRename = () => {
+    if (editingIndex === null) return
+    const name = draft.trim()
+    if (name && name !== lanes[editingIndex]) onRenameLane?.(editingIndex, name)
+    setEditingIndex(null)
+  }
+
+  const openDelete = (index: number) => {
+    const others = lanes.filter((_, i) => i !== index)
+    setMoveTo(others[0] ?? "")
+    setDeleteIndex(index)
+  }
+
+  const confirmDelete = () => {
+    if (deleteIndex === null) return
+    const count = nodes.filter((n) => n.data.lane === lanes[deleteIndex]).length
+    onDeleteLane?.(deleteIndex, count > 0 ? moveTo || undefined : undefined)
+    setDeleteIndex(null)
+  }
+
+  const nodeCountInLane = (lane: string) => nodes.filter((n) => n.data.lane === lane).length
 
   return (
     <aside
@@ -55,10 +103,11 @@ export function TeamAxisPanel({
           const screen = flowToScreen(0, metric.top, viewport)
           const rowH = metric.height * viewport.zoom
           const isActive = activeLane === lane
+          const isEditing = editingIndex === i
           return (
             <div
               key={`${lane}-${i}`}
-              className="absolute left-0 flex w-full items-center justify-center border-b px-1 text-center text-[11px] font-semibold leading-tight transition-colors"
+              className="group/lane absolute left-0 flex w-full items-center justify-center border-b px-1 text-center text-[11px] font-semibold leading-tight transition-colors"
               style={{
                 top: screen.y,
                 height: rowH,
@@ -70,12 +119,127 @@ export function TeamAxisPanel({
                 opacity: isActive ? 1 : i % 2 === 0 ? 0.45 : 0.25,
                 boxShadow: isActive ? "inset 3px 0 0 var(--primary)" : undefined,
               }}
+              onDoubleClick={() => startRename(i, lane)}
             >
-              <span className={`line-clamp-4 px-0.5 ${isActive ? "text-primary" : ""}`}>{lane}</span>
+              {isEditing ? (
+                <Input
+                  value={draft}
+                  autoFocus
+                  className="h-7 px-1 text-[11px]"
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename()
+                    if (e.key === "Escape") setEditingIndex(null)
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <div className="flex w-full flex-col items-center gap-0.5 px-0.5">
+                  <span className={`line-clamp-3 ${isActive ? "text-primary" : ""}`}>{lane}</span>
+                  {editable && (
+                    <div className="flex gap-0.5 opacity-0 transition-opacity group-hover/lane:opacity-100">
+                      <button
+                        type="button"
+                        className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                        aria-label={`${lane}を改名`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          startRename(i, lane)
+                        }}
+                      >
+                        <Pencil className="size-2.5" />
+                      </button>
+                      {lanes.length > 1 && (
+                        <button
+                          type="button"
+                          className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive"
+                          aria-label={`${lane}を削除`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openDelete(i)
+                          }}
+                        >
+                          <Trash2 className="size-2.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+      {editable && (
+        <div className="shrink-0 border-t p-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-full gap-1 px-1 text-[10px]"
+            onClick={() => {
+              let n = 1
+              let name = `担当チーム${n}`
+              while (lanes.includes(name)) {
+                n += 1
+                name = `担当チーム${n}`
+              }
+              onAddLane?.(name)
+            }}
+          >
+            <Plus className="size-3" />
+            レーン追加
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={deleteIndex !== null} onOpenChange={(open) => !open && setDeleteIndex(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>レーンを削除</DialogTitle>
+            <DialogDescription>
+              {deleteIndex !== null && nodeCountInLane(lanes[deleteIndex]) > 0
+                ? `「${lanes[deleteIndex]}」には ${nodeCountInLane(lanes[deleteIndex])} 件のステップがあります。移動先レーンを選んでください。`
+                : deleteIndex !== null
+                  ? `「${lanes[deleteIndex]}」を削除します。`
+                  : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteIndex !== null && nodeCountInLane(lanes[deleteIndex]) > 0 && (
+            <Select value={moveTo} onValueChange={setMoveTo}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="移動先レーン" />
+              </SelectTrigger>
+              <SelectContent>
+                {lanes
+                  .filter((_, i) => i !== deleteIndex)
+                  .map((lane) => (
+                    <SelectItem key={lane} value={lane}>
+                      {lane}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteIndex(null)}>
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={
+                deleteIndex !== null &&
+                nodeCountInLane(lanes[deleteIndex]) > 0 &&
+                !moveTo
+              }
+            >
+              削除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   )
 }

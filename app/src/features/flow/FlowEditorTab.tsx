@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react"
 import {
   AlignCenterVertical,
+  AlertTriangle,
   ArrowLeft,
   Check,
   ChevronUp,
@@ -92,6 +93,13 @@ import {
   type ConnectorInsertTarget,
 } from "./flow-interaction-context"
 import { connectorById, type FlowConnector } from "./flow-connectors"
+import { FlowInspectorPanel, type StepPatch } from "./FlowInspectorPanel"
+import { FlowErrorsPanel } from "./FlowErrorsPanel"
+import {
+  applyValidationMarks,
+  validateFlow,
+  type FlowIssue,
+} from "./flow-validation"
 
 const nodeTypes = { step: StepNode }
 const edgeTypes = { flowAdd: FlowAddEdge }
@@ -139,6 +147,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [canvasWidth, setCanvasWidth] = useState(0)
   const [canvasHeight, setCanvasHeight] = useState(0)
   const [rfReady, setRfReady] = useState(false)
+  const [errorsPanelOpen, setErrorsPanelOpen] = useState(true)
+  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [confirmBlockedOpen, setConfirmBlockedOpen] = useState(false)
 
   const zoomBy = useCallback((factor: number) => {
     const inst = rfRef.current
@@ -166,6 +177,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const previewFlow = useMemo(
     () => (proposal ? polishFlow(proposal.preview(flow)) : flow),
     [proposal, flow],
+  )
+
+  const validation = useMemo(() => validateFlow(previewFlow), [previewFlow])
+
+  const displayFlow = useMemo(
+    () => applyValidationMarks(previewFlow, validation),
+    [previewFlow, validation],
   )
 
   /** 選択状態の変化では再計算しない(タップ時の fitView 再発火を防ぐ) */
@@ -373,6 +391,140 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const selectedNodes = flow.nodes.filter((n) => n.selected)
   const selectedEdges = flow.edges.filter((e) => e.selected)
   const activeLane = selectedNodes.length === 1 ? selectedNodes[0].data.lane : undefined
+  const inspectorNode =
+    inspectorOpen && selectedNodes.length === 1 && selectedEdges.length === 0
+      ? selectedNodes[0]
+      : null
+  const inspectorEdge =
+    inspectorOpen && selectedEdges.length === 1 && selectedNodes.length === 0
+      ? selectedEdges[0]
+      : null
+
+  const focusIssue = useCallback(
+    (issue: FlowIssue) => {
+      const inst = rfRef.current
+      if (!inst) return
+      if (issue.nodeId) {
+        const node = flow.nodes.find((n) => n.id === issue.nodeId)
+        if (!node) return
+        setFlow((prev) => ({
+          ...prev,
+          nodes: prev.nodes.map((n) => ({ ...n, selected: n.id === issue.nodeId })),
+          edges: prev.edges.map((e) => ({ ...e, selected: false })),
+        }))
+        const dims = dimForKind(
+          node.data.kind === "start" || node.data.kind === "end" || node.data.kind === "decision"
+            ? node.data.kind
+            : "process",
+        )
+        void inst.setCenter(
+          node.position.x + dims.w / 2,
+          node.position.y + dims.h / 2,
+          { zoom: Math.max(inst.getZoom(), 0.9), duration: 300 },
+        )
+        setInspectorOpen(true)
+        return
+      }
+      if (issue.edgeId) {
+        setFlow((prev) => ({
+          ...prev,
+          nodes: prev.nodes.map((n) => ({ ...n, selected: false })),
+          edges: prev.edges.map((e) => ({ ...e, selected: e.id === issue.edgeId })),
+        }))
+        setInspectorOpen(true)
+      }
+    },
+    [flow.nodes],
+  )
+
+  const updateSelectedNode = useCallback(
+    (id: string, patch: StepPatch) => {
+      commit((s) => {
+        let nodes = s.nodes.map((n) => {
+          if (n.id !== id) return n
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              ...patch,
+              manual: true,
+            },
+          }
+        })
+        if (patch.lane || patch.kind) {
+          nodes = restackLaneColumnNodes(nodes, s.lanes)
+        }
+        return polishFlow({ ...s, nodes })
+      })
+    },
+    [commit],
+  )
+
+  const updateEdgeLabel = useCallback(
+    (id: string, label: string) => {
+      commit((s) =>
+        polishFlow({
+          ...s,
+          edges: s.edges.map((e) =>
+            e.id === id ? { ...e, label: label.trim() || undefined } : e,
+          ),
+        }),
+      )
+    },
+    [commit],
+  )
+
+  const renameLane = useCallback(
+    (index: number, name: string) => {
+      commit((s) => {
+        if (s.lanes[index] === name || s.lanes.includes(name)) return s
+        const old = s.lanes[index]
+        const lanes = s.lanes.map((l, i) => (i === index ? name : l))
+        const nodes = s.nodes.map((n) =>
+          n.data.lane === old ? { ...n, data: { ...n.data, lane: name, manual: true } } : n,
+        )
+        return polishFlow({ ...s, lanes, nodes: restackLaneColumnNodes(nodes, lanes) })
+      })
+    },
+    [commit],
+  )
+
+  const addLane = useCallback(
+    (name: string) => {
+      commit((s) => {
+        if (s.lanes.includes(name)) return s
+        return polishFlow({ ...s, lanes: [...s.lanes, name] })
+      })
+    },
+    [commit],
+  )
+
+  const deleteLane = useCallback(
+    (index: number, moveToLane?: string) => {
+      commit((s) => {
+        if (s.lanes.length <= 1) return s
+        const removed = s.lanes[index]
+        const lanes = s.lanes.filter((_, i) => i !== index)
+        const fallback = moveToLane && lanes.includes(moveToLane) ? moveToLane : lanes[0]
+        const nodes = s.nodes.map((n) =>
+          n.data.lane === removed
+            ? { ...n, data: { ...n.data, lane: fallback, manual: true } }
+            : n,
+        )
+        return polishFlow({ ...s, lanes, nodes: restackLaneColumnNodes(nodes, lanes) })
+      })
+      fitCanvas()
+    },
+    [commit, fitCanvas],
+  )
+
+  const clearSelection = useCallback(() => {
+    setFlow((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) => ({ ...n, selected: false })),
+      edges: prev.edges.map((e) => ({ ...e, selected: false })),
+    }))
+  }, [])
 
   const handleInsertConnector = useCallback(
     (connector: FlowConnector, target: ConnectorInsertTarget) => {
@@ -699,7 +851,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     fitCanvas()
   }
 
+  const requestConfirmFlow = () => {
+    if (validation.errorCount > 0) {
+      setConfirmBlockedOpen(true)
+      setErrorsPanelOpen(true)
+      return
+    }
+    confirmFlow()
+  }
+
   const confirmFlow = () => {
+    setConfirmBlockedOpen(false)
     const finalized = polishFlow(flow)
     setFlow(finalized)
     persist(finalized)
@@ -824,6 +986,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         >
           <Trash2 className="size-4" />
         </ToolButton>
+        {(selectedNodes.length > 0 || selectedEdges.length > 0) && (
+          <span className="hidden px-1 text-[10px] text-muted-foreground sm:inline">
+            {selectedNodes.length > 0 && `${selectedNodes.length}ノード`}
+            {selectedNodes.length > 0 && selectedEdges.length > 0 && " / "}
+            {selectedEdges.length > 0 && `${selectedEdges.length}結線`}
+          </span>
+        )}
         <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0}>
           <Undo2 className="size-4" />
         </ToolButton>
@@ -858,6 +1027,24 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
+          {validation.issues.length > 0 && (
+            <ToolButton
+              label={`問題 ${validation.errorCount}件のエラー / ${validation.warningCount}件の警告`}
+              onClick={() => setErrorsPanelOpen((v) => !v)}
+            >
+              <span className="relative">
+                <AlertTriangle
+                  className={cn(
+                    "size-4",
+                    validation.errorCount > 0 ? "text-destructive" : "text-amber-600",
+                  )}
+                />
+                <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-white">
+                  {validation.issues.length}
+                </span>
+              </span>
+            </ToolButton>
+          )}
           <FlowHelpButton isMobile={isMobile} isLocked={isLocked} />
           <ToolButton
             label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
@@ -868,7 +1055,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           </ToolButton>
           <ToolButton
             label={isMobile ? "確定" : "フロー図を確定して深掘りへ"}
-            onClick={confirmFlow}
+            onClick={requestConfirmFlow}
             variant="default"
           >
             <ListChecks className="size-4" />
@@ -891,7 +1078,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1">
               {!isMobile && (
-                <TeamAxisPanel lanes={flow.lanes} nodes={previewFlow.nodes} viewport={viewport} activeLane={activeLane} />
+                <TeamAxisPanel
+                  lanes={flow.lanes}
+                  nodes={previewFlow.nodes}
+                  viewport={viewport}
+                  activeLane={activeLane}
+                  editable={!isEditingDisabled}
+                  onRenameLane={renameLane}
+                  onAddLane={addLane}
+                  onDeleteLane={deleteLane}
+                />
               )}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {!isMobile && <FlowCanvasHeader />}
@@ -917,8 +1113,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 </div>
                 <ReactFlow
                   className="z-[1] h-full"
-                  nodes={previewFlow.nodes}
-                  edges={previewFlow.edges}
+                  nodes={displayFlow.nodes}
+                  edges={displayFlow.edges}
                   onInit={(inst) => {
                     rfRef.current = inst
                     setRfReady(true)
@@ -933,6 +1129,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   onConnect={isEditingDisabled ? undefined : onConnect}
                   onDragOver={onDragOver}
                   onDrop={onDrop}
+                  onPaneClick={() => {
+                    if (!proposal) setInspectorOpen(true)
+                  }}
                   onPaneContextMenu={(e) => {
                     e.preventDefault()
                     if (isEditingDisabled) return
@@ -956,11 +1155,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                       targetId: edge.target,
                     })
                   }}
+                  onNodeClick={() => setInspectorOpen(true)}
+                  onEdgeClick={() => setInspectorOpen(true)}
                   nodeTypes={nodeTypes}
                   edgeTypes={edgeTypes}
                   nodesDraggable={!isEditingDisabled}
                   nodesConnectable={!isEditingDisabled}
                   elementsSelectable={!proposal}
+                  selectionOnDrag={false}
+                  panOnDrag
+                  multiSelectionKeyCode="Shift"
+                  selectionKeyCode="Shift"
                   translateExtent={translateExtent}
                   minZoom={0.12}
                   maxZoom={2.5}
@@ -1039,6 +1244,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 </div>
               </ReactFlowProvider>
 
+              {errorsPanelOpen && validation.issues.length > 0 && (
+                <div className="absolute top-12 left-3 z-30">
+                  <FlowErrorsPanel
+                    issues={validation.issues}
+                    onFocusIssue={focusIssue}
+                    onClose={() => setErrorsPanelOpen(false)}
+                  />
+                </div>
+              )}
+
               {proposal && (
                 <div className="absolute inset-x-0 top-12 z-20 flex justify-center px-4">
                   <Alert className="max-w-xl border-primary/40 bg-background shadow-lg">
@@ -1085,6 +1300,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               />
             )}
           </div>
+        {!isMobile && (inspectorNode || inspectorEdge) && (
+          <FlowInspectorPanel
+            node={inspectorNode}
+            edge={inspectorEdge}
+            lanes={flow.lanes}
+            locked={isEditingDisabled}
+            onUpdateNode={updateSelectedNode}
+            onUpdateEdgeLabel={updateEdgeLabel}
+            onClose={clearSelection}
+          />
+        )}
         </div>
       </div>
 
@@ -1158,6 +1384,60 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 検証エラーがある場合の確定ブロック */}
+      <Dialog open={confirmBlockedOpen} onOpenChange={setConfirmBlockedOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>フロー図に問題があります</DialogTitle>
+            <DialogDescription>
+              エラーが {validation.errorCount} 件あるため確定できません。問題パネルから該当箇所を確認して修正してください。
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-destructive">
+            {validation.issues
+              .filter((i) => i.severity === "error")
+              .slice(0, 8)
+              .map((i) => (
+                <li key={i.id}>・{i.message}</li>
+              ))}
+          </ul>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmBlockedOpen(false)
+                setErrorsPanelOpen(true)
+              }}
+            >
+              問題を確認する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* モバイル: ステップ／結線インスペクタ */}
+      {isMobile && (
+        <Dialog
+          open={!!(inspectorNode || inspectorEdge)}
+          onOpenChange={(open) => {
+            if (!open) clearSelection()
+          }}
+        >
+          <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+            <FlowInspectorPanel
+              node={inspectorNode}
+              edge={inspectorEdge}
+              lanes={flow.lanes}
+              locked={isEditingDisabled}
+              onUpdateNode={updateSelectedNode}
+              onUpdateEdgeLabel={updateEdgeLabel}
+              onClose={clearSelection}
+              className="w-full border-0"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* 自然言語修正の入力(F-3) */}
       {isMobile ? (

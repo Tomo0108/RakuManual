@@ -116,6 +116,12 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
           ? "!border-amber-400 !bg-amber-50 border-dashed"
           : ""
 
+  const validationClass = data.validationError
+    ? "!border-destructive ring-2 ring-destructive/30"
+    : data.validationWarning
+      ? "!border-amber-500 ring-2 ring-amber-400/30"
+      : ""
+
   const addAfterButton =
     !ctx.locked && kind !== "end" ? (
       <button
@@ -186,6 +192,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
             "flex flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-50 px-2 py-1.5 shadow-sm",
             selected && "ring-2 ring-primary ring-offset-1",
             diffClass,
+            validationClass,
           )}
           style={{ minHeight: dims.h }}
         >
@@ -205,6 +212,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
             "flex flex-col items-center justify-center rounded-full border-2 border-rose-400 bg-rose-50 px-2 py-1.5 shadow-sm",
             selected && "ring-2 ring-primary ring-offset-1",
             diffClass,
+            validationClass,
           )}
           style={{ minHeight: dims.h }}
         >
@@ -257,6 +265,8 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
               diffClass.includes("emerald") && "fill-emerald-50 stroke-emerald-400",
               diffClass.includes("red") && "fill-red-50 stroke-red-300",
               diffClass.includes("amber") && "fill-amber-50 stroke-amber-400",
+              data.validationError && "stroke-destructive",
+              data.validationWarning && "stroke-amber-500",
             )}
             strokeWidth={2}
             vectorEffect="non-scaling-stroke"
@@ -282,6 +292,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
           "rounded-md border-2 border-slate-300 bg-card px-2.5 py-1.5 shadow-sm",
           selected && "border-primary shadow-md ring-2 ring-primary/20",
           diffClass,
+          validationClass,
         )}
         style={{ minHeight: dims.h }}
       >
