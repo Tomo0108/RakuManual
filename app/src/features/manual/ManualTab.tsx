@@ -25,6 +25,7 @@ import {
   resolveSectionNumber,
 } from "@/lib/manual-outline"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
+import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE, SEMANTIC } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,9 +35,9 @@ import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const SECTION_STYLE = {
-  draft: "bg-muted text-muted-foreground border-transparent",
-  review: "bg-sky-50 text-sky-700 border-sky-200",
-  approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  draft: REVIEW_STATUS.draft,
+  review: REVIEW_STATUS.review,
+  approved: REVIEW_STATUS.approved,
 } as const
 
 function resolveMajorTitle(project: Project): string {
@@ -155,7 +156,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             フロー図のセクションごとにマニュアルを生成します。AIが推測で補った箇所には「要確認」マークが付き、あなたの承認なしに確定されることはありません。
           </p>
           {!ready && (
-            <p className="mt-3 text-xs text-amber-600">
+            <p className={cn("mt-3 text-xs", WARNING_TEXT)}>
               深掘りヒアリングが未回答のため、生成してもプレースホルダが多くなります
             </p>
           )}
@@ -397,7 +398,7 @@ function TocItem({
         {SECTION_LABEL[section.status]}
       </Badge>
       {confirms > 0 && (
-        <AlertTriangle className="size-3 shrink-0 text-amber-600" />
+        <AlertTriangle className={cn("size-3 shrink-0", WARNING_TEXT)} />
       )}
     </button>
   )
@@ -545,7 +546,7 @@ function SectionEditor({
         </div>
 
         {confirms > 0 && (
-          <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-800 md:px-4 md:text-[13px]">
+          <div className={cn("mt-4 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、すべて解消すると承認できます。
           </div>
@@ -600,7 +601,7 @@ function SectionEditor({
         <div className="shrink-0 border-t bg-card/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
           <div className="flex gap-2">{actionButtons}</div>
           {confirms > 0 && (
-            <p className="mt-2 text-center text-[10px] text-amber-700">
+            <p className={cn("mt-2 text-center text-[10px]", WARNING_TEXT)}>
               要確認をすべて解消すると承認できます
             </p>
           )}
@@ -684,7 +685,7 @@ function BlockView({
     <div
       className={cn(
         "group relative rounded-lg px-3 py-2 transition-colors",
-        block.needsConfirm && "bg-amber-50/70 ring-1 ring-amber-200",
+        block.needsConfirm && WARNING_SUBTLE,
         !block.needsConfirm && "hover:bg-muted/40",
       )}
     >
@@ -711,13 +712,13 @@ function BlockView({
               </span>
             )}
             {block.type === "note" && (
-              <StickyNote className="mt-1 size-4 shrink-0 text-amber-500" />
+              <StickyNote className={cn("mt-1 size-4 shrink-0", WARNING_TEXT)} />
             )}
             <div className="min-w-0 flex-1">
               <p
                 className={cn(
                   "text-sm leading-relaxed",
-                  block.type === "note" && "text-[13px] text-amber-800",
+                  block.type === "note" && cn("text-[13px]", WARNING_TEXT),
                 )}
               >
                 {block.text}
@@ -726,7 +727,7 @@ function BlockView({
               {/* 要確認マーク(F-5: ハルシネーション対策) */}
               {block.needsConfirm && (
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                  <Badge variant="outline" className="h-auto w-fit gap-1 border-amber-300 bg-amber-100/60 px-2 py-1 text-[10px] leading-snug text-amber-700">
+                  <Badge variant="outline" className={cn("h-auto w-fit gap-1 px-2 py-1 text-[10px] leading-snug", SEMANTIC.warning)}>
                     <AlertTriangle className="size-2.5 shrink-0" />
                     要確認: AIが推測で補完した内容です
                   </Badge>
@@ -734,7 +735,7 @@ function BlockView({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-9 gap-1 border-amber-300 bg-white px-3 text-[11px]"
+                      className="h-9 gap-1 bg-background px-3 text-[11px]"
                       onClick={onResolveConfirm}
                     >
                       <Check className="size-3.5" />

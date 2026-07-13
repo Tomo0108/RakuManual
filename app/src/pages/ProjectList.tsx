@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CalendarClock, Plus, Search, User } from "lucide-react"
+import { CalendarClock, FolderOpen, Plus, Search, User } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
 import { STATUS_LABEL } from "@/lib/types"
 import { STATUS_BADGE, STATUS_TAB, projectProgress, uid, today } from "@/lib/project-utils"
@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { PageHeader } from "@/components/ui/page-header"
+import { EmptyState } from "@/components/EmptyState"
 import {
   Card,
   CardContent,
@@ -69,59 +71,57 @@ export function ProjectList({ projects, onOpen, onCreate }: Props) {
   return (
     <div className="scroll-touch h-full overflow-y-auto">
       <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight md:text-2xl">プロジェクト一覧</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              マニュアル1本 = 1プロジェクト。AIとの対話でマニュアルを作成できます。
-            </p>
-          </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full gap-1.5 sm:w-auto">
-                <Plus className="size-4" />
-                新規プロジェクト
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>新規プロジェクトの作成</DialogTitle>
-                <DialogDescription>
-                  作成後、すぐにAIヒアリングが始まります。業務名だけ決めれば OK です。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col gap-4 py-2">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="new-name">マニュアル名(業務名)</Label>
-                  <Input
-                    id="new-name"
-                    placeholder="例: 出張旅費の精算業務"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="new-desc">説明(任意)</Label>
-                  <Textarea
-                    id="new-desc"
-                    placeholder="どんな業務のマニュアルか、ひとことで"
-                    value={newDesc}
-                    onChange={(e) => setNewDesc(e.target.value)}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  キャンセル
+        <PageHeader
+          title="プロジェクト一覧"
+          description="マニュアル1本 = 1プロジェクト。AIとの対話でマニュアルを作成できます。"
+          actions={
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full gap-1.5 sm:w-auto">
+                  <Plus className="size-4" />
+                  新規プロジェクト
                 </Button>
-                <Button onClick={handleCreate} disabled={!newName.trim()}>
-                  作成してヒアリング開始
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>新規プロジェクトの作成</DialogTitle>
+                  <DialogDescription>
+                    作成後、すぐにAIヒアリングが始まります。業務名だけ決めれば OK です。
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 py-2">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="new-name">マニュアル名(業務名)</Label>
+                    <Input
+                      id="new-name"
+                      placeholder="例: 出張旅費の精算業務"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="new-desc">説明(任意)</Label>
+                    <Textarea
+                      id="new-desc"
+                      placeholder="どんな業務のマニュアルか、ひとことで"
+                      value={newDesc}
+                      onChange={(e) => setNewDesc(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                    キャンセル
+                  </Button>
+                  <Button onClick={handleCreate} disabled={!newName.trim()}>
+                    作成してヒアリング開始
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          }
+        />
 
         <div className="relative mt-6">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -152,21 +152,27 @@ export function ProjectList({ projects, onOpen, onCreate }: Props) {
                 <CardDescription className="line-clamp-2">{p.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Progress value={projectProgress(p)} className="h-1.5" />
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>進捗</span>
+                  <span className="font-medium tabular-nums text-foreground">{projectProgress(p)}%</span>
+                </div>
+                <Progress value={projectProgress(p)} className="mt-1.5 h-2" />
               </CardContent>
-              <CardFooter className="justify-between text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <User className="size-3.5" />
-                  {p.owner}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CalendarClock className="size-3.5" />
-                  更新 {p.updatedAt}
-                </span>
+              <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <User className="size-3.5" />
+                    {p.owner}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <CalendarClock className="size-3.5" />
+                    更新 {p.updatedAt}
+                  </span>
+                </div>
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-7 text-primary"
+                  variant="secondary"
+                  className="h-8 w-full shrink-0 gap-1 sm:w-auto"
                   onClick={(e) => {
                     e.stopPropagation()
                     onOpen(p.id, STATUS_TAB[p.status])
@@ -178,9 +184,21 @@ export function ProjectList({ projects, onOpen, onCreate }: Props) {
             </Card>
           ))}
           {filtered.length === 0 && (
-            <div className="col-span-full py-16 text-center text-sm text-muted-foreground">
-              該当するプロジェクトがありません
-            </div>
+            <EmptyState
+              className="col-span-full"
+              icon={query ? Search : FolderOpen}
+              title={query ? "該当するプロジェクトがありません" : "プロジェクトがまだありません"}
+              description={
+                query
+                  ? "検索条件を変えるか、新規プロジェクトを作成してください。"
+                  : "最初のマニュアルを作成して、AIヒアリングを始めましょう。"
+              }
+              action={
+                !query
+                  ? { label: "新規プロジェクトを作成", onClick: () => setDialogOpen(true) }
+                  : undefined
+              }
+            />
           )}
         </div>
       </div>

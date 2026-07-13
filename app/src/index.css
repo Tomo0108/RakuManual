@@ -73,6 +73,20 @@
   --status-published-bg: oklch(0.955 0.04 155);
   --status-published-fg: oklch(0.4 0.1 155);
   --status-published-border: oklch(0.87 0.06 155);
+
+  /* セマンティック（成功・警告・情報・エラー）— アクセント色に依存しない */
+  --semantic-success-bg: oklch(0.955 0.04 155);
+  --semantic-success-fg: oklch(0.4 0.1 155);
+  --semantic-success-border: oklch(0.87 0.06 155);
+  --semantic-warning-bg: oklch(0.955 0.04 85);
+  --semantic-warning-fg: oklch(0.42 0.09 65);
+  --semantic-warning-border: oklch(0.87 0.06 80);
+  --semantic-info-bg: oklch(0.955 0.035 235);
+  --semantic-info-fg: oklch(0.4 0.1 240);
+  --semantic-info-border: oklch(0.87 0.05 235);
+  --semantic-danger-bg: oklch(0.955 0.04 25);
+  --semantic-danger-fg: oklch(0.45 0.14 25);
+  --semantic-danger-border: oklch(0.87 0.06 25);
 }
 
 [data-accent="blue"] {
@@ -232,4 +246,52 @@
   background: var(--status-published-bg);
   color: var(--status-published-fg);
   border-color: var(--status-published-border);
+}
+
+@utility semantic-success {
+  background: var(--semantic-success-bg);
+  color: var(--semantic-success-fg);
+  border-color: var(--semantic-success-border);
+}
+@utility semantic-warning {
+  background: var(--semantic-warning-bg);
+  color: var(--semantic-warning-fg);
+  border-color: var(--semantic-warning-border);
+}
+@utility semantic-info {
+  background: var(--semantic-info-bg);
+  color: var(--semantic-info-fg);
+  border-color: var(--semantic-info-border);
+}
+@utility semantic-danger {
+  background: var(--semantic-danger-bg);
+  color: var(--semantic-danger-fg);
+  border-color: var(--semantic-danger-border);
+}
+
+/* タブバー横スクロールのフェードヒント */
+@utility tab-scroll-fade {
+  position: relative;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1.25rem;
+    pointer-events: none;
+    z-index: 1;
+  }
+  &::before {
+    left: 0;
+    background: linear-gradient(to right, var(--secondary), transparent);
+    opacity: var(--scroll-fade-left, 0);
+    transition: opacity 0.15s;
+  }
+  &::after {
+    right: 0;
+    background: linear-gradient(to left, var(--secondary), transparent);
+    opacity: var(--scroll-fade-right, 1);
+    transition: opacity 0.15s;
+  }
 }

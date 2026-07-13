@@ -12,6 +12,7 @@ import { STATUS_BADGE } from "@/lib/project-utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { PageHeader } from "@/components/ui/page-header"
 import { DashboardHelpButton } from "@/components/DashboardHelpButton"
 import {
   Table,
@@ -40,24 +41,22 @@ export function DashboardPage({ projects }: Props) {
   return (
     <div className="scroll-touch h-full overflow-y-auto">
       <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-            <LayoutDashboard className="size-5 text-primary" />
-            KPIダッシュボード
-          </h1>
-          <DashboardHelpButton />
-        </div>
+        <PageHeader
+          title="KPIダッシュボード"
+          icon={<LayoutDashboard className="size-5" />}
+          actions={<DashboardHelpButton />}
+        />
 
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {KPIS.map((k) => (
-            <Card key={k.label} className="gap-0 py-4">
+            <Card key={k.label} className="gap-0 py-4 transition-shadow hover:shadow-md">
               <CardContent>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex size-5 shrink-0 items-center justify-center overflow-visible">
-                    <k.icon className="size-4 text-muted-foreground" aria-hidden />
+                  <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-subtle">
+                    <k.icon className="size-4 text-primary" aria-hidden />
                   </span>
                   {k.good && (
-                    <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="目標達成" />
+                    <span className="size-1.5 shrink-0 rounded-full bg-[var(--semantic-success-fg)]" aria-label="目標達成" />
                   )}
                 </div>
                 <p className="mt-2 text-xs leading-snug text-muted-foreground">{k.label}</p>
@@ -116,7 +115,7 @@ export function DashboardPage({ projects }: Props) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">プロジェクト一覧</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

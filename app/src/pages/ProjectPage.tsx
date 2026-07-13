@@ -5,6 +5,8 @@ import { STATUS_BADGE } from "@/lib/project-utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PipelineStepper } from "@/components/PipelineStepper"
+import { TabScrollContainer } from "@/components/TabScrollContainer"
 import { OverviewTab } from "@/features/overview/OverviewTab"
 import { HearingTab } from "@/features/hearing/HearingTab"
 import { FlowEditorTab } from "@/features/flow/FlowEditorTab"
@@ -49,18 +51,23 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
             {STATUS_LABEL[project.status]}
           </Badge>
         </div>
+        <div className="mt-3 hidden sm:block">
+          <PipelineStepper project={project} activeTab={tab} onSelect={setTab} />
+        </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ProjectTab)} className="mt-2 md:mt-3">
-          <TabsList className="scrollbar-none scroll-touch h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg bg-secondary/70 p-1 flex-nowrap">
-            {TAB_ITEMS.map((t) => (
-              <TabsTrigger
-                key={t.id}
-                value={t.id}
-                className="shrink-0 rounded-md px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-4 md:text-[13px]"
-              >
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <TabScrollContainer>
+            <TabsList className="h-auto w-max min-w-full justify-start gap-1 rounded-lg bg-secondary/70 p-1 flex-nowrap md:w-full">
+              {TAB_ITEMS.map((t) => (
+                <TabsTrigger
+                  key={t.id}
+                  value={t.id}
+                  className="shrink-0 rounded-md px-3 py-2 text-[12px] font-medium text-muted-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-4 md:text-[13px]"
+                >
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </TabScrollContainer>
         </Tabs>
       </header>
 

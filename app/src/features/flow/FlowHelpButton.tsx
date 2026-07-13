@@ -1,5 +1,7 @@
 import { useState } from "react"
 import { CircleHelp } from "lucide-react"
+import { WARNING_BOX } from "@/lib/semantic-styles"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -61,7 +63,7 @@ export function FlowHelpButton({ isMobile, isLocked }: Props) {
               </li>
             ))}
             {isLocked && (
-              <li className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+              <li className={cn("flex gap-2 px-2.5 py-2", WARNING_BOX)}>
                 <span>🔒</span>
                 <span>ロック中です。編集するにはツールバーのロックを解除してください。</span>
               </li>

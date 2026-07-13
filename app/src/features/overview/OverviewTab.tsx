@@ -9,6 +9,7 @@ import {
   Workflow,
 } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
+import { PipelineStepper } from "@/components/PipelineStepper"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -83,6 +84,10 @@ export function OverviewTab({ project, setTab }: Props) {
             <Badge variant="secondary">{project.reviewDeadline}</Badge>
           </div>
         )}
+
+        <div className="mt-6 sm:hidden">
+          <PipelineStepper project={project} activeTab="overview" onSelect={setTab} compact />
+        </div>
 
         <div className="mt-6 grid gap-3">
           {steps.map((s) => (
