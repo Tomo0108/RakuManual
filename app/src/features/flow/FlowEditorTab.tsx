@@ -1424,7 +1424,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             if (!open) clearSelection()
           }}
         >
-          <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md" showCloseButton={false}>
             <FlowInspectorPanel
               node={inspectorNode}
               edge={inspectorEdge}
