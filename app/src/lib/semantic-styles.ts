@@ -17,6 +17,11 @@ export const REVIEW_STATUS = {
   "in-progress": SEMANTIC.info,
   done: SEMANTIC.success,
   recheck: SEMANTIC.warning,
+  ok: SEMANTIC.success,
+  needs_review: SEMANTIC.warning,
+  intentional_difference: SEMANTIC.info,
+  orphaned: SEMANTIC.danger,
+  unplaced: SEMANTIC.warning,
 } as const
 
 /** 警告テキスト（本文内） */

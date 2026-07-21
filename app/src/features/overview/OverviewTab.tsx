@@ -9,6 +9,7 @@ import {
   Workflow,
 } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
+import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,6 +28,9 @@ export function OverviewTab({ project, setTab }: Props) {
     (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
     0,
   )
+  const syncReview =
+    countManualReviewNeeded(project.sections) +
+    buildUnplacedCandidates(project.flow, project.sections).length
 
   const steps: {
     tab: ProjectTab
@@ -66,9 +70,10 @@ export function OverviewTab({ project, setTab }: Props) {
       stat:
         project.sections.length > 0
           ? `${approved} / ${project.sections.length} セクション承認済み` +
-            (needsConfirm > 0 ? ` ・ 要確認 ${needsConfirm} 件` : "")
+            (needsConfirm > 0 ? ` ・ 要確認 ${needsConfirm} 件` : "") +
+            (syncReview > 0 ? ` ・ フロー見直し ${syncReview} 件` : "")
           : "未生成",
-      done: project.sections.length > 0 && approved === project.sections.length,
+      done: project.sections.length > 0 && approved === project.sections.length && syncReview === 0,
     },
   ]
 
