@@ -7,7 +7,7 @@ import {
   countManualReviewNeeded,
 } from "@/lib/manual-impact"
 import type { FlowState } from "@/lib/types"
-import { WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
+import { WARNING_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -54,7 +54,11 @@ export function ManualImpactBanner({
   const filterActive = filter !== "all"
 
   return (
-    <div className={cn("mb-4 px-3 py-3 md:px-4", WARNING_BOX)}>
+    <div
+      className="rounded-lg border border-border/80 bg-background/90 px-3 py-3 shadow-sm md:px-4"
+      role="region"
+      aria-label="フロー連携の操作"
+    >
       <div className={cn("flex gap-3", isMobile ? "flex-col" : "items-start justify-between")}>
         <div className="flex min-w-0 items-start gap-2">
           <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", WARNING_TEXT)} />
@@ -63,7 +67,7 @@ export function ManualImpactBanner({
               フロー変更の見直し候補が {displayTotal} 件あります
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              本文は保護されています。残したい箇所を選んでから反映できます。
+              マニュアル本文は保護されています。下の本文とは別の操作パネルです。
               {impact.addedStepIds.length > 0 && (
                 <> 未配置の新規ステップ: {impact.addedStepIds.length} 件。</>
               )}
@@ -103,7 +107,7 @@ export function ManualImpactBanner({
       </div>
 
       {(filtersOpen || filterActive) && (
-        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto border-t border-[var(--semantic-warning-border)]/40 pt-3 pb-0.5">
+        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto border-t border-border/60 pt-3 pb-0.5">
           {filters.map((f) => (
             <button
               key={f.id}
@@ -113,7 +117,7 @@ export function ManualImpactBanner({
                 "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
                 filter === f.id
                   ? "border-primary/50 bg-primary-subtle text-foreground"
-                  : "border-transparent bg-background/80 text-muted-foreground hover:bg-muted/50",
+                  : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted",
               )}
             >
               {f.label}

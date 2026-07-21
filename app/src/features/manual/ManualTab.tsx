@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import {
   AlertTriangle,
   BadgeCheck,
+  BookOpen,
   Check,
   ChevronDown,
   Image as ImageIcon,
@@ -12,6 +13,7 @@ import {
   Sparkles,
   StickyNote,
   Trash2,
+  Wrench,
   Workflow,
   X,
 } from "lucide-react"
@@ -223,6 +225,12 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   )
   const showOrphans = impactFilter === "all" || impactFilter === "orphaned"
   const showUnplaced = impactFilter === "all" || impactFilter === "unplaced"
+  const hasUnplacedTools = showUnplaced && unplacedCandidates.length > 0
+  const hasImpactSignal = sections.some((s) => {
+    const st = s.syncStatus ?? "ok"
+    return st === "needs_review" || st === "orphaned" || st === "unplaced"
+  }) || unplacedCandidates.length > 0
+  const showWorkspaceChrome = hasImpactSignal || hasUnplacedTools
 
   return (
     <div className="flex h-full">
@@ -235,116 +243,174 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           onNavigate={scrollToSection}
         />
       )}
-      <div ref={documentRef} className="scroll-touch min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-8 md:py-6">
-          {isMobile && (
-            <SectionTocBar
-              outline={outline}
-              activeSectionId={activeSectionId}
-              onNavigate={scrollToSection}
-            />
-          )}
-
-          <ManualImpactBanner
-            sections={sections}
-            flow={project.flow}
-            filter={impactFilter}
-            onFilterChange={setImpactFilter}
-            onOpenRegen={() => setRegenOpen(true)}
-            isMobile={isMobile}
-          />
-
-          {showUnplaced && unplacedCandidates.length > 0 && (
-            <div className="mb-6 rounded-xl border border-dashed border-[var(--semantic-warning-border)] bg-[color-mix(in_oklch,var(--semantic-warning-bg)_50%,transparent)] p-3 md:p-4">
-              <h3 className="text-sm font-semibold">未配置の新規ステップ</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                フローに追加されたステップです。目次の末尾に空セクションとして追加できます。
-              </p>
-              <ul className="mt-3 flex flex-col gap-2">
-                {unplacedCandidates.map((c) => (
-                  <li
-                    key={c.stepId}
-                    className={cn(
-                      "flex gap-2 rounded-lg border bg-card px-3 py-2",
-                      isMobile ? "flex-col" : "items-center justify-between",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {c.sectionNumber && (
-                          <span className="font-mono text-[10px] font-bold text-primary">
-                            {c.sectionNumber}
-                          </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* アプリ操作帯: マニュアル本文と視覚的に分離 */}
+        {showWorkspaceChrome && (
+          <div className="shrink-0 border-b border-border/80 bg-muted/35">
+            <div className="mx-auto w-full max-w-3xl px-4 py-3 md:px-8">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                <Wrench className="size-3" aria-hidden />
+                アプリ操作
+              </div>
+              <ManualImpactBanner
+                sections={sections}
+                flow={project.flow}
+                filter={impactFilter}
+                onFilterChange={setImpactFilter}
+                onOpenRegen={() => setRegenOpen(true)}
+                isMobile={isMobile}
+              />
+              {hasUnplacedTools && (
+                <div
+                  className={cn(
+                    "rounded-lg border border-dashed border-[var(--semantic-warning-border)] bg-background/80 p-3 md:p-4",
+                    "mt-3",
+                  )}
+                >
+                  <h3 className="text-sm font-semibold">未配置の新規ステップ</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    フローに追加されたステップです。目次の末尾に空セクションとして追加できます。
+                  </p>
+                  <ul className="mt-3 flex flex-col gap-2">
+                    {unplacedCandidates.map((c) => (
+                      <li
+                        key={c.stepId}
+                        className={cn(
+                          "flex gap-2 rounded-md border bg-card px-3 py-2",
+                          isMobile ? "flex-col" : "items-center justify-between",
                         )}
-                        <span className="text-sm font-medium">{c.label}</span>
-                        <SyncStatusBadge status="unplaced" />
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {c.sectionNumber && (
+                              <span className="font-mono text-[10px] font-bold text-primary">
+                                {c.sectionNumber}
+                              </span>
+                            )}
+                            <span className="text-sm font-medium">{c.label}</span>
+                            <SyncStatusBadge status="unplaced" />
+                          </div>
+                        </div>
+                        <Button
+                          size={isMobile ? "default" : "sm"}
+                          className={cn(isMobile && "h-10 w-full")}
+                          onClick={() => {
+                            updateProject(project.id, (p) => ({
+                              ...p,
+                              sections: placeUnplacedSection(
+                                p.sections,
+                                c,
+                                p.flow,
+                                p.sections[p.sections.length - 1]?.id ?? null,
+                              ),
+                              history: [
+                                {
+                                  id: `h-${Date.now()}`,
+                                  date: now(),
+                                  user: "山田 太郎",
+                                  action: `未配置ステップ「${c.label}」をマニュアルに追加`,
+                                },
+                                ...p.history,
+                              ],
+                            }))
+                          }}
+                        >
+                          末尾に追加
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* マニュアル本文の読み面 */}
+        <div ref={documentRef} className="scroll-touch min-h-0 flex-1 overflow-y-auto bg-background">
+          <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-8 md:py-6">
+            {isMobile && (
+              <SectionTocBar
+                outline={outline}
+                activeSectionId={activeSectionId}
+                onNavigate={scrollToSection}
+              />
+            )}
+
+            <div className="mb-5 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+              <BookOpen className="size-3" aria-hidden />
+              マニュアル本文
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-card px-4 py-5 shadow-sm md:px-7 md:py-7">
+              {outline.map((major) => (
+                <section key={major.key} className="mb-10 last:mb-0">
+                  <header className="mb-6 border-b pb-4">
+                    <div className="flex items-start gap-3">
+                      <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
+                        {major.number}
+                      </span>
+                      <div className="min-w-0">
+                        <h1 className="text-xl font-bold tracking-tight md:text-2xl">
+                          {major.title ?? majorTitle}
+                        </h1>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {sections.filter((s) => s.status === "approved").length} / {sections.length}{" "}
+                          セクション承認済み
+                        </p>
                       </div>
                     </div>
-                    <Button
-                      size={isMobile ? "default" : "sm"}
-                      className={cn(isMobile && "h-10 w-full")}
-                      onClick={() => {
-                        updateProject(project.id, (p) => ({
-                          ...p,
-                          sections: placeUnplacedSection(
-                            p.sections,
-                            c,
-                            p.flow,
-                            p.sections[p.sections.length - 1]?.id ?? null,
-                          ),
-                          history: [
-                            {
-                              id: `h-${Date.now()}`,
-                              date: now(),
-                              user: "山田 太郎",
-                              action: `未配置ステップ「${c.label}」をマニュアルに追加`,
-                            },
-                            ...p.history,
-                          ],
-                        }))
-                      }}
-                    >
-                      末尾に追加
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                  </header>
+                  {major.mediums.map((medium) => (
+                    <div key={medium.key} className="mb-8 flex flex-col gap-5 last:mb-0">
+                      <div className="flex items-baseline gap-2 border-b border-border/50 pb-2">
+                        <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-primary">
+                          {medium.number}
+                        </span>
+                        <h2 className="text-base font-semibold tracking-tight md:text-lg">
+                          {medium.title ?? "—"}
+                        </h2>
+                      </div>
+                      <div className="flex flex-col gap-8">
+                        {medium.sections.map((section) => (
+                          <article
+                            key={section.id}
+                            id={sectionAnchorId(section.id)}
+                            className="scroll-mt-4"
+                          >
+                            <SectionEditor
+                              section={section}
+                              project={project}
+                              embedded
+                              isMobile={isMobile}
+                              onUpdate={(updater) => updateSection(section.id, updater)}
+                              onReplaceProject={replaceProject}
+                              onLog={logAction}
+                            />
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              ))}
 
-          {outline.map((major) => (
-            <section key={major.key} className="mb-10 last:mb-4">
-              <header className="mb-6 border-b pb-4">
-                <div className="flex items-start gap-3">
-                  <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
-                    {major.number}
-                  </span>
-                  <div className="min-w-0">
-                    <h1 className="text-xl font-bold tracking-tight md:text-2xl">
-                      {major.title ?? majorTitle}
-                    </h1>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {sections.filter((s) => s.status === "approved").length} / {sections.length} セクション承認済み
-                    </p>
+              {showOrphans && orphaned.length > 0 && (
+                <section className="mt-8 border-t border-[var(--semantic-danger-border)] pt-6">
+                  <div className="mb-4 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    <Wrench className="size-3" aria-hidden />
+                    アプリ操作 · 廃止候補
                   </div>
-                </div>
-              </header>
-              {major.mediums.map((medium) => (
-                <div key={medium.key} className="mb-8 flex flex-col gap-4 last:mb-0">
-                  <div className="flex items-baseline gap-2 border-b border-border/60 pb-2">
-                    <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-primary">
-                      {medium.number}
-                    </span>
-                    <h2 className="text-base font-semibold tracking-tight md:text-lg">
-                      {medium.title ?? "—"}
-                    </h2>
-                  </div>
-                  <div className="flex flex-col gap-6">
-                    {medium.sections.map((section) => (
+                  <h3 className="text-sm font-semibold">フローから削除されたステップ</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    本文は残しています。意図的に残すか、反映ウィザードで廃止できます。
+                  </p>
+                  <div className="mt-4 flex flex-col gap-6">
+                    {orphaned.map((section) => (
                       <article
                         key={section.id}
                         id={sectionAnchorId(section.id)}
-                        className="scroll-mt-4"
+                        className="scroll-mt-4 rounded-lg border border-[var(--semantic-danger-border)]/60 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_25%,transparent)] p-3 md:p-4"
                       >
                         <SectionEditor
                           section={section}
@@ -358,38 +424,10 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                       </article>
                     ))}
                   </div>
-                </div>
-              ))}
-            </section>
-          ))}
-
-          {showOrphans && orphaned.length > 0 && (
-            <section className="mb-8 rounded-xl border border-[var(--semantic-danger-border)] bg-[color-mix(in_oklch,var(--semantic-danger-bg)_40%,transparent)] p-3 md:p-4">
-              <h3 className="text-sm font-semibold">廃止候補（フローから削除されたステップ）</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                本文は残しています。意図的に残すか、反映ウィザードで廃止できます。
-              </p>
-              <div className="mt-4 flex flex-col gap-4">
-                {orphaned.map((section) => (
-                  <article
-                    key={section.id}
-                    id={sectionAnchorId(section.id)}
-                    className="scroll-mt-4 rounded-lg border bg-card p-3"
-                  >
-                    <SectionEditor
-                      section={section}
-                      project={project}
-                      embedded
-                      isMobile={isMobile}
-                      onUpdate={(updater) => updateSection(section.id, updater)}
-                      onReplaceProject={replaceProject}
-                      onLog={logAction}
-                    />
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
+                </section>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -433,14 +471,14 @@ function SectionTocPanel({
   onNavigate: (id: string) => void
 }) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/20">
+    <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/25">
       <div className="page-header border-b px-4 py-3">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           <ListTree className="size-4 text-muted-foreground" />
           目次
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          {sections.filter((s) => s.status === "approved").length} / {sections.length} 承認済み
+          ナビ · {sections.filter((s) => s.status === "approved").length} / {sections.length} 承認済み
         </div>
       </div>
       <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-2">
@@ -679,18 +717,22 @@ function SectionEditor({
 
   const syncActions =
     sync === "needs_review" || sync === "orphaned" ? (
-      <details className="mt-3 rounded-lg border border-border/70 bg-muted/20 open:bg-muted/30">
+      <details className="rounded-md border border-dashed border-border/80 bg-muted/40 open:bg-muted/50">
         <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5">
-              <Workflow className="size-3.5 text-muted-foreground" />
-              フロー同期操作
+              <Wrench className="size-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                操作
+              </span>
+              <span className="text-muted-foreground">·</span>
+              フロー同期
               <SyncStatusBadge status={section.syncStatus} />
             </span>
             <ChevronDown className="size-3.5 text-muted-foreground" />
           </span>
         </summary>
-        <div className={cn("flex gap-2 border-t px-3 py-3", isMobile && "flex-col")}>
+        <div className={cn("flex gap-2 border-t border-border/60 px-3 py-3", isMobile && "flex-col")}>
           {sync === "needs_review" && (
             <Button
               variant="outline"
@@ -719,113 +761,133 @@ function SectionEditor({
       </details>
     ) : null
 
-  const actionButtons = (
-    <>
-      <SectionHistoryButton
-        project={project}
-        sectionId={section.id}
-        isMobile={isMobile}
-        onRestore={(next) => {
-          onReplaceProject(next)
-          onLog(`セクション「${section.title}」を過去版から復元`)
-        }}
-      />
-      <Button
-        variant="outline"
-        size={isMobile ? "default" : "sm"}
-        className={cn("gap-1", isMobile && "h-10 flex-1")}
-        onClick={regenerate}
-        disabled={regenerating}
-      >
-        <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-        {regenerating ? "再生成中…" : "AI再生成"}
-      </Button>
-      <Button
-        size={isMobile ? "default" : "sm"}
-        className={cn("gap-1", isMobile && "h-10 flex-1")}
-        disabled={!canApprove}
-        onClick={approve}
-      >
-        <BadgeCheck className="size-4" />
-        {section.status === "approved" ? "承認済み" : "承認する"}
-      </Button>
-    </>
-  )
-
-  const desktopActions = (
-    <div className="flex shrink-0 flex-wrap justify-end gap-2">
-      <SectionHistoryButton
-        project={project}
-        sectionId={section.id}
-        onRestore={(next) => {
-          onReplaceProject(next)
-          onLog(`セクション「${section.title}」を過去版から復元`)
-        }}
-      />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
-            <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-            {regenerating ? "再生成中…" : "AI再生成"}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>このセクションのみ再生成します。他セクションには影響しません</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span>
-            <Button size="sm" className="gap-1" disabled={!canApprove} onClick={approve}>
+  const actionToolbar = (
+    <div
+      className={cn(
+        "flex gap-2 rounded-md border border-dashed border-border/80 bg-muted/40 px-2.5 py-2",
+        isMobile ? "flex-col" : "flex-wrap items-center",
+      )}
+      role="toolbar"
+      aria-label="セクション操作"
+    >
+      <div className="flex shrink-0 items-center gap-1.5 px-0.5">
+        <Wrench className="size-3 text-muted-foreground" aria-hidden />
+        <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+          操作
+        </span>
+      </div>
+      {!isMobile && <div className="hidden h-4 w-px bg-border sm:block" aria-hidden />}
+      <div className={cn("flex min-w-0 flex-1 gap-2", isMobile && "flex-wrap")}>
+        <SectionHistoryButton
+          project={project}
+          sectionId={section.id}
+          isMobile={isMobile}
+          onRestore={(next) => {
+            onReplaceProject(next)
+            onLog(`セクション「${section.title}」を過去版から復元`)
+          }}
+        />
+        {isMobile ? (
+          <>
+            <Button
+              variant="outline"
+              size="default"
+              className="h-10 flex-1 gap-1"
+              onClick={regenerate}
+              disabled={regenerating}
+            >
+              <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+              {regenerating ? "再生成中…" : "AI再生成"}
+            </Button>
+            <Button
+              size="default"
+              className="h-10 flex-1 gap-1"
+              disabled={!canApprove}
+              onClick={approve}
+            >
               <BadgeCheck className="size-4" />
               {section.status === "approved" ? "承認済み" : "承認する"}
             </Button>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>
-          {confirms > 0
-            ? `「要確認」が ${confirms} 件残っているため承認できません`
-            : "内容を確認して承認済みにします"}
-        </TooltipContent>
-      </Tooltip>
+          </>
+        ) : (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
+                  <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+                  {regenerating ? "再生成中…" : "AI再生成"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>このセクションのみ再生成します。他セクションには影響しません</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button size="sm" className="gap-1" disabled={!canApprove} onClick={approve}>
+                    <BadgeCheck className="size-4" />
+                    {section.status === "approved" ? "承認済み" : "承認する"}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {confirms > 0
+                  ? `「要確認」が ${confirms} 件残っているため承認できません`
+                  : "内容を確認して承認済みにします"}
+              </TooltipContent>
+            </Tooltip>
+          </>
+        )}
+      </div>
     </div>
   )
 
   return (
     <div className={cn(!embedded && "flex h-full flex-col scroll-touch overflow-y-auto")}>
-      <div className={cn(!embedded && "mx-auto w-full max-w-3xl flex-1 px-4 py-4 md:px-8 md:py-8", embedded && "pb-2", isMobile && !embedded && "scroll-touch overflow-y-auto pb-4")}>
-        <div className={cn("flex gap-4", isMobile ? "flex-col" : "items-start justify-between")}>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start gap-3">
-              {/* embedded 時は中項目見出し側に項番があるため、ここでは出さない(承認済み横の二重表示を防ぐ) */}
-              {sectionNum && !embedded && (
-                <span className="shrink-0 rounded-lg bg-primary/10 px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary">
-                  {sectionNum}
-                </span>
+      <div
+        className={cn(
+          !embedded && "mx-auto w-full max-w-3xl flex-1 px-4 py-4 md:px-8 md:py-8",
+          embedded && "pb-1",
+          isMobile && !embedded && "scroll-touch overflow-y-auto pb-4",
+        )}
+      >
+        {/* ドキュメント見出し（操作ボタンを混ぜない） */}
+        <div className="min-w-0">
+          <div className="flex items-start gap-3">
+            {sectionNum && !embedded && (
+              <span className="shrink-0 rounded-lg bg-primary/10 px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary">
+                {sectionNum}
+              </span>
+            )}
+            <div className="min-w-0">
+              {embedded ? (
+                <h3 className="text-base font-semibold tracking-tight md:text-lg">{sectionTitle}</h3>
+              ) : (
+                <h2 className="text-lg font-bold tracking-tight md:text-xl">{sectionTitle}</h2>
               )}
-              <div className="min-w-0">
-                {!embedded && (
-                  <h2 className="text-lg font-bold tracking-tight md:text-xl">{sectionTitle}</h2>
-                )}
-                <div className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground", !embedded && "mt-1.5")}>
-                  <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
-                    {SECTION_LABEL[section.status]}
-                  </Badge>
-                  {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
-                  <span>v{section.version}</span>
-                  <span>最終更新 {section.updatedAt}</span>
-                </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
+                  {SECTION_LABEL[section.status]}
+                </Badge>
+                {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
+                <span>v{section.version}</span>
+                <span>最終更新 {section.updatedAt}</span>
               </div>
             </div>
           </div>
-          {!isMobile && desktopActions}
-          {isMobile && embedded && (
-            <div className="flex flex-wrap gap-2">{actionButtons}</div>
-          )}
         </div>
 
-        {syncActions}
+        {/* アプリ操作バー（本文とは別レイヤ）。モバイル単体表示時は下部バーへ寄せる */}
+        {isMobile && !embedded ? (
+          syncActions ? <div className="mt-3">{syncActions}</div> : null
+        ) : (
+          <div className="mt-3 flex flex-col gap-2">
+            {actionToolbar}
+            {syncActions}
+          </div>
+        )}
 
         {confirms > 0 && (
-          <div className={cn("mt-4 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>
+          <div className={cn("mt-3 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、すべて解消すると承認できます。
           </div>
@@ -845,54 +907,54 @@ function SectionEditor({
           </div>
         )}
 
-        <div className={cn("rounded-xl border-2 border-border/80 bg-card shadow-sm", embedded ? "mt-3" : "mt-5 md:mt-6")}>
-          <div className="border-b bg-muted/30 px-4 py-2.5 md:px-5">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              {embedded && sectionTitle ? sectionTitle : sectionNum ? `項番 ${sectionNum}` : "セクション本文"}
-            </span>
+        {/* マニュアル本文面 */}
+        <div className={cn("mt-4 border-t border-border/50 pt-4", !embedded && "mt-5 md:mt-6")}>
+          <div className="mb-3 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+            <BookOpen className="size-3" aria-hidden />
+            セクション本文
           </div>
-          <div className="flex flex-col gap-0.5 px-2 py-2 md:px-3 md:py-3">
-          {section.blocks.map((block) => {
-            if (block.type === "step") stepNo += 1
-            return (
-              <BlockView
-                key={block.id}
-                block={block}
-                stepNo={block.type === "step" ? stepNo : undefined}
-                isMobile={isMobile}
-                editing={editingBlockId === block.id}
-                draft={blockDraft}
-                setDraft={setBlockDraft}
-                onStartEdit={() => {
-                  setEditingBlockId(block.id)
-                  setBlockDraft(block.text)
-                }}
-                onSave={() => {
-                  updateBlock(block.id, (b) => ({ ...b, text: blockDraft }))
-                  setEditingBlockId(null)
-                }}
-                onCancel={() => setEditingBlockId(null)}
-                onResolveConfirm={() => updateBlock(block.id, (b) => ({ ...b, needsConfirm: false }))}
-                onAttachImage={async (file) => {
-                  const image = await readImageFile(file)
-                  updateBlock(block.id, (b) => ({ ...b, image }))
-                }}
-                onRemoveImage={() => updateBlock(block.id, (b) => ({ ...b, image: undefined }))}
-                onUpdateImageCaption={(caption) =>
-                  updateBlock(block.id, (b) =>
-                    b.image ? { ...b, image: { ...b.image, caption } } : b,
-                  )
-                }
-              />
-            )
-          })}
+          <div className="flex flex-col gap-0.5">
+            {section.blocks.map((block) => {
+              if (block.type === "step") stepNo += 1
+              return (
+                <BlockView
+                  key={block.id}
+                  block={block}
+                  stepNo={block.type === "step" ? stepNo : undefined}
+                  isMobile={isMobile}
+                  editing={editingBlockId === block.id}
+                  draft={blockDraft}
+                  setDraft={setBlockDraft}
+                  onStartEdit={() => {
+                    setEditingBlockId(block.id)
+                    setBlockDraft(block.text)
+                  }}
+                  onSave={() => {
+                    updateBlock(block.id, (b) => ({ ...b, text: blockDraft }))
+                    setEditingBlockId(null)
+                  }}
+                  onCancel={() => setEditingBlockId(null)}
+                  onResolveConfirm={() => updateBlock(block.id, (b) => ({ ...b, needsConfirm: false }))}
+                  onAttachImage={async (file) => {
+                    const image = await readImageFile(file)
+                    updateBlock(block.id, (b) => ({ ...b, image }))
+                  }}
+                  onRemoveImage={() => updateBlock(block.id, (b) => ({ ...b, image: undefined }))}
+                  onUpdateImageCaption={(caption) =>
+                    updateBlock(block.id, (b) =>
+                      b.image ? { ...b, image: { ...b.image, caption } } : b,
+                    )
+                  }
+                />
+              )
+            })}
           </div>
         </div>
       </div>
 
       {isMobile && !embedded && (
-        <div className="shrink-0 border-t bg-card/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
-          <div className="flex gap-2">{actionButtons}</div>
+        <div className="shrink-0 border-t bg-muted/40 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
+          {actionToolbar}
           {confirms > 0 && (
             <p className={cn("mt-2 text-center text-[10px]", WARNING_TEXT)}>
               要確認をすべて解消すると承認できます
@@ -1017,14 +1079,17 @@ function BlockView({
                 {block.text}
               </p>
 
-              {/* 要確認マーク(F-5: ハルシネーション対策) */}
+              {/* 要確認マーク(F-5: ハルシネーション対策) — 本文とは別の確認操作帯 */}
               {block.needsConfirm && (
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="mt-2 rounded-md border border-dashed border-[var(--semantic-warning-border)] bg-[color-mix(in_oklch,var(--semantic-warning-bg)_55%,transparent)] px-2.5 py-2">
+                  <div className="mb-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    要確認の操作
+                  </div>
                   <Badge variant="outline" className={cn("h-auto w-fit gap-1 px-2 py-1 text-[10px] leading-snug", SEMANTIC.warning)}>
                     <AlertTriangle className="size-2.5 shrink-0" />
                     要確認: AIが推測で補完した内容です
                   </Badge>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <Button
                       size="sm"
                       variant="outline"
@@ -1034,7 +1099,7 @@ function BlockView({
                       <Check className="size-3.5" />
                       内容OK
                     </Button>
-                    <Button size="sm" variant="outline" className="h-9 gap-1 bg-white px-3 text-[11px]" onClick={onStartEdit}>
+                    <Button size="sm" variant="outline" className="h-9 gap-1 bg-background px-3 text-[11px]" onClick={onStartEdit}>
                       <Pencil className="size-3.5" />
                       修正する
                     </Button>
@@ -1119,11 +1184,11 @@ function BlockImageSection({
 
       {image ? (
         <>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1 rounded-md border border-dashed border-border/70 bg-muted/30 px-2 py-1.5">
             <button
               type="button"
               onClick={() => setImageOpen(!imageOpen)}
-              className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/5"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-background/80"
             >
               <ImageIcon className="size-3" />
               {image.url ? "画像を見る" : "プレースホルダ"}
@@ -1132,7 +1197,7 @@ function BlockImageSection({
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
               className="h-7 gap-1 px-2 text-[11px]"
               onClick={onPickImage}
               disabled={uploading}
@@ -1193,8 +1258,8 @@ function BlockImageSection({
         <Button
           type="button"
           size="sm"
-          variant="outline"
-          className="h-8 gap-1.5 text-[11px]"
+          variant="ghost"
+          className="mt-1.5 h-8 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
           onClick={onPickImage}
           disabled={uploading}
         >
