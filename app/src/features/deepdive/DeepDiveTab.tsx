@@ -228,7 +228,7 @@ function StepListPanel({
               className={cn(
                 "min-h-14 rounded-md border bg-background px-3 py-3 text-left transition-colors md:min-h-0 md:py-2.5",
                 selectedId === item.stepId
-                  ? "border-primary/60 ring-2 ring-primary/15"
+                  ? "border-primary bg-primary-subtle ring-2 ring-primary/20"
                   : "hover:border-primary/30 active:bg-muted/50",
               )}
             >
@@ -240,7 +240,13 @@ function StepListPanel({
                 <ChevronRight className="size-3.5 text-muted-foreground" />
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Badge variant="outline" className={cn("h-5 text-[10px]", STATUS_STYLE[item.status])}>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "h-5 overflow-visible border text-[10px] whitespace-nowrap",
+                    STATUS_STYLE[item.status],
+                  )}
+                >
                   {item.status === "recheck" && <AlertTriangle className="size-2.5" />}
                   {DEEPDIVE_LABEL[item.status]}
                 </Badge>
@@ -310,7 +316,10 @@ function StepDetailPanel({
         }))
       }}
     >
-      <SelectTrigger size="sm" className={cn("text-xs", isMobile ? "w-full" : "w-36")}>
+      <SelectTrigger
+        size="sm"
+        className={cn("bg-background text-xs", isMobile ? "h-10 w-full" : "w-36")}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

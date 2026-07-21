@@ -78,7 +78,7 @@ export function ProjectProcessNav({ tab, status, onSelect }: Props) {
                     className={cn(
                       "flex items-center gap-1.5 rounded-md px-2.5 py-2 text-left text-[12px] font-medium transition-colors md:px-3 md:text-[13px]",
                       active && "bg-primary text-primary-foreground shadow-sm",
-                      !active && phase === "current" && "bg-primary-subtle text-primary",
+                      !active && phase === "current" && "bg-primary-subtle text-primary ring-1 ring-primary/25",
                       !active && phase === "done" && "text-foreground/80 hover:bg-accent",
                       !active && phase === "upcoming" && "text-muted-foreground/70 hover:bg-accent hover:text-foreground",
                     )}
@@ -86,7 +86,7 @@ export function ProjectProcessNav({ tab, status, onSelect }: Props) {
                     <span
                       className={cn(
                         "flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold tabular-nums",
-                        active && "bg-primary-foreground/20 text-primary-foreground",
+                        active && "bg-primary-foreground/25 text-primary-foreground",
                         !active && phase === "current" && "bg-primary text-primary-foreground",
                         !active && phase === "done" && "bg-primary/15 text-primary",
                         !active && phase === "upcoming" && "bg-muted text-muted-foreground",
@@ -99,11 +99,6 @@ export function ProjectProcessNav({ tab, status, onSelect }: Props) {
                       )}
                     </span>
                     <span className="whitespace-nowrap">{step.label}</span>
-                    {phase === "current" && !active && (
-                      <span className="hidden text-[10px] font-normal opacity-80 sm:inline">
-                        進行中
-                      </span>
-                    )}
                   </button>
                 </li>
               )
