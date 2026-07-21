@@ -243,11 +243,23 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           onNavigate={scrollToSection}
         />
       )}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* アプリ操作帯: マニュアル本文と視覚的に分離 */}
-        {showWorkspaceChrome && (
-          <div className="shrink-0 border-b border-border/80 bg-muted/35">
-            <div className="mx-auto w-full max-w-3xl px-4 py-3 md:px-8">
+      {/* スクロール一体: 下へ進むと操作帯が退避し、上へ戻すと再表示 */}
+      <div
+        ref={documentRef}
+        className="scroll-touch min-w-0 flex-1 overflow-y-auto bg-muted/55"
+      >
+        <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-8 md:py-6">
+          {isMobile && (
+            <SectionTocBar
+              outline={outline}
+              activeSectionId={activeSectionId}
+              onNavigate={scrollToSection}
+            />
+          )}
+
+          {/* アプリ操作帯（スクロールで自然に退避） */}
+          {showWorkspaceChrome && (
+            <div className="mb-5 rounded-xl border border-border/70 bg-secondary/80 px-3 py-3 shadow-sm md:px-4">
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                 <Wrench className="size-3" aria-hidden />
                 アプリ操作
@@ -263,7 +275,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               {hasUnplacedTools && (
                 <div
                   className={cn(
-                    "rounded-lg border border-dashed border-[var(--semantic-warning-border)] bg-background/80 p-3 md:p-4",
+                    "rounded-lg border border-dashed border-[var(--semantic-warning-border)] bg-card/90 p-3 md:p-4",
                     "mt-3",
                   )}
                 >
@@ -323,110 +335,98 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          <div className="mb-4 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+            <BookOpen className="size-3" aria-hidden />
+            マニュアル本文
           </div>
-        )}
 
-        {/* マニュアル本文の読み面 */}
-        <div ref={documentRef} className="scroll-touch min-h-0 flex-1 overflow-y-auto bg-background">
-          <div className="mx-auto w-full max-w-3xl px-4 py-4 md:px-8 md:py-6">
-            {isMobile && (
-              <SectionTocBar
-                outline={outline}
-                activeSectionId={activeSectionId}
-                onNavigate={scrollToSection}
-              />
-            )}
-
-            <div className="mb-5 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-              <BookOpen className="size-3" aria-hidden />
-              マニュアル本文
-            </div>
-
-            <div className="rounded-xl border border-border/70 bg-card px-4 py-5 shadow-sm md:px-7 md:py-7">
-              {outline.map((major) => (
-                <section key={major.key} className="mb-10 last:mb-0">
-                  <header className="mb-6 border-b pb-4">
-                    <div className="flex items-start gap-3">
-                      <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
-                        {major.number}
+          {/* 読み面: 周囲の muted より明るい紙面で本文の視認性を確保 */}
+          <div className="rounded-xl border border-border/50 bg-card px-4 py-5 shadow-md md:px-8 md:py-8">
+            {outline.map((major) => (
+              <section key={major.key} className="mb-10 last:mb-0">
+                <header className="mb-6 border-b border-border/70 pb-4">
+                  <div className="flex items-start gap-3">
+                    <span className="shrink-0 rounded-lg bg-primary px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary-foreground">
+                      {major.number}
+                    </span>
+                    <div className="min-w-0">
+                      <h1 className="text-xl font-bold tracking-tight text-foreground md:text-2xl">
+                        {major.title ?? majorTitle}
+                      </h1>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {sections.filter((s) => s.status === "approved").length} / {sections.length}{" "}
+                        セクション承認済み
+                      </p>
+                    </div>
+                  </div>
+                </header>
+                {major.mediums.map((medium) => (
+                  <div key={medium.key} className="mb-8 flex flex-col gap-5 last:mb-0">
+                    <div className="flex items-baseline gap-2 border-b border-border/50 pb-2">
+                      <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-primary">
+                        {medium.number}
                       </span>
-                      <div className="min-w-0">
-                        <h1 className="text-xl font-bold tracking-tight md:text-2xl">
-                          {major.title ?? majorTitle}
-                        </h1>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {sections.filter((s) => s.status === "approved").length} / {sections.length}{" "}
-                          セクション承認済み
-                        </p>
-                      </div>
+                      <h2 className="text-base font-semibold tracking-tight text-foreground md:text-lg">
+                        {medium.title ?? "—"}
+                      </h2>
                     </div>
-                  </header>
-                  {major.mediums.map((medium) => (
-                    <div key={medium.key} className="mb-8 flex flex-col gap-5 last:mb-0">
-                      <div className="flex items-baseline gap-2 border-b border-border/50 pb-2">
-                        <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-primary">
-                          {medium.number}
-                        </span>
-                        <h2 className="text-base font-semibold tracking-tight md:text-lg">
-                          {medium.title ?? "—"}
-                        </h2>
-                      </div>
-                      <div className="flex flex-col gap-8">
-                        {medium.sections.map((section) => (
-                          <article
-                            key={section.id}
-                            id={sectionAnchorId(section.id)}
-                            className="scroll-mt-4"
-                          >
-                            <SectionEditor
-                              section={section}
-                              project={project}
-                              embedded
-                              isMobile={isMobile}
-                              onUpdate={(updater) => updateSection(section.id, updater)}
-                              onReplaceProject={replaceProject}
-                              onLog={logAction}
-                            />
-                          </article>
-                        ))}
-                      </div>
+                    <div className="flex flex-col gap-8">
+                      {medium.sections.map((section) => (
+                        <article
+                          key={section.id}
+                          id={sectionAnchorId(section.id)}
+                          className="scroll-mt-4"
+                        >
+                          <SectionEditor
+                            section={section}
+                            project={project}
+                            embedded
+                            isMobile={isMobile}
+                            onUpdate={(updater) => updateSection(section.id, updater)}
+                            onReplaceProject={replaceProject}
+                            onLog={logAction}
+                          />
+                        </article>
+                      ))}
                     </div>
-                  ))}
-                </section>
-              ))}
+                  </div>
+                ))}
+              </section>
+            ))}
 
-              {showOrphans && orphaned.length > 0 && (
-                <section className="mt-8 border-t border-[var(--semantic-danger-border)] pt-6">
-                  <div className="mb-4 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                    <Wrench className="size-3" aria-hidden />
-                    アプリ操作 · 廃止候補
-                  </div>
-                  <h3 className="text-sm font-semibold">フローから削除されたステップ</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    本文は残しています。意図的に残すか、反映ウィザードで廃止できます。
-                  </p>
-                  <div className="mt-4 flex flex-col gap-6">
-                    {orphaned.map((section) => (
-                      <article
-                        key={section.id}
-                        id={sectionAnchorId(section.id)}
-                        className="scroll-mt-4 rounded-lg border border-[var(--semantic-danger-border)]/60 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_25%,transparent)] p-3 md:p-4"
-                      >
-                        <SectionEditor
-                          section={section}
-                          project={project}
-                          embedded
-                          isMobile={isMobile}
-                          onUpdate={(updater) => updateSection(section.id, updater)}
-                          onReplaceProject={replaceProject}
-                          onLog={logAction}
-                        />
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </div>
+            {showOrphans && orphaned.length > 0 && (
+              <section className="mt-8 border-t border-[var(--semantic-danger-border)] pt-6">
+                <div className="mb-4 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  <Wrench className="size-3" aria-hidden />
+                  アプリ操作 · 廃止候補
+                </div>
+                <h3 className="text-sm font-semibold">フローから削除されたステップ</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  本文は残しています。意図的に残すか、反映ウィザードで廃止できます。
+                </p>
+                <div className="mt-4 flex flex-col gap-6">
+                  {orphaned.map((section) => (
+                    <article
+                      key={section.id}
+                      id={sectionAnchorId(section.id)}
+                      className="scroll-mt-4 rounded-lg border border-[var(--semantic-danger-border)]/60 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_25%,transparent)] p-3 md:p-4"
+                    >
+                      <SectionEditor
+                        section={section}
+                        project={project}
+                        embedded
+                        isMobile={isMobile}
+                        onUpdate={(updater) => updateSection(section.id, updater)}
+                        onReplaceProject={replaceProject}
+                        onLog={logAction}
+                      />
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </div>
@@ -570,7 +570,7 @@ function SectionTocBar({
   )
 
   return (
-    <div className="sticky top-0 z-10 -mx-4 mb-4 border-b bg-background/95 px-4 py-2 backdrop-blur-sm md:-mx-8 md:px-8">
+    <div className="sticky top-0 z-10 -mx-4 mb-4 border-b border-border/60 bg-muted/90 px-4 py-2 backdrop-blur-sm md:-mx-8 md:px-8">
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {items.map((item) => (
           <button
@@ -907,12 +907,8 @@ function SectionEditor({
           </div>
         )}
 
-        {/* マニュアル本文面 */}
-        <div className={cn("mt-4 border-t border-border/50 pt-4", !embedded && "mt-5 md:mt-6")}>
-          <div className="mb-3 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-            <BookOpen className="size-3" aria-hidden />
-            セクション本文
-          </div>
+        {/* マニュアル本文面（ラベルなしで読み物として連続表示） */}
+        <div className={cn("mt-4 border-t border-border/40 pt-4", !embedded && "mt-5 md:mt-6")}>
           <div className="flex flex-col gap-0.5">
             {section.blocks.map((block) => {
               if (block.type === "step") stepNo += 1
@@ -1072,8 +1068,8 @@ function BlockView({
             <div className="min-w-0 flex-1">
               <p
                 className={cn(
-                  "text-sm leading-relaxed",
-                  block.type === "note" && cn("text-[13px]", WARNING_TEXT),
+                  "text-[15px] leading-[1.75] text-foreground",
+                  block.type === "note" && cn("text-[13px] leading-relaxed", WARNING_TEXT),
                 )}
               >
                 {block.text}

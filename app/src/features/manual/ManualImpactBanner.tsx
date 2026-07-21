@@ -67,7 +67,7 @@ export function ManualImpactBanner({
               フロー変更の見直し候補が {displayTotal} 件あります
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              マニュアル本文は保護されています。下の本文とは別の操作パネルです。
+              マニュアル本文は保護されています。下へスクロールすると本文を広く確認できます。
               {impact.addedStepIds.length > 0 && (
                 <> 未配置の新規ステップ: {impact.addedStepIds.length} 件。</>
               )}

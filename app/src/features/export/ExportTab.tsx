@@ -199,8 +199,13 @@ export function ExportTab({ project }: Props) {
           </CardContent>
         </Card>
 
-        <div className="mt-6 flex items-center gap-3">
-          <Button className="gap-1.5" onClick={doExport} disabled={exporting || project.sections.length === 0}>
+        <div className="mt-8 flex flex-col items-center gap-2 text-center">
+          <Button
+            size="lg"
+            className="min-w-[14rem] gap-1.5"
+            onClick={doExport}
+            disabled={exporting || project.sections.length === 0}
+          >
             <Download className="size-4" />
             {exporting ? "出力中…" : `${format === "pdf" ? "PDF" : "PowerPoint"} を出力`}
           </Button>
@@ -208,13 +213,13 @@ export function ExportTab({ project }: Props) {
             <span className="text-xs text-muted-foreground">マニュアルを生成すると出力できます</span>
           )}
           {exported && format === "pptx" && (
-            <span className={cn("flex items-center gap-1 text-sm", SUCCESS_TEXT)}>
+            <span className={cn("flex items-center justify-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
               {targetSections.length} スライドの {project.name}.pptx をダウンロードしました
             </span>
           )}
           {exported && format === "pdf" && (
-            <span className={cn("flex items-center gap-1 text-sm", SUCCESS_TEXT)}>
+            <span className={cn("flex items-center justify-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
               {project.name}.pdf を出力しました(デモのためダウンロードは行われません)
             </span>
