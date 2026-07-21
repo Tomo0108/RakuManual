@@ -108,12 +108,10 @@ export function OverviewTab({ project, setTab }: Props) {
         </section>
 
         {currentStep && project.status !== "published" && (
-          <section className="mt-5 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary-subtle/40 p-4 sm:flex-row sm:items-center sm:justify-between md:mt-6 md:p-5">
+          <section className="mt-5 flex flex-col gap-3 border-b border-border/70 pb-5 sm:flex-row sm:items-end sm:justify-between md:mt-6 md:pb-6">
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold tracking-wide text-primary uppercase">
-                現在の工程
-              </div>
-              <div className="mt-1 text-base font-semibold">{currentStep.title}</div>
+              <div className="text-[11px] tracking-wide text-muted-foreground">現在の工程</div>
+              <div className="mt-1 text-lg font-semibold tracking-tight">{currentStep.title}</div>
               <div className="mt-0.5 text-xs text-muted-foreground">{currentStep.stat}</div>
             </div>
             <Button className="shrink-0 gap-1.5" onClick={() => setTab(currentStep.tab)}>
@@ -123,49 +121,60 @@ export function OverviewTab({ project, setTab }: Props) {
           </section>
         )}
 
-        <section className="mt-6 md:mt-8">
+        <section className={cn(currentStep && project.status !== "published" ? "mt-5 md:mt-6" : "mt-6 md:mt-8")}>
           <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase md:mb-4">
             作成工程
           </h2>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {steps.map((s) => (
               <button
                 key={s.tab}
                 type="button"
                 onClick={() => setTab(s.tab)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors sm:gap-4 sm:px-5",
-                  s.current
-                    ? "border-primary/40 bg-primary-subtle/30"
-                    : s.done
-                      ? "border-transparent bg-muted/30 hover:border-border"
-                      : "border-border/60 bg-card hover:border-primary/30",
+                  "group flex w-full items-center gap-3 border-b border-border/50 px-1 py-3.5 text-left transition-colors last:border-b-0 sm:gap-4 sm:py-4",
+                  s.current ? "bg-muted/40" : "hover:bg-muted/25",
                 )}
               >
                 <div
                   className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                    "flex size-9 shrink-0 items-center justify-center rounded-md",
                     s.current
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-foreground text-background"
                       : s.done
-                        ? "bg-primary/15 text-primary"
-                        : "bg-muted text-muted-foreground",
+                        ? "bg-foreground/8 text-foreground/70"
+                        : "bg-transparent text-muted-foreground",
                   )}
                 >
                   <s.icon className="size-4.5" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold leading-snug">{s.title}</span>
+                <div
+                  className={cn(
+                    "min-w-0 flex-1 border-l-2 pl-3 sm:pl-4",
+                    s.current ? "border-l-primary" : "border-l-transparent",
+                  )}
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <span
+                      className={cn(
+                        "text-sm leading-snug",
+                        s.current ? "font-semibold text-foreground" : "font-medium text-foreground/90",
+                      )}
+                    >
+                      {s.title}
+                    </span>
                     {s.current && (
-                      <Badge variant="secondary" className="h-5 text-[10px]">
-                        進行中
-                      </Badge>
+                      <span className="text-[11px] text-primary">進行中</span>
                     )}
                   </div>
                   <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
                 </div>
-                <span className="flex shrink-0 items-center gap-1 text-sm text-primary">
+                <span
+                  className={cn(
+                    "flex shrink-0 items-center gap-1 text-sm",
+                    s.current ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
+                  )}
+                >
                   {s.done && !s.current ? (
                     <>
                       <Eye className="size-3.5" />
