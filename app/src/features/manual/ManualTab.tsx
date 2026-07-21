@@ -580,7 +580,7 @@ function TocItem({
       )}
     >
       <span className="shrink-0 font-mono text-[10px] font-bold tabular-nums text-primary">{num || "—"}</span>
-      <SyncStatusBadge status={section.syncStatus} />
+      {(section.syncStatus ?? "ok") !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
       <Badge variant="outline" className={cn("ml-auto h-5 shrink-0 text-[9px]", SECTION_STYLE[section.status])}>
         {SECTION_LABEL[section.status]}
       </Badge>
@@ -680,32 +680,44 @@ function SectionEditor({
 
   const syncActions =
     sync === "needs_review" || sync === "orphaned" ? (
-      <div className={cn("flex gap-2", isMobile && "w-full flex-col")}>
-        {sync === "needs_review" && (
+      <details className="mt-3 rounded-lg border border-border/70 bg-muted/20 open:bg-muted/30">
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <Workflow className="size-3.5 text-muted-foreground" />
+              フロー同期操作
+              <SyncStatusBadge status={section.syncStatus} />
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </span>
+        </summary>
+        <div className={cn("flex gap-2 border-t px-3 py-3", isMobile && "flex-col")}>
+          {sync === "needs_review" && (
+            <Button
+              variant="outline"
+              size={isMobile ? "default" : "sm"}
+              className={cn(isMobile && "h-10 w-full")}
+              onClick={() => {
+                onUpdate((s) => clearManualReview(s, project.flow))
+                onLog(`セクション「${section.title}」の要確認を解除`)
+              }}
+            >
+              要確認を解除
+            </Button>
+          )}
           <Button
             variant="outline"
             size={isMobile ? "default" : "sm"}
             className={cn(isMobile && "h-10 w-full")}
             onClick={() => {
-              onUpdate((s) => clearManualReview(s, project.flow))
-              onLog(`セクション「${section.title}」の要確認を解除`)
+              onUpdate((s) => markIntentionalDifference(s))
+              onLog(`セクション「${section.title}」を意図的差分に設定`)
             }}
           >
-            要確認を解除
+            意図的差分にする
           </Button>
-        )}
-        <Button
-          variant="outline"
-          size={isMobile ? "default" : "sm"}
-          className={cn(isMobile && "h-10 w-full")}
-          onClick={() => {
-            onUpdate((s) => markIntentionalDifference(s))
-            onLog(`セクション「${section.title}」を意図的差分に設定`)
-          }}
-        >
-          意図的差分にする
-        </Button>
-      </div>
+        </div>
+      </details>
     ) : null
 
   const actionButtons = (
@@ -798,7 +810,7 @@ function SectionEditor({
                   <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
                     {SECTION_LABEL[section.status]}
                   </Badge>
-                  <SyncStatusBadge status={section.syncStatus} />
+                  {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
                   <span>v{section.version}</span>
                   <span>最終更新 {section.updatedAt}</span>
                 </div>
@@ -811,7 +823,7 @@ function SectionEditor({
           )}
         </div>
 
-        {syncActions && <div className="mt-3">{syncActions}</div>}
+        {syncActions}
 
         {confirms > 0 && (
           <div className={cn("mt-4 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>

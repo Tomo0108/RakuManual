@@ -947,6 +947,15 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     })
   }
 
+  const toggleLock = () => {
+    setIsLocked((prev) => {
+      const next = !prev
+      // 編集開始時はコネクタパネルを開き、操作手段をすぐ使えるようにする
+      if (!next && !isMobile) setConnectorPanelOpen(true)
+      return next
+    })
+  }
+
   /* 空状態 */
   if (flow.nodes.length === 0) {
     const hearingDone = project.hearingAnswers.length >= 8
@@ -982,99 +991,141 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* ツールバー */}
-      <div className="scrollbar-none scroll-touch flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1.5 md:gap-1 md:px-3 md:py-1.5">
-        {(isMobile || !connectorPanelOpen) && (
-          <ToolButton
-            label="コネクタを追加"
-            onClick={openConnectorPicker}
-            disabled={isEditingDisabled}
-          >
-            <Layers className="size-4" />
-          </ToolButton>
-        )}
-        {!isMobile && <Separator orientation="vertical" className="mx-0.5 !h-5" />}
-        <ToolButton
-          label="選択中の要素を削除(Delete)"
-          onClick={deleteSelected}
-          disabled={isEditingDisabled || (selectedNodes.length === 0 && selectedEdges.length === 0)}
-        >
-          <Trash2 className="size-4" />
-        </ToolButton>
-        {(selectedNodes.length > 0 || selectedEdges.length > 0) && (
-          <span className="hidden px-1 text-[10px] text-muted-foreground sm:inline">
-            {selectedNodes.length > 0 && `${selectedNodes.length}ノード`}
-            {selectedNodes.length > 0 && selectedEdges.length > 0 && " / "}
-            {selectedEdges.length > 0 && `${selectedEdges.length}結線`}
-          </span>
-        )}
-        <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0}>
-          <Undo2 className="size-4" />
-        </ToolButton>
-        <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0}>
-          <Redo2 className="size-4" />
-        </ToolButton>
-        {!isMobile && (
-          <>
-            <Separator orientation="vertical" className="mx-0.5 !h-5" />
-            <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout} disabled={isEditingDisabled}>
-              <AlignCenterVertical className="size-4" />
-            </ToolButton>
+      {/* ツールバー: 編集 / 生成・整列 / モード・確定 にグループ化(機能は維持) */}
+      <div className="shrink-0 border-b bg-background">
+        <div className="scrollbar-none scroll-touch flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 md:gap-1 md:px-3">
+          <ToolGroup label="編集">
+            {(isMobile || !connectorPanelOpen) && (
+              <ToolButton
+                label="コネクタを追加"
+                onClick={openConnectorPicker}
+                disabled={isEditingDisabled}
+              >
+                <Layers className="size-4" />
+              </ToolButton>
+            )}
             <ToolButton
-              label="ヒアリング回答からフロー図を再生成(手動修正は保護)"
-              onClick={() => setRegenConfirmOpen(true)}
-              disabled={isEditingDisabled}
+              label="選択中の要素を削除(Delete)"
+              onClick={deleteSelected}
+              disabled={isEditingDisabled || (selectedNodes.length === 0 && selectedEdges.length === 0)}
             >
-              <Sparkles className="size-4" />
+              <Trash2 className="size-4" />
             </ToolButton>
-          </>
-        )}
-        {isMobile && (
-          <ToolButton
-            label="全体表示"
-            onClick={() => {
-              bumpMobileTeamAxis()
-              fitCanvas()
-            }}
-          >
-            <Focus className="size-4" />
-          </ToolButton>
-        )}
-
-        <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
-          {validation.issues.length > 0 && (
-            <ToolButton
-              label={`問題 ${validation.errorCount}件のエラー / ${validation.warningCount}件の警告`}
-              onClick={() => setErrorsPanelOpen((v) => !v)}
-            >
-              <span className="relative">
-                <AlertTriangle
-                  className={cn(
-                    "size-4",
-                    validation.errorCount > 0 ? "text-destructive" : "text-amber-600",
-                  )}
-                />
-                <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-white">
-                  {validation.issues.length}
-                </span>
+            {(selectedNodes.length > 0 || selectedEdges.length > 0) && (
+              <span className="hidden px-1 text-[10px] text-muted-foreground sm:inline">
+                {selectedNodes.length > 0 && `${selectedNodes.length}ノード`}
+                {selectedNodes.length > 0 && selectedEdges.length > 0 && " / "}
+                {selectedEdges.length > 0 && `${selectedEdges.length}結線`}
               </span>
+            )}
+            <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0}>
+              <Undo2 className="size-4" />
+            </ToolButton>
+            <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0}>
+              <Redo2 className="size-4" />
+            </ToolButton>
+          </ToolGroup>
+
+          {!isMobile && (
+            <ToolGroup label="生成・整列">
+              <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout} disabled={isEditingDisabled}>
+                <AlignCenterVertical className="size-4" />
+              </ToolButton>
+              <ToolButton
+                label="ヒアリング回答からフロー図を再生成(手動修正は保護)"
+                onClick={() => setRegenConfirmOpen(true)}
+                disabled={isEditingDisabled}
+              >
+                <Sparkles className="size-4" />
+              </ToolButton>
+            </ToolGroup>
+          )}
+
+          {isMobile && (
+            <ToolButton
+              label="全体表示"
+              onClick={() => {
+                bumpMobileTeamAxis()
+                fitCanvas()
+              }}
+            >
+              <Focus className="size-4" />
             </ToolButton>
           )}
-          <FlowHelpButton isMobile={isMobile} isLocked={isLocked} />
-          <ToolButton
-            label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
-            onClick={() => setIsLocked((v) => !v)}
-            disabled={!!proposal}
-          >
-            {isLocked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
-          </ToolButton>
-          <ToolButton
-            label={isMobile ? "確定" : "フロー図を確定して深掘りへ"}
-            onClick={requestConfirmFlow}
-            variant="default"
-          >
-            <ListChecks className="size-4" />
-          </ToolButton>
+
+          <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
+            {validation.issues.length > 0 && (
+              <ToolButton
+                label={`問題 ${validation.errorCount}件のエラー / ${validation.warningCount}件の警告`}
+                onClick={() => setErrorsPanelOpen((v) => !v)}
+              >
+                <span className="relative">
+                  <AlertTriangle
+                    className={cn(
+                      "size-4",
+                      validation.errorCount > 0 ? "text-destructive" : "text-amber-600",
+                    )}
+                  />
+                  <span className="absolute -top-1.5 -right-1.5 flex size-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-white">
+                    {validation.issues.length}
+                  </span>
+                </span>
+              </ToolButton>
+            )}
+            <FlowHelpButton isMobile={isMobile} isLocked={isLocked} />
+            <ToolButton
+              label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
+              onClick={toggleLock}
+              disabled={!!proposal}
+              variant={isLocked ? "outline" : "ghost"}
+            >
+              {isLocked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
+            </ToolButton>
+            <ToolButton
+              label={isMobile ? "確定" : "フロー図を確定して深掘りへ"}
+              onClick={requestConfirmFlow}
+              variant="default"
+              iconOnly={isMobile}
+              className={!isMobile ? "font-semibold" : undefined}
+            >
+              <ListChecks className="size-4" />
+              {!isMobile && <span>確定して深掘りへ</span>}
+            </ToolButton>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "flex items-center gap-2 border-t px-3 py-1.5 text-[11px] md:px-4",
+            isLocked
+              ? "bg-muted/40 text-muted-foreground"
+              : "bg-primary-subtle/50 text-primary",
+          )}
+        >
+          {isLocked ? (
+            <>
+              <Lock className="size-3 shrink-0" />
+              <span>
+                閲覧モード — キャンバス上の編集はロック中です。ロック解除でコネクタ追加・結線・NL修正が使えます。
+              </span>
+            </>
+          ) : (
+            <>
+              <LockOpen className="size-3 shrink-0" />
+              <span>
+                編集モード — ドラッグ、結線、コネクタ追加、自然言語修正が利用できます。
+              </span>
+            </>
+          )}
+          {validation.errorCount > 0 && (
+            <button
+              type="button"
+              className="ml-auto shrink-0 font-medium text-destructive underline-offset-2 hover:underline"
+              onClick={() => setErrorsPanelOpen(true)}
+            >
+              エラー {validation.errorCount} 件
+            </button>
+          )}
         </div>
       </div>
 
@@ -1550,6 +1601,18 @@ function FlowMinimap({ width, height }: { width: number; height: number }) {
   )
 }
 
+function ToolGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-0.5 md:gap-1">
+      <span className="mr-0.5 hidden text-[9px] font-semibold tracking-wide text-muted-foreground uppercase lg:inline">
+        {label}
+      </span>
+      <div className="flex items-center gap-0.5 rounded-md bg-muted/35 p-0.5 md:gap-0.5">{children}</div>
+      <Separator orientation="vertical" className="mx-1 !h-5" />
+    </div>
+  )
+}
+
 function ToolButton({
   label,
   onClick,
@@ -1574,7 +1637,7 @@ function ToolButton({
           <Button
             variant={variant}
             size={iconOnly ? "icon" : "sm"}
-            className={cn(iconOnly ? "size-9 shrink-0 px-0" : "h-8 gap-1 px-2 text-xs", className)}
+            className={cn(iconOnly ? "size-9 shrink-0 px-0" : "h-8 gap-1.5 px-2.5 text-xs", className)}
             onClick={onClick}
             disabled={disabled}
             aria-label={iconOnly ? label : undefined}

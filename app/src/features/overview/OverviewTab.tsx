@@ -32,26 +32,38 @@ export function OverviewTab({ project, setTab }: Props) {
     countManualReviewNeeded(project.sections) +
     buildUnplacedCandidates(project.flow, project.sections).length
 
+  const statusToTab: Record<string, ProjectTab> = {
+    hearing: "hearing",
+    flow: "flow",
+    deepdive: "deepdive",
+    manual: "manual",
+    published: "export",
+  }
+  const currentTab = statusToTab[project.status] ?? "overview"
+
   const steps: {
     tab: ProjectTab
     icon: typeof MessagesSquare
     title: string
     stat: string
     done: boolean
+    current: boolean
   }[] = [
     {
       tab: "hearing",
       icon: MessagesSquare,
       title: "骨組みヒアリング",
       stat: `${answered} / 10 問回答済み`,
-      done: answered >= 10,
+      done: answered >= 10 && project.status !== "hearing",
+      current: currentTab === "hearing",
     },
     {
       tab: "flow",
       icon: Workflow,
       title: "フロー図の生成・編集",
       stat: project.flow.nodes.length > 0 ? `${project.flow.nodes.length} ステップ` : "未生成",
-      done: project.flow.nodes.length > 0 && project.status !== "flow",
+      done: project.flow.nodes.length > 0 && project.status !== "flow" && project.status !== "hearing",
+      current: currentTab === "flow",
     },
     {
       tab: "deepdive",
@@ -62,6 +74,7 @@ export function OverviewTab({ project, setTab }: Props) {
           ? `${deepdiveDone} / ${project.deepdive.length} ステップ完了`
           : "未着手",
       done: project.deepdive.length > 0 && deepdiveDone === project.deepdive.length,
+      current: currentTab === "deepdive",
     },
     {
       tab: "manual",
@@ -74,8 +87,11 @@ export function OverviewTab({ project, setTab }: Props) {
             (syncReview > 0 ? ` ・ フロー見直し ${syncReview} 件` : "")
           : "未生成",
       done: project.sections.length > 0 && approved === project.sections.length && syncReview === 0,
+      current: currentTab === "manual",
     },
   ]
+
+  const currentStep = steps.find((s) => s.current)
 
   return (
     <div className="scroll-touch h-full overflow-y-auto">
@@ -91,57 +107,78 @@ export function OverviewTab({ project, setTab }: Props) {
           )}
         </section>
 
+        {currentStep && project.status !== "published" && (
+          <section className="mt-5 flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary-subtle/40 p-4 sm:flex-row sm:items-center sm:justify-between md:mt-6 md:p-5">
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold tracking-wide text-primary uppercase">
+                現在の工程
+              </div>
+              <div className="mt-1 text-base font-semibold">{currentStep.title}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{currentStep.stat}</div>
+            </div>
+            <Button className="shrink-0 gap-1.5" onClick={() => setTab(currentStep.tab)}>
+              この工程へ進む
+              <ArrowRight className="size-4" />
+            </Button>
+          </section>
+        )}
+
         <section className="mt-6 md:mt-8">
           <h2 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase md:mb-4">
             作成工程
           </h2>
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="flex flex-col gap-2">
             {steps.map((s) => (
-              <Card
+              <button
                 key={s.tab}
-                className={cn(
-                  "cursor-pointer gap-0 py-0 transition-colors hover:border-primary/40",
-                  s.done && "bg-muted/40",
-                )}
+                type="button"
                 onClick={() => setTab(s.tab)}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors sm:gap-4 sm:px-5",
+                  s.current
+                    ? "border-primary/40 bg-primary-subtle/30"
+                    : s.done
+                      ? "border-transparent bg-muted/30 hover:border-border"
+                      : "border-border/60 bg-card hover:border-primary/30",
+                )}
               >
-                <CardContent className="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5 sm:py-4">
-                  <div
-                    className={cn(
-                      "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                      s.done ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
+                <div
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                    s.current
+                      ? "bg-primary text-primary-foreground"
+                      : s.done
+                        ? "bg-primary/15 text-primary"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  <s.icon className="size-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold leading-snug">{s.title}</span>
+                    {s.current && (
+                      <Badge variant="secondary" className="h-5 text-[10px]">
+                        進行中
+                      </Badge>
                     )}
-                  >
-                    <s.icon className="size-4.5" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold leading-snug">{s.title}</div>
-                    <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1 text-primary sm:hidden" aria-hidden>
-                    <ArrowRight className="size-4" />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="hidden shrink-0 gap-1 text-primary sm:inline-flex"
-                    tabIndex={-1}
-                    aria-hidden
-                  >
-                    {s.done ? (
-                      <>
-                        <Eye className="size-3.5" />
-                        確認
-                      </>
-                    ) : (
-                      <>
-                        進む
-                        <ArrowRight className="size-3.5" />
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
+                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
+                </div>
+                <span className="flex shrink-0 items-center gap-1 text-sm text-primary">
+                  {s.done && !s.current ? (
+                    <>
+                      <Eye className="size-3.5" />
+                      <span className="hidden sm:inline">確認</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="hidden sm:inline">{s.current ? "続ける" : "開く"}</span>
+                      <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </span>
+              </button>
             ))}
           </div>
         </section>
