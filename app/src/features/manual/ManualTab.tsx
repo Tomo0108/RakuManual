@@ -66,6 +66,13 @@ function sectionAnchorId(sectionId: string) {
   return `manual-section-${sectionId}`
 }
 
+function mediumAnchorId(mediumKey: string) {
+  return `manual-medium-${mediumKey}`
+}
+
+/** sticky 目次バー分を見込んだスクロール余白 */
+const SCROLL_MARGIN_CLASS = "scroll-mt-16 md:scroll-mt-6"
+
 interface Props {
   project: Project
   updateProject: UpdateProject
@@ -85,6 +92,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const scrollToSection = (id: string) => {
     setActiveSectionId(id)
     document.getElementById(sectionAnchorId(id))?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  const scrollToMedium = (mediumKey: string, sectionId?: string) => {
+    if (sectionId) setActiveSectionId(sectionId)
+    document.getElementById(mediumAnchorId(mediumKey))?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
   const updateSection = (sectionId: string, updater: (s: ManualSection) => ManualSection) => {
@@ -240,7 +252,8 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           sections={sections}
           orphaned={orphaned}
           activeSectionId={activeSectionId}
-          onNavigate={scrollToSection}
+          onNavigateSection={scrollToSection}
+          onNavigateMedium={scrollToMedium}
         />
       )}
       {/* スクロール一体: 下へ進むと操作帯が退避し、上へ戻すと再表示 */}
@@ -253,7 +266,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             <SectionTocBar
               outline={outline}
               activeSectionId={activeSectionId}
-              onNavigate={scrollToSection}
+              onNavigateMedium={scrollToMedium}
             />
           )}
 
@@ -364,7 +377,10 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                 </header>
                 {major.mediums.map((medium) => (
                   <div key={medium.key} className="mb-8 flex flex-col gap-5 last:mb-0">
-                    <div className="flex items-baseline gap-2 border-b border-border/50 pb-2">
+                    <div
+                      id={mediumAnchorId(medium.key)}
+                      className={cn("flex items-baseline gap-2 border-b border-border/50 pb-2", SCROLL_MARGIN_CLASS)}
+                    >
                       <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-primary">
                         {medium.number}
                       </span>
@@ -374,11 +390,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                     </div>
                     <div className="flex flex-col gap-8">
                       {medium.sections.map((section) => (
-                        <article
-                          key={section.id}
-                          id={sectionAnchorId(section.id)}
-                          className="scroll-mt-4"
-                        >
+                        <article key={section.id}>
                           <SectionEditor
                             section={section}
                             project={project}
@@ -410,8 +422,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                   {orphaned.map((section) => (
                     <article
                       key={section.id}
-                      id={sectionAnchorId(section.id)}
-                      className="scroll-mt-4 rounded-lg border border-[var(--semantic-danger-border)]/60 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_25%,transparent)] p-3 md:p-4"
+                      className="rounded-lg border border-[var(--semantic-danger-border)]/60 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_25%,transparent)] p-3 md:p-4"
                     >
                       <SectionEditor
                         section={section}
@@ -462,13 +473,15 @@ function SectionTocPanel({
   sections,
   orphaned,
   activeSectionId,
-  onNavigate,
+  onNavigateSection,
+  onNavigateMedium,
 }: {
   outline: ReturnType<typeof buildManualOutline>
   sections: ManualSection[]
   orphaned: ManualSection[]
   activeSectionId: string | null
-  onNavigate: (id: string) => void
+  onNavigateSection: (id: string) => void
+  onNavigateMedium: (mediumKey: string, sectionId?: string) => void
 }) {
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/25">
@@ -496,7 +509,7 @@ function SectionTocPanel({
                   <div key={medium.key} className="flex flex-col gap-0.5">
                     <button
                       type="button"
-                      onClick={() => medium.sections[0] && onNavigate(medium.sections[0].id)}
+                      onClick={() => onNavigateMedium(medium.key, medium.sections[0]?.id)}
                       className={cn(
                         "w-full rounded-md border px-1.5 py-1.5 text-left transition-colors",
                         medium.sections.some((s) => s.id === activeSectionId)
@@ -519,7 +532,7 @@ function SectionTocPanel({
                           key={s.id}
                           section={s}
                           active={activeSectionId === s.id}
-                          onNavigate={() => onNavigate(s.id)}
+                          onNavigate={() => onNavigateSection(s.id)}
                         />
                       ))}
                   </div>
@@ -538,7 +551,7 @@ function SectionTocPanel({
                     key={s.id}
                     section={s}
                     active={activeSectionId === s.id}
-                    onNavigate={() => onNavigate(s.id)}
+                    onNavigate={() => onNavigateSection(s.id)}
                   />
                 ))}
               </div>
@@ -553,20 +566,19 @@ function SectionTocPanel({
 function SectionTocBar({
   outline,
   activeSectionId,
-  onNavigate,
+  onNavigateMedium,
 }: {
   outline: ReturnType<typeof buildManualOutline>
   activeSectionId: string | null
-  onNavigate: (id: string) => void
+  onNavigateMedium: (mediumKey: string, sectionId?: string) => void
 }) {
   const items = outline.flatMap((major) =>
-    major.mediums
-      .filter((medium) => medium.sections[0])
-      .map((medium) => ({
-        id: medium.sections[0]!.id,
-        number: medium.number,
-        title: medium.title,
-      })),
+    major.mediums.map((medium) => ({
+      key: medium.key,
+      sectionId: medium.sections[0]?.id,
+      number: medium.number,
+      title: medium.title,
+    })),
   )
 
   return (
@@ -574,13 +586,13 @@ function SectionTocBar({
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {items.map((item) => (
           <button
-            key={item.id}
+            key={item.key}
             type="button"
-            onClick={() => onNavigate(item.id)}
+            onClick={() => onNavigateMedium(item.key, item.sectionId)}
             title={item.title}
             className={cn(
               "shrink-0 rounded-full border px-2.5 py-1 font-mono text-[10px] font-semibold tabular-nums transition-colors",
-              activeSectionId === item.id
+              item.sectionId && activeSectionId === item.sectionId
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-muted/50 text-muted-foreground",
             )}
@@ -850,8 +862,11 @@ function SectionEditor({
           isMobile && !embedded && "scroll-touch overflow-y-auto pb-4",
         )}
       >
-        {/* ドキュメント見出し（操作ボタンを混ぜない） */}
-        <div className="min-w-0">
+        {/* ドキュメント見出し（目次ジャンプの着地点） */}
+        <div
+          id={sectionAnchorId(section.id)}
+          className={cn("min-w-0", SCROLL_MARGIN_CLASS)}
+        >
           <div className="flex items-start gap-3">
             {sectionNum && !embedded && (
               <span className="shrink-0 rounded-lg bg-primary/10 px-2.5 py-1 font-mono text-sm font-bold tabular-nums text-primary">
