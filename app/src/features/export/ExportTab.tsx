@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { Check, Download, FileText, Presentation } from "lucide-react"
+import { AlertTriangle, Check, Download, FileText, Presentation } from "lucide-react"
 import type { Project } from "@/lib/types"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
-import { SUCCESS_TEXT } from "@/lib/semantic-styles"
+import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
+import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -45,6 +46,10 @@ export function ExportTab({ project }: Props) {
   const targetSections =
     range === "all" ? sortedSections : sortedSections.filter((s) => s.id === range)
 
+  const syncReviewCount =
+    countManualReviewNeeded(project.sections) +
+    buildUnplacedCandidates(project.flow, project.sections).length
+
   const doExport = async () => {
     setExporting(true)
     setExported(false)
@@ -72,6 +77,13 @@ export function ExportTab({ project }: Props) {
         <p className="mt-1 text-sm text-muted-foreground">
           マニュアルを PDF / PowerPoint 形式で出力します。社内テンプレートの体裁が適用されます。
         </p>
+
+        {syncReviewCount > 0 && (
+          <div className={cn("mt-4 flex items-start gap-2 px-3 py-2.5 text-xs leading-relaxed", WARNING_BOX)}>
+            <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", WARNING_TEXT)} />
+            フローとの見直し候補が {syncReviewCount} 件残っています。出力前にマニュアルタブで確認することを推奨します。
+          </div>
+        )}
 
         {/* 形式 */}
         <div className="mt-6 grid grid-cols-2 gap-3">

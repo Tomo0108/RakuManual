@@ -152,6 +152,32 @@ export interface ManualBlock {
   image?: ManualImage
 }
 
+/** フロー構造との同期状態（SectionStatus とは独立） */
+export type ManualSyncStatus =
+  | "ok"
+  | "needs_review"
+  | "intentional_difference"
+  | "orphaned"
+  | "unplaced"
+
+export const MANUAL_SYNC_LABEL: Record<ManualSyncStatus, string> = {
+  ok: "同期済み",
+  needs_review: "要確認",
+  intentional_difference: "意図的差分",
+  orphaned: "廃止候補",
+  unplaced: "未配置",
+}
+
+/** 選択的再生成時の操作 */
+export type ManualRegenChoice = "keep" | "regenerate" | "archive"
+
+/** 生成／最終同期時のフロー側スナップショット */
+export interface ManualSourceSnapshot {
+  label: string
+  kind?: StepKind
+  sectionNumber?: string
+}
+
 export interface ManualSection {
   id: string
   title: string
@@ -167,6 +193,46 @@ export interface ManualSection {
   version: number
   updatedAt: string
   blocks: ManualBlock[]
+  /** フローとの対応状態。未設定は ok 扱い */
+  syncStatus?: ManualSyncStatus
+  /** 最終同期／生成時のフロー側スナップショット */
+  sourceSnapshot?: ManualSourceSnapshot
+}
+
+export type ManualRevisionReason =
+  | "generate"
+  | "edit"
+  | "approve"
+  | "regenerate"
+  | "restore"
+  | "flow_sync"
+  | "checkpoint"
+
+/** セクション1版分の不変スナップショット */
+export interface ManualSectionRevision {
+  id: string
+  sectionId: string
+  version: number
+  savedAt: string
+  savedBy: string
+  reason: ManualRevisionReason
+  title: string
+  sectionNumber?: string
+  majorTitle?: string
+  mediumTitle?: string
+  stepId?: string
+  status: SectionStatus
+  syncStatus?: ManualSyncStatus
+  blocks: ManualBlock[]
+}
+
+/** 選択的再生成など複数セクションをまとめて戻す点 */
+export interface ManualRestorePoint {
+  id: string
+  createdAt: string
+  createdBy: string
+  label: string
+  revisionIds: string[]
 }
 
 /* ---------- 変更履歴 ---------- */
@@ -191,4 +257,8 @@ export interface Project {
   deepdive: DeepDiveItem[]
   sections: ManualSection[]
   history: HistoryEntry[]
+  /** セクション版履歴（プロトは配列） */
+  sectionRevisions?: ManualSectionRevision[]
+  /** 一括復元ポイント */
+  restorePoints?: ManualRestorePoint[]
 }

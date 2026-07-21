@@ -34,6 +34,7 @@ import {
 import type { FlowNode, FlowEdge, FlowState, Project, ProjectTab, ColumnSystemEntry } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
+import { applyManualImpactStatuses, computeManualImpact } from "@/lib/manual-impact"
 import { WARNING_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -895,21 +896,35 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       const recheckCount = nextDeepdive.filter(
         (d) => d.status === "recheck" && known.get(d.stepId)?.status !== "recheck",
       ).length
+
+      const impact =
+        p.sections.length === 0 ? null : computeManualImpact(finalized, p.sections)
+      const nextSections =
+        impact === null
+          ? p.sections
+          : applyManualImpactStatuses(p.sections, impact, finalized, {
+              preserveIntentional: true,
+            })
+      const manualReviewCount = impact?.reviewCount ?? 0
+
+      const parts: string[] = []
+      if (recheckCount > 0) parts.push(`深掘り要確認 ${recheckCount} 件`)
+      if (manualReviewCount > 0) parts.push(`マニュアル見直し候補 ${manualReviewCount} 件`)
+
       return {
         ...p,
         flow: finalized,
         updatedAt: now().slice(0, 10),
         status: p.status === "flow" || p.status === "hearing" ? "deepdive" : p.status,
         deepdive: nextDeepdive,
+        sections: nextSections,
         history: [
           {
             id: `h-${Date.now()}`,
             date: now(),
             user: "山田 太郎",
             action:
-              recheckCount > 0
-                ? `フロー図を確定(変更の影響で ${recheckCount} 件の深掘り回答が要確認になりました)`
-                : "フロー図を確定",
+              parts.length > 0 ? `フロー図を確定(${parts.join("、")})` : "フロー図を確定",
           },
           ...p.history,
         ],

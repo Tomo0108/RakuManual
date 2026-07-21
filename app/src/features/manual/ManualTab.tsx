@@ -24,6 +24,14 @@ import {
   displaySectionTitle,
   resolveSectionNumber,
 } from "@/lib/manual-outline"
+import {
+  buildUnplacedCandidates,
+  clearManualReview,
+  markIntentionalDifference,
+  partitionSectionsBySync,
+} from "@/lib/manual-impact"
+import { placeUnplacedSection } from "@/lib/manual-regen"
+import { appendRevision, snapshotSection } from "@/lib/manual-version"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE, SEMANTIC } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +41,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { SyncStatusBadge } from "@/features/manual/SyncStatusBadge"
+import {
+  ManualImpactBanner,
+  sectionMatchesImpactFilter,
+  type ImpactFilter,
+} from "@/features/manual/ManualImpactBanner"
+import { ManualRegenWizard } from "@/features/manual/ManualRegenWizard"
+import { SectionHistoryButton } from "@/features/manual/SectionHistoryPanel"
 
 const SECTION_STYLE = {
   draft: REVIEW_STATUS.draft,
@@ -61,6 +77,8 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const majorTitle = resolveMajorTitle(project)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null)
   const [generating, setGenerating] = useState(false)
+  const [impactFilter, setImpactFilter] = useState<ImpactFilter>("all")
+  const [regenOpen, setRegenOpen] = useState(false)
   const documentRef = useRef<HTMLDivElement>(null)
 
   const scrollToSection = (id: string) => {
@@ -75,6 +93,10 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
     }))
   }
 
+  const replaceProject = (next: Project) => {
+    updateProject(project.id, () => next)
+  }
+
   /* セクション生成(モック): 深掘り回答からセクションを作る */
   const generateSections = () => {
     setGenerating(true)
@@ -85,6 +107,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
         const generated: ManualSection[] = p.deepdive.map((d) => {
           const sectionNum = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
           const majorNum = sectionNum?.split(".")[0]
+          const node = nodeMap.get(d.stepId)
           return {
             id: uid("s"),
             title: d.stepLabel,
@@ -92,9 +115,15 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             majorTitle: d.majorTitle ?? (majorNum === "1" ? businessName : undefined),
             mediumTitle: d.mediumTitle,
             stepId: d.stepId,
-            status: "draft",
+            status: "draft" as const,
             version: 1,
             updatedAt: today(),
+            syncStatus: "ok" as const,
+            sourceSnapshot: {
+              label: d.stepLabel,
+              kind: node?.data.kind,
+              sectionNumber: sectionNum,
+            },
             blocks:
               d.status === "done" || d.answers.length > 0
                 ? d.answers.map((qa, j) => ({
@@ -112,7 +141,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                   ],
           }
         })
-        return {
+        let next: Project = {
           ...p,
           status: p.status === "deepdive" ? "manual" : p.status,
           sections: generated,
@@ -121,6 +150,13 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             ...p.history,
           ],
         }
+        for (const section of generated) {
+          next = appendRevision(
+            next,
+            snapshotSection(section, { reason: "generate", user: "山田 太郎" }),
+          )
+        }
+        return next
       })
       setGenerating(false)
     }, 1100)
@@ -176,7 +212,18 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
     }))
   }
 
-  const outline = buildManualOutline(sections, { defaultMajorTitle: majorTitle })
+  const { placed, orphaned } = partitionSectionsBySync(sections)
+  const unplacedCandidates = buildUnplacedCandidates(project.flow, sections)
+  const filteredPlaced =
+    impactFilter === "all" || impactFilter === "unplaced"
+      ? placed
+      : placed.filter((s) => sectionMatchesImpactFilter(s, impactFilter))
+  const outline = buildManualOutline(
+    impactFilter === "orphaned" ? [] : filteredPlaced,
+    { defaultMajorTitle: majorTitle },
+  )
+  const showOrphans = impactFilter === "all" || impactFilter === "orphaned"
+  const showUnplaced = impactFilter === "all" || impactFilter === "unplaced"
 
   return (
     <div className="flex h-full">
@@ -184,6 +231,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
         <SectionTocPanel
           outline={outline}
           sections={sections}
+          orphaned={orphaned}
           activeSectionId={activeSectionId}
           onNavigate={scrollToSection}
         />
@@ -197,6 +245,74 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               onNavigate={scrollToSection}
             />
           )}
+
+          <ManualImpactBanner
+            sections={sections}
+            flow={project.flow}
+            filter={impactFilter}
+            onFilterChange={setImpactFilter}
+            onOpenRegen={() => setRegenOpen(true)}
+            isMobile={isMobile}
+          />
+
+          {showUnplaced && unplacedCandidates.length > 0 && (
+            <div className="mb-6 rounded-xl border border-dashed border-[var(--semantic-warning-border)] bg-[color-mix(in_oklch,var(--semantic-warning-bg)_50%,transparent)] p-3 md:p-4">
+              <h3 className="text-sm font-semibold">未配置の新規ステップ</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                フローに追加されたステップです。目次の末尾に空セクションとして追加できます。
+              </p>
+              <ul className="mt-3 flex flex-col gap-2">
+                {unplacedCandidates.map((c) => (
+                  <li
+                    key={c.stepId}
+                    className={cn(
+                      "flex gap-2 rounded-lg border bg-card px-3 py-2",
+                      isMobile ? "flex-col" : "items-center justify-between",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {c.sectionNumber && (
+                          <span className="font-mono text-[10px] font-bold text-primary">
+                            {c.sectionNumber}
+                          </span>
+                        )}
+                        <span className="text-sm font-medium">{c.label}</span>
+                        <SyncStatusBadge status="unplaced" />
+                      </div>
+                    </div>
+                    <Button
+                      size={isMobile ? "default" : "sm"}
+                      className={cn(isMobile && "h-10 w-full")}
+                      onClick={() => {
+                        updateProject(project.id, (p) => ({
+                          ...p,
+                          sections: placeUnplacedSection(
+                            p.sections,
+                            c,
+                            p.flow,
+                            p.sections[p.sections.length - 1]?.id ?? null,
+                          ),
+                          history: [
+                            {
+                              id: `h-${Date.now()}`,
+                              date: now(),
+                              user: "山田 太郎",
+                              action: `未配置ステップ「${c.label}」をマニュアルに追加`,
+                            },
+                            ...p.history,
+                          ],
+                        }))
+                      }}
+                    >
+                      末尾に追加
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {outline.map((major) => (
             <section key={major.key} className="mb-10 last:mb-4">
               <header className="mb-6 border-b pb-4">
@@ -233,9 +349,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                       >
                         <SectionEditor
                           section={section}
+                          project={project}
                           embedded
                           isMobile={isMobile}
                           onUpdate={(updater) => updateSection(section.id, updater)}
+                          onReplaceProject={replaceProject}
                           onLog={logAction}
                         />
                       </article>
@@ -245,8 +363,57 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               ))}
             </section>
           ))}
+
+          {showOrphans && orphaned.length > 0 && (
+            <section className="mb-8 rounded-xl border border-[var(--semantic-danger-border)] bg-[color-mix(in_oklch,var(--semantic-danger-bg)_40%,transparent)] p-3 md:p-4">
+              <h3 className="text-sm font-semibold">廃止候補（フローから削除されたステップ）</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                本文は残しています。意図的に残すか、反映ウィザードで廃止できます。
+              </p>
+              <div className="mt-4 flex flex-col gap-4">
+                {orphaned.map((section) => (
+                  <article
+                    key={section.id}
+                    id={sectionAnchorId(section.id)}
+                    className="scroll-mt-4 rounded-lg border bg-card p-3"
+                  >
+                    <SectionEditor
+                      section={section}
+                      project={project}
+                      embedded
+                      isMobile={isMobile}
+                      onUpdate={(updater) => updateSection(section.id, updater)}
+                      onReplaceProject={replaceProject}
+                      onLog={logAction}
+                    />
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </div>
+
+      <ManualRegenWizard
+        project={project}
+        open={regenOpen}
+        onOpenChange={setRegenOpen}
+        isMobile={isMobile}
+        onApply={(next) => {
+          replaceProject({
+            ...next,
+            history: [
+              {
+                id: `h-${Date.now()}`,
+                date: now(),
+                user: "山田 太郎",
+                action: "フロー変更をマニュアルに選択反映",
+              },
+              ...next.history,
+            ],
+          })
+        }}
+      />
     </div>
   )
 }
@@ -256,11 +423,13 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
 function SectionTocPanel({
   outline,
   sections,
+  orphaned,
   activeSectionId,
   onNavigate,
 }: {
   outline: ReturnType<typeof buildManualOutline>
   sections: ManualSection[]
+  orphaned: ManualSection[]
   activeSectionId: string | null
   onNavigate: (id: string) => void
 }) {
@@ -321,6 +490,23 @@ function SectionTocPanel({
               </div>
             </div>
           ))}
+          {orphaned.length > 0 && (
+            <div className="overflow-hidden rounded-lg border border-[var(--semantic-danger-border)] bg-card/80">
+              <div className="border-b bg-[color-mix(in_oklch,var(--semantic-danger-bg)_60%,transparent)] px-3 py-2">
+                <span className="text-[11px] font-semibold">廃止候補</span>
+              </div>
+              <div className="flex flex-col gap-1 p-2">
+                {orphaned.map((s) => (
+                  <TocItem
+                    key={s.id}
+                    section={s}
+                    active={activeSectionId === s.id}
+                    onNavigate={() => onNavigate(s.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </aside>
@@ -394,6 +580,7 @@ function TocItem({
       )}
     >
       <span className="shrink-0 font-mono text-[10px] font-bold tabular-nums text-primary">{num || "—"}</span>
+      <SyncStatusBadge status={section.syncStatus} />
       <Badge variant="outline" className={cn("ml-auto h-5 shrink-0 text-[9px]", SECTION_STYLE[section.status])}>
         {SECTION_LABEL[section.status]}
       </Badge>
@@ -408,13 +595,17 @@ function TocItem({
 
 function SectionEditor({
   section,
+  project,
   onUpdate,
+  onReplaceProject,
   onLog,
   isMobile,
   embedded,
 }: {
   section: ManualSection
+  project: Project
   onUpdate: (updater: (s: ManualSection) => ManualSection) => void
+  onReplaceProject: (next: Project) => void
   onLog: (action: string) => void
   isMobile?: boolean
   embedded?: boolean
@@ -425,6 +616,7 @@ function SectionEditor({
 
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
   const canApprove = confirms === 0 && section.status !== "approved"
+  const sync = section.syncStatus ?? "ok"
 
   const updateBlock = (blockId: string, updater: (b: ManualBlock) => ManualBlock) => {
     onUpdate((s) => ({
@@ -437,20 +629,46 @@ function SectionEditor({
   }
 
   const approve = () => {
-    onUpdate((s) => ({ ...s, status: "approved", version: s.version + 1, updatedAt: today() }))
+    onReplaceProject(
+      appendRevision(
+        {
+          ...project,
+          sections: project.sections.map((s) =>
+            s.id === section.id
+              ? { ...s, status: "approved", version: s.version + 1, updatedAt: today() }
+              : s,
+          ),
+        },
+        snapshotSection(
+          { ...section, status: "approved", version: section.version + 1, updatedAt: today() },
+          { reason: "approve", user: "山田 太郎" },
+        ),
+      ),
+    )
     onLog(`セクション「${section.title}」を承認(v${section.version + 1})`)
   }
 
   const regenerate = () => {
     setRegenerating(true)
     window.setTimeout(() => {
-      onUpdate((s) => ({
-        ...s,
-        status: "draft",
-        version: s.version + 1,
-        updatedAt: today(),
-        blocks: s.blocks.map((b) => ({ ...b })),
-      }))
+      const withSnapshot = appendRevision(
+        project,
+        snapshotSection(section, { reason: "regenerate", user: "山田 太郎" }),
+      )
+      onReplaceProject({
+        ...withSnapshot,
+        sections: withSnapshot.sections.map((s) =>
+          s.id === section.id
+            ? {
+                ...s,
+                status: "draft",
+                version: s.version + 1,
+                updatedAt: today(),
+                blocks: s.blocks.map((b) => ({ ...b })),
+              }
+            : s,
+        ),
+      })
       onLog(`セクション「${section.title}」をAIで部分再生成(他セクションへの影響なし)`)
       setRegenerating(false)
     }, 900)
@@ -460,8 +678,47 @@ function SectionEditor({
   const sectionNum = resolveSectionNumber(section)
   const sectionTitle = displaySectionTitle(section)
 
+  const syncActions =
+    sync === "needs_review" || sync === "orphaned" ? (
+      <div className={cn("flex gap-2", isMobile && "w-full flex-col")}>
+        {sync === "needs_review" && (
+          <Button
+            variant="outline"
+            size={isMobile ? "default" : "sm"}
+            className={cn(isMobile && "h-10 w-full")}
+            onClick={() => {
+              onUpdate((s) => clearManualReview(s, project.flow))
+              onLog(`セクション「${section.title}」の要確認を解除`)
+            }}
+          >
+            要確認を解除
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size={isMobile ? "default" : "sm"}
+          className={cn(isMobile && "h-10 w-full")}
+          onClick={() => {
+            onUpdate((s) => markIntentionalDifference(s))
+            onLog(`セクション「${section.title}」を意図的差分に設定`)
+          }}
+        >
+          意図的差分にする
+        </Button>
+      </div>
+    ) : null
+
   const actionButtons = (
     <>
+      <SectionHistoryButton
+        project={project}
+        sectionId={section.id}
+        isMobile={isMobile}
+        onRestore={(next) => {
+          onReplaceProject(next)
+          onLog(`セクション「${section.title}」を過去版から復元`)
+        }}
+      />
       <Button
         variant="outline"
         size={isMobile ? "default" : "sm"}
@@ -485,7 +742,15 @@ function SectionEditor({
   )
 
   const desktopActions = (
-    <div className="flex shrink-0 gap-2">
+    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+      <SectionHistoryButton
+        project={project}
+        sectionId={section.id}
+        onRestore={(next) => {
+          onReplaceProject(next)
+          onLog(`セクション「${section.title}」を過去版から復元`)
+        }}
+      />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
@@ -533,6 +798,7 @@ function SectionEditor({
                   <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
                     {SECTION_LABEL[section.status]}
                   </Badge>
+                  <SyncStatusBadge status={section.syncStatus} />
                   <span>v{section.version}</span>
                   <span>最終更新 {section.updatedAt}</span>
                 </div>
@@ -541,14 +807,30 @@ function SectionEditor({
           </div>
           {!isMobile && desktopActions}
           {isMobile && embedded && (
-            <div className="flex gap-2">{actionButtons}</div>
+            <div className="flex flex-wrap gap-2">{actionButtons}</div>
           )}
         </div>
+
+        {syncActions && <div className="mt-3">{syncActions}</div>}
 
         {confirms > 0 && (
           <div className={cn("mt-4 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、すべて解消すると承認できます。
+          </div>
+        )}
+
+        {sync === "needs_review" && (
+          <div className={cn("mt-3 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            対応するフローステップが変更されています。本文は保護中です。内容を見直すか、意図的差分として残してください。
+          </div>
+        )}
+
+        {sync === "orphaned" && (
+          <div className={cn("mt-3 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:px-4 md:text-[13px]", WARNING_BOX)}>
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            フロー上のステップが削除されています。このセクションは廃止候補です。
           </div>
         )}
 
