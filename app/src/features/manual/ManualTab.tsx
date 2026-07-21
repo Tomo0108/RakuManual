@@ -36,7 +36,6 @@ import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE, SEMANTIC } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -1162,28 +1161,29 @@ function BlockImageSection({
                 />
               ) : (
                 <div
-                  className="flex h-40 items-center justify-center text-xs text-muted-foreground"
+                  className="flex h-40 items-center justify-center px-3 text-center text-xs leading-relaxed text-muted-foreground"
                   style={{ background: image.color ?? "var(--muted)" }}
                 >
-                  <span className="rounded bg-white/70 px-3 py-1.5 dark:bg-black/40">
+                  <span className="max-w-full rounded bg-white/80 px-3 py-2 break-words dark:bg-black/40">
                     画像未添付（「画像を添付」から追加）
                   </span>
                 </div>
               )}
               <figcaption className="border-t bg-muted/30 px-3 py-2">
-                <Input
+                <Textarea
                   value={captionDraft}
                   onChange={(e) => setCaptionDraft(e.target.value)}
                   onBlur={onSaveCaption}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault()
                       onSaveCaption()
-                      ;(e.target as HTMLInputElement).blur()
+                      ;(e.target as HTMLTextAreaElement).blur()
                     }
                   }}
-                  placeholder="キャプション"
-                  className="h-8 border-0 bg-transparent px-0 text-[11px] shadow-none focus-visible:ring-0"
+                  placeholder="キャプション（画像の説明）"
+                  rows={2}
+                  className="min-h-[2.5rem] resize-y border-0 bg-transparent px-0 py-0 text-[12px] leading-relaxed shadow-none focus-visible:ring-0"
                 />
               </figcaption>
             </figure>

@@ -6,7 +6,10 @@ interface TabScrollContainerProps {
   className?: string
 }
 
-/** 横スクロールタブに左右フェードヒントを付与 */
+/**
+ * 横スクロール＋端フェード。
+ * 擬似要素の色重ねだとアクティブタブの塗りが濁るため、mask で端を透過させる。
+ */
 export function TabScrollContainer({ children, className }: TabScrollContainerProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -14,8 +17,11 @@ export function TabScrollContainer({ children, className }: TabScrollContainerPr
     const el = ref.current
     if (!el) return
     const { scrollLeft, scrollWidth, clientWidth } = el
-    el.style.setProperty("--scroll-fade-left", scrollLeft > 4 ? "1" : "0")
-    el.style.setProperty("--scroll-fade-right", scrollLeft + clientWidth < scrollWidth - 4 ? "1" : "0")
+    const canScroll = scrollWidth > clientWidth + 2
+    const fadeLeft = canScroll && scrollLeft > 4 ? "1.25rem" : "0px"
+    const fadeRight = canScroll && scrollLeft + clientWidth < scrollWidth - 4 ? "1.25rem" : "0px"
+    el.style.setProperty("--scroll-fade-left", fadeLeft)
+    el.style.setProperty("--scroll-fade-right", fadeRight)
   }, [])
 
   useEffect(() => {

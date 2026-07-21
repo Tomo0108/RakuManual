@@ -1093,40 +1093,6 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             </ToolButton>
           </div>
         </div>
-
-        <div
-          className={cn(
-            "flex items-center gap-2 border-t px-3 py-1.5 text-[11px] md:px-4",
-            isLocked
-              ? "bg-muted/40 text-muted-foreground"
-              : "bg-primary-subtle/50 text-primary",
-          )}
-        >
-          {isLocked ? (
-            <>
-              <Lock className="size-3 shrink-0" />
-              <span>
-                閲覧モード — キャンバス上の編集はロック中です。ロック解除でコネクタ追加・結線・NL修正が使えます。
-              </span>
-            </>
-          ) : (
-            <>
-              <LockOpen className="size-3 shrink-0" />
-              <span>
-                編集モード — ドラッグ、結線、コネクタ追加、自然言語修正が利用できます。
-              </span>
-            </>
-          )}
-          {validation.errorCount > 0 && (
-            <button
-              type="button"
-              className="ml-auto shrink-0 font-medium text-destructive underline-offset-2 hover:underline"
-              onClick={() => setErrorsPanelOpen(true)}
-            >
-              エラー {validation.errorCount} 件
-            </button>
-          )}
-        </div>
       </div>
 
       {/* キャンバス: コネクタ(左) + 担当チーム + フロー(中央) + 利用システム(下) */}
