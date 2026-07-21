@@ -1,4 +1,5 @@
-import { AlertTriangle, GitCompareArrows, ListFilter } from "lucide-react"
+import { useState } from "react"
+import { AlertTriangle, ChevronDown, GitCompareArrows, ListFilter } from "lucide-react"
 import type { ManualSection, ManualSyncStatus } from "@/lib/types"
 import {
   buildUnplacedCandidates,
@@ -27,6 +28,7 @@ export function ManualImpactBanner({
   onOpenRegen: () => void
   isMobile?: boolean
 }) {
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const impact = computeManualImpact(flow, sections)
   const unplaced = buildUnplacedCandidates(flow, sections)
   const reviewCount = countManualReviewNeeded(sections) + unplaced.length
@@ -49,6 +51,8 @@ export function ManualImpactBanner({
     { id: "unplaced", label: "未配置" },
   ]
 
+  const filterActive = filter !== "all"
+
   return (
     <div className={cn("mb-4 px-3 py-3 md:px-4", WARNING_BOX)}>
       <div className={cn("flex gap-3", isMobile ? "flex-col" : "items-start justify-between")}>
@@ -69,33 +73,54 @@ export function ManualImpactBanner({
             </p>
           </div>
         </div>
-        <Button
-          size={isMobile ? "default" : "sm"}
-          className={cn("gap-1.5 shrink-0", isMobile && "h-10 w-full")}
-          onClick={onOpenRegen}
-        >
-          <GitCompareArrows className="size-4" />
-          フロー変更を反映…
-        </Button>
-      </div>
-      <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-        <ListFilter className="size-3.5 shrink-0 text-muted-foreground" />
-        {filters.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => onFilterChange(f.id)}
-            className={cn(
-              "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors",
-              filter === f.id
-                ? "border-primary/50 bg-primary-subtle text-foreground"
-                : "border-transparent bg-background/80 text-muted-foreground hover:bg-muted/50",
-            )}
+        <div className={cn("flex shrink-0 gap-2", isMobile && "w-full flex-col")}>
+          <Button
+            size={isMobile ? "default" : "sm"}
+            className={cn("gap-1.5", isMobile && "h-10 w-full")}
+            onClick={onOpenRegen}
           >
-            {f.label}
-          </button>
-        ))}
+            <GitCompareArrows className="size-4" />
+            フロー変更を反映…
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size={isMobile ? "default" : "sm"}
+            className={cn("gap-1.5", isMobile && "h-10 w-full")}
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+          >
+            <ListFilter className="size-3.5" />
+            絞り込み
+            {filterActive && (
+              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                適用中
+              </span>
+            )}
+            <ChevronDown className={cn("size-3.5 transition-transform", filtersOpen && "rotate-180")} />
+          </Button>
+        </div>
       </div>
+
+      {(filtersOpen || filterActive) && (
+        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto border-t border-[var(--semantic-warning-border)]/40 pt-3 pb-0.5">
+          {filters.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => onFilterChange(f.id)}
+              className={cn(
+                "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                filter === f.id
+                  ? "border-primary/50 bg-primary-subtle text-foreground"
+                  : "border-transparent bg-background/80 text-muted-foreground hover:bg-muted/50",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
