@@ -226,10 +226,10 @@ function StepListPanel({
               key={item.stepId}
               onClick={() => onSelect(item.stepId)}
               className={cn(
-                "min-h-14 rounded-md border bg-background px-3 py-3 text-left transition-colors md:min-h-0 md:py-2.5",
+                "min-h-14 rounded-md border border-transparent px-3 py-3 text-left transition-colors md:min-h-0 md:py-2.5",
                 selectedId === item.stepId
-                  ? "border-primary bg-primary-subtle ring-2 ring-primary/20"
-                  : "hover:border-primary/30 active:bg-muted/50",
+                  ? "border-border/80 bg-muted/50"
+                  : "hover:bg-muted/30 active:bg-muted/40",
               )}
             >
               <div className="flex items-center gap-2">
