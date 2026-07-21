@@ -58,13 +58,14 @@ FlowNode.id  ──stepId──►  DeepDiveItem
 
 | 禁止 | 理由 |
 | --- | --- |
-| `confirmFlow` で `blocks` / `title` を自動書き換え | 承認・手編集の破壊 |
-| `generateSections` の暗黙再実行 | 全置換で P6 悪化 |
+| `confirmFlow` で `blocks` / `title` を自動書き換え | 承認・手編集の破壊。再生成は明示ウィザード経由 |
+| 保持選択なしの一括再生成 | P6 / P8。残したい箇所を潰す |
 | `sectionNumber` を同期キーにする | 人間向け表示。キーは `stepId` |
 | 既存項番の強制振り直し | 参照・レビューが壊れる |
 | ハードロック（マニュアル中はフロー編集不可） | 要件の「タブ間自由往来」と衝突 |
-| イベントソーシング／差分マージエンジン | プロトタイプ過剰 |
+| イベントソーシング全面導入 | プロトタイプ過剰。版はリビジョン表で足りる |
 | DeepDive 削除時の回答保持（本フェーズ） | 別課題。マニュアル保護を先行 |
+| キー入力ごとの自動版保存 | 版ノイズ。意味のある区切りのみ保存 |
 
 ---
 
@@ -293,15 +294,184 @@ syncStatus: "ok",
 2. orphan はエクスポート対象から外すか、外す前に警告（B では目次分離まで。Export ゲートは Phase C）
 3. 再紐づけ後は `syncStatus: needs_review` または `ok`（ラベル一致時）
 
-### Phase C — 提案型更新・下流ゲート
+### Phase C — 選択的再生成（保持選択）※ユーザー追加要件
 
-| ID | タスク | 備考 |
+**前提:** Phase D-min（版の保存／復元 API）が先にあること。適用前に必ずスナップショットする。
+
+| ID | タスク | ファイル |
 | --- | --- | --- |
-| C1 | 部分再生成を「草案パネル」に変更（既存横並び） | 現行 `regenerate` の置き換え |
-| C2 | `approved` は草案適用前に承認解除を要求 | SectionEditor |
-| C3 | deepdive `recheck` ↔ section `needs_review` 相互リンク | DeepDiveTab / ManualTab |
-| C4 | Export 前に orphan / needs_review 警告 | `ExportTab.tsx` |
-| C5 | Overview に見直し候補件数 | `OverviewTab.tsx` |
+| C0 | `ManualRegenChoice = keep \| regenerate \| archive` | `types.ts` |
+| C1 | `buildRegenPlan(impact, sections)` — 既定選択の算出 | `manual-impact.ts` または **新規** `manual-regen.ts` |
+| C2 | 反映ウィザード UI（チェック／ラジオ一覧） | **新規** `features/manual/ManualRegenWizard.tsx` |
+| C3 | `keep` は本文・画像・status を一切触らない | `manual-regen.ts` |
+| C4 | `regenerate` は草案生成→差分表示→適用（承認済みは解除確認） | ManualTab / SectionEditor |
+| C5 | 新規 step（added）は「追加して生成」チェック | ウィザード |
+| C6 | orphan は `archive`（目次外）または `keep`（意図的残存） | ウィザード |
+| C7 | 適用時: 対象セクションを版保存 → 本文更新 → `syncStatus` 更新 | `manual-version.ts` + regen |
+| C8 | Export / Overview 警告 | ExportTab / OverviewTab |
+
+#### ウィザード UX（必須フロー）
+
+```text
+[フロー変更をマニュアルに反映]
+  → 一覧:
+      ☑ 1.1 申請受付     [残す ●] [再生成 ○]     ← 承認済みなら既定「残す」
+      ☑ 1.2 内容確認     [残す ○] [再生成 ●]     ← needs_review なら既定「再生成」
+      ＋ 1.5 新規ステップ [追加して生成 ●]
+      ⚠ 旧 2.1 紙回付   [廃止 ●] [残す ○]
+  → 要約: 「3件を残す / 2件を再生成 / 1件を追加 / 1件を廃止」
+  → [草案を生成] → 再生成対象だけ草案レビュー → [適用]
+  → 適用前に自動で版・復元ポイント作成
+```
+
+#### 既定選択ルール
+
+| 条件 | 既定 |
+| --- | --- |
+| `status === approved` | `keep` |
+| ユーザーが blocks を編集済み（簡易: version>1 または flag） | `keep` |
+| `syncStatus === needs_review` | `regenerate` |
+| `syncStatus === orphaned` | `archive` |
+| flow にのみ存在（未配置） | `regenerate`（新規セクション作成） |
+| `intentional_difference` | `keep` |
+
+ユーザーは一覧でいつでも上書きできる。**既定を keep 寄りにする**のが安全。
+
+**受け入れ条件**
+
+1. ウィザードを経ない一括上書き導線がない
+2. `keep` 指定セクションの blocks / images / version 本文が適用後もビット一致
+3. 適用後にワンクリックで復元ポイントへ戻れる（D 連携）
+4. 承認済みを `regenerate` にした場合、適用前に確認ダイアログが出る
+
+### Phase D — マニュアル版管理・復元 ※ユーザー追加要件
+
+要件 F-6「版管理」「差分・復元」に対応。現行の `ManualSection.version`（カウンタ）と `Project.history`（操作ログ）では **中身を戻せない**。
+
+#### 現状との差分
+
+| 現行 | 不足 |
+| --- | --- |
+| `section.version: number` | 中身のスナップショットがない |
+| `Project.history: HistoryEntry[]` | 文言ログのみ。復元不可 |
+| フローの Undo | メモリ上・フロー専用。マニュアル非連動 |
+
+#### データモデル（`types.ts`）
+
+```ts
+export type ManualRevisionReason =
+  | "generate"
+  | "edit"
+  | "approve"
+  | "regenerate"
+  | "restore"
+  | "flow_sync"
+  | "checkpoint"
+
+/** セクション1版分の不変スナップショット */
+export interface ManualSectionRevision {
+  id: string
+  sectionId: string
+  version: number
+  savedAt: string
+  savedBy: string
+  reason: ManualRevisionReason
+  title: string
+  sectionNumber?: string
+  majorTitle?: string
+  mediumTitle?: string
+  stepId?: string
+  status: SectionStatus
+  syncStatus?: ManualSyncStatus
+  blocks: ManualBlock[] // 画像メタ含む。実体URLは参照のまま可
+}
+
+/** 選択的再生成など複数セクションをまとめて戻す点 */
+export interface ManualRestorePoint {
+  id: string
+  createdAt: string
+  createdBy: string
+  label: string // 例: 「フロー反映 2026-07-21 11:00」
+  revisionIds: string[] // 当時保存した ManualSectionRevision.id
+}
+
+export interface Project {
+  // …既存…
+  sectionRevisions?: ManualSectionRevision[] // プロトは配列で十分
+  restorePoints?: ManualRestorePoint[]
+}
+```
+
+#### 新規モジュール `app/src/lib/manual-version.ts`
+
+```ts
+export function snapshotSection(
+  section: ManualSection,
+  meta: { reason: ManualRevisionReason; user: string },
+): ManualSectionRevision
+
+export function appendRevision(
+  project: Project,
+  revision: ManualSectionRevision,
+  options?: { maxPerSection?: number }, // 例: 直近20
+): Project
+
+export function createRestorePoint(
+  project: Project,
+  sectionIds: string[],
+  label: string,
+  user: string,
+): Project
+
+export function restoreSection(
+  project: Project,
+  sectionId: string,
+  revisionId: string,
+  user: string,
+): Project // 復元前に現行を snapshot(reason: restore) してから差し替え
+
+export function restorePoint(
+  project: Project,
+  restorePointId: string,
+  user: string,
+): Project
+```
+
+#### UI タスク
+
+| ID | タスク | ファイル |
+| --- | --- | --- |
+| D0 | 上記型を `Project` に追加 | `types.ts` |
+| D1 | `manual-version.ts` + 単体テスト | **新規** |
+| D2 | セクションヘッダ「履歴」パネル（版一覧・復元） | ManualTab / SectionEditor |
+| D3 | 簡易差分（ブロック text の前後比較で十分） | `manual-version.ts` または UI 内 |
+| D4 | 復元ポイント一覧（マニュアルタブまたは Overview） | ManualTab / OverviewTab |
+| D5 | 自動スナップショット契機の配線 | 承認・再生成適用・明示「版を保存」・ウィザード適用前 |
+| D6 | モックに数版分の履歴を持たせる | `mock-data.ts` |
+
+#### 自動保存する契機（これ以外は保存しない）
+
+1. 初回 `generateSections`
+2. セクション承認
+3. 選択的再生成の **適用直前**（必須）
+4. 復元の直前（復元前の現行を残す）
+5. ユーザー明示の「版を保存」
+6. （任意）承認済みセクションの手編集開始時に1回
+
+**受け入れ条件**
+
+1. 再生成適用後、履歴から1つ前の本文にワンクリック復元できる
+2. 復元後も「復元前」が履歴に残り、再々復元できる
+3. 復元ポイント適用で、ウィザードで触った複数セクションがまとめて戻る
+4. `Project.history` には従来どおり操作ログも残す（監査用。復元の正は revisions）
+
+### Phase E — 将来
+
+| 候補 | 着手条件 |
+| --- | --- |
+| 公開版ピン留めと閲覧者向け固定 | 永続化・公開フロー本格化時 |
+| フロー版とマニュアル版の紐づけ | 監査要件が明確になったとき |
+| 分割・統合の自動差分エンジン | 手作業がボトルネックと実証されたとき |
 
 ---
 
@@ -312,28 +482,43 @@ syncStatus: "ok",
 2. confirmFlow フック + generateSections の snapshot
 3. ManualTab バナー／バッジ／アクション
 4. mock-data ドリフトシナリオ
-── ここで Phase A 完了・検証 ──
+── Phase A 完了 ──
 5. unplaced / orphan UI + outline 分離
 6. 確定サマリー Dialog
-── Phase B ──
-7. 草案パネル・Export/Overview ゲート
+── Phase B 完了 ──
+7. types: ManualSectionRevision / RestorePoint + manual-version.ts
+8. セクション履歴パネル（一覧・復元）※ D-min
+── 再生成の受け皿完了 ──
+9. ManualRegenWizard（保持／再生成／廃止の選択）
+10. 草案生成→適用（適用前に必ず snapshot + restore point）
+11. Export / Overview ゲート
+── Phase C + D 完了 ──
 ```
 
-各コミットで「本文が自動変更されていないこと」を手動またはテストで確認する。
+**重要:** ステップ 9–10 の前に 7–8 を入れる。戻せる状態でなければ再生成 UI を出さない。
 
 ---
 
 ## 9. テスト観点
 
+### Phase A
+
 | ケース | 期待 |
 | --- | --- |
 | sections=[], confirm | sections 空のまま、deepdive のみ更新 |
-| 全 step 一致 | 全 `ok`、reviewCount=0 |
-| step 追加 | addedStepIds に含まれる。既存 section の blocks 同一 |
-| step 削除 | 該当 section → orphaned。配列から消えない |
-| label 変更 | needs_review。title 不変 |
+| step 追加 / 削除 / ラベル変更 | 本文不変 + 適切な syncStatus / added 検知 |
 | intentional → 再 confirm | intentional 維持 |
-| snapshot 無しの旧データ | label 比較は section.title vs flow.label にフォールバック可 |
+
+### Phase C / D
+
+| ケース | 期待 |
+| --- | --- |
+| 全セクション keep で適用 | sections 本文不変。revision はチェックポイントのみ増えても可 |
+| 1件だけ regenerate | 他セクション blocks 不変。対象は新版。旧版が revisions に残る |
+| 承認済みを regenerate | 確認ダイアログ必須。適用後 status は draft/review |
+| 復元 | 指定 revision の title/blocks が復元。復元前が新 revision として残る |
+| 復元ポイント | 複数 sectionId が一括で適用前の内容に戻る |
+| maxPerSection | 古い revision が刈り込まれても最新 N 件は残る |
 
 ---
 
@@ -344,7 +529,9 @@ syncStatus: "ok",
 | バッジだらけ | reviewCount に orphan + label 変更を優先。number のみは Phase A では情報弱めでも可 |
 | confirm のたびに snapshot が動いて「永遠に ok」 | label 不一致時は snapshot を「検知用の旧値」として残し、解除操作時に更新 |
 | deepdive 削除で回答消失との非対称 | UI コピーで「深掘り項目は削除されました。マニュアルは廃止候補として残しています」と明示（Phase B） |
-| `generateSections` 全置換の残存 | Phase A では触らない。将来「差分マージ生成」は別 Issue |
+| `generateSections` 全置換の残存 | 初回のみ許可。2回目以降はウィザード必須に誘導 |
+| 版データの肥大（画像 data URL） | プロトは許容。本番は画像は ID 参照・本文のみスナップショット |
+| 「残す」を忘れて全部再生成 | 既定 keep 寄り + 適用前サマリーで保持件数を再確認 |
 
 ---
 
@@ -354,9 +541,9 @@ syncStatus: "ok",
 | --- | --- | --- |
 | A | 新規1モジュール + types + confirm 数行 + ManualTab UI | 低 |
 | B | outline 拡張 + トレイ UI + 確定 Dialog | 中 |
-| C | 編集 UX・Export・DeepDive 連携 | 中 |
-
-プロトタイプとして **Phase A だけで課題の大半（「何がズレたか分からない」）に効く**。構造の欠落／残骸（P1/P2）の安全な解消は Phase B。
+| D-min | 版型 + version lib + 履歴パネル | 中 |
+| C | ウィザード + 草案適用 + D 連携 | 中〜高 |
+| D 完成 | 差分 UI・復元ポイント一覧 | 中 |
 
 ---
 
@@ -364,7 +551,9 @@ syncStatus: "ok",
 
 | 問い | 答え |
 | --- | --- |
-| どこを変えるか | 主に `confirmFlow` の出口と `ManualTab` の表示。ロジックは `lib/manual-impact.ts` |
-| 何を変えないか | マニュアル本文、項番の強制再採番、deepdive 規則、全再生成 |
+| どこを変えるか | `confirmFlow` 出口（検知）、ManualTab（可視化→ウィザード）、`manual-version`（復元） |
+| 後からマニュアルも更新したいとき | **保持選択付きウィザード**で keep / regenerate / archive を選んでから適用 |
+| 戻したいとき | セクション版履歴、または再生成適用時の復元ポイント |
+| 何を変えないか | 確定時の本文自動上書き、保持確認なしの一括再生成、項番強制再採番 |
 | 最初の PR | A0〜A5（検知と見える化） |
-| 設計の一貫性 | deepdive の `recheck` 思想をマニュアルの `syncStatus` に横展開する |
+| 再生成 PR の前提 | D-min（snapshot / restore）が先 |
