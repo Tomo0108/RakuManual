@@ -34,7 +34,7 @@ import {
 import { placeUnplacedSection } from "@/lib/manual-regen"
 import { appendRevision, snapshotSection } from "@/lib/manual-version"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
-import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE, SEMANTIC } from "@/lib/semantic-styles"
+import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -71,6 +71,12 @@ function mediumAnchorId(mediumKey: string) {
 
 /** sticky 目次バー分を見込んだスクロール余白 */
 const SCROLL_MARGIN_CLASS = "scroll-mt-16 md:scroll-mt-6"
+
+/** アプリUI（操作・メタ）— マニュアル本文と区別するクローム */
+const APP_CHROME =
+  "rounded-lg border border-border/70 bg-muted/40 text-muted-foreground shadow-none"
+const APP_CHROME_LABEL =
+  "inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
 
 interface Props {
   project: Project
@@ -349,83 +355,98 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             </div>
           )}
 
-          {/* 読み面: Notion / GitBook 系のドキュメント紙面 */}
-          <div className="rounded-2xl border border-border/40 bg-card px-5 py-8 shadow-sm md:px-12 md:py-12">
-            {outline.map((major) => (
-              <section key={major.key} className="mb-14 last:mb-0">
-                <header className="mb-10">
-                  <p className="font-mono text-[13px] font-semibold tracking-wide text-primary">
-                    {major.number}
-                  </p>
-                  <h1 className="mt-1.5 text-[1.75rem] font-bold leading-tight tracking-tight text-foreground md:text-[2rem]">
-                    {major.title ?? majorTitle}
-                  </h1>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {sections.filter((s) => s.status === "approved").length} / {sections.length}{" "}
-                    セクション承認済み
-                  </p>
-                </header>
-                {major.mediums.map((medium) => (
-                  <div key={medium.key} className="mb-12 flex flex-col gap-6 last:mb-0">
-                    <div
-                      id={mediumAnchorId(medium.key)}
-                      className={cn("group/medium", SCROLL_MARGIN_CLASS)}
-                    >
-                      <h2 className="text-xl font-semibold leading-snug tracking-tight text-foreground md:text-[1.35rem]">
-                        <span className="mr-2.5 font-mono text-[0.95em] font-semibold text-muted-foreground">
-                          {medium.number}
-                        </span>
-                        {medium.title ?? "—"}
-                      </h2>
-                      <div className="mt-3 h-px bg-border/70" />
-                    </div>
-                    <div className="flex flex-col gap-10">
-                      {medium.sections.map((section) => (
-                        <article key={section.id} className="min-w-0">
-                          <SectionEditor
-                            section={section}
-                            project={project}
-                            embedded
-                            isMobile={isMobile}
-                            onUpdate={(updater) => updateSection(section.id, updater)}
-                            onReplaceProject={replaceProject}
-                            onLog={logAction}
-                          />
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </section>
-            ))}
+          {/* 読み面: マニュアル本文のみを紙面に。アプリUIは帯で分離 */}
+          <div className="overflow-hidden rounded-2xl border border-border/40 bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-muted/45 px-4 py-2.5 text-muted-foreground md:px-8">
+              <span className={APP_CHROME_LABEL}>
+                <Wrench className="size-3" aria-hidden />
+                編集画面
+              </span>
+              <span className="text-[11px]">
+                承認 {sections.filter((s) => s.status === "approved").length} / {sections.length}
+              </span>
+            </div>
 
-            {showOrphans && orphaned.length > 0 && (
-              <section className="mt-12 border-t border-[var(--semantic-danger-border)]/70 pt-8">
-                <p className="text-xs font-medium text-muted-foreground">廃止候補</p>
-                <h3 className="mt-1 text-base font-semibold">フローから削除されたステップ</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  本文は残しています。フローと不一致のまま残すか、反映ウィザードで廃止できます。
-                </p>
-                <div className="mt-5 flex flex-col gap-8">
-                  {orphaned.map((section) => (
-                    <article
-                      key={section.id}
-                      className="rounded-xl border border-[var(--semantic-danger-border)]/50 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_20%,transparent)] px-4 py-4 md:px-5"
-                    >
-                      <SectionEditor
-                        section={section}
-                        project={project}
-                        embedded
-                        isMobile={isMobile}
-                        onUpdate={(updater) => updateSection(section.id, updater)}
-                        onReplaceProject={replaceProject}
-                        onLog={logAction}
-                      />
-                    </article>
+            <div className="px-5 py-8 md:px-12 md:py-12">
+              {outline.map((major) => (
+                <section key={major.key} className="mb-14 last:mb-0">
+                  <header className="mb-10">
+                    <p className="font-mono text-[13px] font-semibold tracking-wide text-primary">
+                      {major.number}
+                    </p>
+                    <h1 className="mt-1.5 text-[1.75rem] font-bold leading-tight tracking-tight text-foreground md:text-[2rem]">
+                      {major.title ?? majorTitle}
+                    </h1>
+                  </header>
+                  {major.mediums.map((medium) => (
+                    <div key={medium.key} className="mb-12 flex flex-col gap-6 last:mb-0">
+                      <div
+                        id={mediumAnchorId(medium.key)}
+                        className={cn("group/medium", SCROLL_MARGIN_CLASS)}
+                      >
+                        <h2 className="text-xl font-semibold leading-snug tracking-tight text-foreground md:text-[1.35rem]">
+                          <span className="mr-2.5 font-mono text-[0.95em] font-semibold text-muted-foreground">
+                            {medium.number}
+                          </span>
+                          {medium.title ?? "—"}
+                        </h2>
+                        <div className="mt-3 h-px bg-border/70" />
+                      </div>
+                      <div className="flex flex-col gap-10">
+                        {medium.sections.map((section) => (
+                          <article key={section.id} className="min-w-0">
+                            <SectionEditor
+                              section={section}
+                              project={project}
+                              embedded
+                              isMobile={isMobile}
+                              onUpdate={(updater) => updateSection(section.id, updater)}
+                              onReplaceProject={replaceProject}
+                              onLog={logAction}
+                            />
+                          </article>
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </div>
-              </section>
-            )}
+                </section>
+              ))}
+
+              {showOrphans && orphaned.length > 0 && (
+                <section className="mt-12 border-t border-border/60 pt-8">
+                  <div className={cn("mb-4 px-3 py-2.5", APP_CHROME)}>
+                    <p className={APP_CHROME_LABEL}>
+                      <Wrench className="size-3" aria-hidden />
+                      アプリ操作 · 廃止候補
+                    </p>
+                    <h3 className="mt-1 text-sm font-semibold text-foreground">
+                      フローから削除されたステップ
+                    </h3>
+                    <p className="mt-0.5 text-xs">
+                      本文は残しています。フローと不一致のまま残すか、反映ウィザードで廃止できます。
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-8">
+                    {orphaned.map((section) => (
+                      <article
+                        key={section.id}
+                        className="rounded-xl border border-[var(--semantic-danger-border)]/50 bg-[color-mix(in_oklch,var(--semantic-danger-bg)_20%,transparent)] px-4 py-4 md:px-5"
+                      >
+                        <SectionEditor
+                          section={section}
+                          project={project}
+                          embedded
+                          isMobile={isMobile}
+                          onUpdate={(updater) => updateSection(section.id, updater)}
+                          onReplaceProject={replaceProject}
+                          onLog={logAction}
+                        />
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -717,12 +738,14 @@ function SectionEditor({
 
   const syncActions =
     sync === "needs_review" || sync === "orphaned" ? (
-      <details className="rounded-lg border border-border/60 bg-muted/30 open:bg-muted/40">
+      <details className={cn(APP_CHROME, "open:bg-muted/55")}>
         <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5">
               <Workflow className="size-3.5 text-muted-foreground" />
-              フロー同期
+              <span className={APP_CHROME_LABEL}>アプリ操作</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-foreground">フロー同期</span>
               <SyncStatusBadge status={section.syncStatus} />
             </span>
             <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -759,10 +782,7 @@ function SectionEditor({
 
   const actionToolbar = (
     <div
-      className={cn(
-        "flex gap-1.5",
-        isMobile ? "flex-wrap" : "flex-wrap items-center justify-end",
-      )}
+      className={cn("flex gap-1.5", isMobile ? "flex-wrap" : "flex-wrap items-center")}
       role="toolbar"
       aria-label="セクション操作"
     >
@@ -778,7 +798,7 @@ function SectionEditor({
       {isMobile ? (
         <>
           <Button
-            variant="ghost"
+            variant="outline"
             size="default"
             className="h-10 flex-1 gap-1"
             onClick={regenerate}
@@ -801,7 +821,7 @@ function SectionEditor({
         <>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" onClick={regenerate} disabled={regenerating}>
+              <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
                 <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
                 {regenerating ? "再生成中…" : "AI再生成"}
               </Button>
@@ -811,7 +831,7 @@ function SectionEditor({
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
-                <Button size="sm" variant={canApprove ? "default" : "ghost"} className="gap-1" disabled={!canApprove} onClick={approve}>
+                <Button size="sm" className="gap-1" disabled={!canApprove} onClick={approve}>
                   <BadgeCheck className="size-4" />
                   {section.status === "approved" ? "承認済み" : "承認する"}
                 </Button>
@@ -837,75 +857,85 @@ function SectionEditor({
           isMobile && !embedded && "scroll-touch overflow-y-auto pb-4",
         )}
       >
-        {/* ドキュメント見出し + 操作（読み物レイアウト優先） */}
+        {/* ① マニュアル本文の見出し */}
         <div
           id={sectionAnchorId(section.id)}
           className={cn("min-w-0", SCROLL_MARGIN_CLASS)}
         >
-          <div className={cn("flex gap-3", isMobile ? "flex-col" : "items-start justify-between")}>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start gap-2.5">
-                {sectionNum && !embedded && (
-                  <span className="mt-1 shrink-0 font-mono text-sm font-semibold tabular-nums text-muted-foreground">
-                    {sectionNum}
-                  </span>
-                )}
-                <div className="min-w-0">
-                  {embedded ? (
-                    <h3 className="text-[1.05rem] font-semibold leading-snug tracking-tight text-foreground md:text-lg">
-                      {sectionTitle}
-                    </h3>
-                  ) : (
-                    <h2 className="text-xl font-bold tracking-tight md:text-2xl">{sectionTitle}</h2>
-                  )}
-                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                    <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
-                      {SECTION_LABEL[section.status]}
-                    </Badge>
-                    {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
-                    <span>v{section.version}</span>
-                    <span>·</span>
-                    <span>{section.updatedAt}</span>
-                  </div>
-                </div>
-              </div>
+          <div className="flex items-start gap-2.5">
+            {sectionNum && !embedded && (
+              <span className="mt-1 shrink-0 font-mono text-sm font-semibold tabular-nums text-muted-foreground">
+                {sectionNum}
+              </span>
+            )}
+            <div className="min-w-0">
+              {embedded ? (
+                <h3 className="text-[1.05rem] font-semibold leading-snug tracking-tight text-foreground md:text-lg">
+                  {sectionTitle}
+                </h3>
+              ) : (
+                <h2 className="text-xl font-bold tracking-tight md:text-2xl">{sectionTitle}</h2>
+              )}
             </div>
-            {!isMobile && <div className="shrink-0 pt-0.5">{actionToolbar}</div>}
-            {isMobile && embedded && <div className="w-full">{actionToolbar}</div>}
           </div>
         </div>
 
-        {isMobile && !embedded
-          ? syncActions
-            ? <div className="mt-3">{syncActions}</div>
-            : null
-          : syncActions
-            ? <div className="mt-3">{syncActions}</div>
-            : null}
+        {/* ② アプリUI（メタ・操作）— 本文とは別レイヤ */}
+        {!(isMobile && !embedded) && (
+          <div className={cn("mt-3 px-3 py-2.5", APP_CHROME)}>
+            <div className={cn("flex gap-2", isMobile ? "flex-col" : "items-center justify-between")}>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                <span className={APP_CHROME_LABEL}>
+                  <Wrench className="size-3" aria-hidden />
+                  アプリ操作
+                </span>
+                <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
+                  {SECTION_LABEL[section.status]}
+                </Badge>
+                {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
+                <span>v{section.version}</span>
+                <span>·</span>
+                <span>{section.updatedAt}</span>
+              </div>
+              {actionToolbar}
+            </div>
+          </div>
+        )}
+
+        {syncActions ? <div className="mt-2">{syncActions}</div> : null}
 
         {confirms > 0 && (
-          <div className={cn("mt-3 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
+          <div className={cn("mt-2 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、すべて解消すると承認できます。
+            <span>
+              <span className="font-medium">アプリからの案内: </span>
+              AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、すべて解消すると承認できます。
+            </span>
           </div>
         )}
 
         {sync === "needs_review" && (
-          <div className={cn("mt-3 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
+          <div className={cn("mt-2 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            対応するフローステップが変更されています。本文は保護中です。内容を見直すか、フローと不一致のまま残してください。
+            <span>
+              <span className="font-medium">アプリからの案内: </span>
+              対応するフローステップが変更されています。本文は保護中です。内容を見直すか、フローと不一致のまま残してください。
+            </span>
           </div>
         )}
 
         {sync === "orphaned" && (
-          <div className={cn("mt-3 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
+          <div className={cn("mt-2 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            フロー上のステップが削除されています。このセクションは廃止候補です。
+            <span>
+              <span className="font-medium">アプリからの案内: </span>
+              フロー上のステップが削除されています。このセクションは廃止候補です。
+            </span>
           </div>
         )}
 
-        {/* マニュアル本文面 */}
-        <div className={cn("mt-5", !embedded && "mt-6")}>
+        {/* ③ マニュアル本文 */}
+        <div className="mt-4 border-t border-border/30 pt-4">
           <div className="flex flex-col gap-1">
             {section.blocks.map((block) => {
               if (block.type === "step") stepNo += 1
@@ -1074,22 +1104,30 @@ function BlockView({
               </p>
 
               {block.needsConfirm && (
-                <div className="mt-3 rounded-lg border border-[var(--semantic-warning-border)]/80 bg-card/80 px-3 py-2.5">
-                  <Badge variant="outline" className={cn("h-auto w-fit gap-1 px-2 py-1 text-[10px] leading-snug", SEMANTIC.warning)}>
-                    <AlertTriangle className="size-2.5 shrink-0" />
-                    要確認: AIが推測で補完した内容です
-                  </Badge>
+                <div className={cn("mt-3 px-3 py-2.5", APP_CHROME, "border-[var(--semantic-warning-border)] bg-[color-mix(in_oklch,var(--semantic-warning-bg)_45%,var(--card))]")}>
+                  <p className={APP_CHROME_LABEL}>
+                    <Wrench className="size-3" aria-hidden />
+                    アプリ操作 · 要確認
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-foreground">
+                    AIが推測で補完した内容です。マニュアル本文に含めてよいか確認してください。
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8 gap-1 px-3 text-[11px]"
+                      className="h-8 gap-1 border bg-background px-3 text-[11px]"
                       onClick={onResolveConfirm}
                     >
                       <Check className="size-3.5" />
                       内容OK
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-8 gap-1 px-3 text-[11px]" onClick={onStartEdit}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1 border bg-background px-3 text-[11px]"
+                      onClick={onStartEdit}
+                    >
                       <Pencil className="size-3.5" />
                       修正する
                     </Button>
@@ -1173,21 +1211,24 @@ function BlockImageSection({
 
       {image ? (
         <>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1 rounded-md border border-dashed border-border/70 bg-muted/30 px-2 py-1.5">
-            <button
+          <div className={cn("mt-2 flex flex-wrap items-center gap-1.5 px-2.5 py-2", APP_CHROME)}>
+            <span className={cn(APP_CHROME_LABEL, "mr-1")}>画像</span>
+            <Button
               type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 border bg-background px-2 text-[11px]"
               onClick={() => setImageOpen(!imageOpen)}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-background/80"
             >
               <ImageIcon className="size-3" />
               {image.url ? "画像を見る" : "プレースホルダ"}
               <ChevronDown className={cn("size-3 transition-transform", imageOpen && "rotate-180")} />
-            </button>
+            </Button>
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              className="h-7 gap-1 px-2 text-[11px]"
+              variant="outline"
+              className="h-7 gap-1 border bg-background px-2 text-[11px]"
               onClick={onPickImage}
               disabled={uploading}
             >
@@ -1197,8 +1238,8 @@ function BlockImageSection({
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              className="h-7 gap-1 px-2 text-[11px] text-muted-foreground"
+              variant="outline"
+              className="h-7 gap-1 border bg-background px-2 text-[11px] text-muted-foreground"
               onClick={onRemoveImage}
             >
               <Trash2 className="size-3" />
@@ -1247,8 +1288,8 @@ function BlockImageSection({
         <Button
           type="button"
           size="sm"
-          variant="ghost"
-          className="mt-1.5 h-8 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+          variant="outline"
+          className="mt-2 h-8 gap-1.5 border bg-background px-2.5 text-[11px] text-muted-foreground hover:text-foreground"
           onClick={onPickImage}
           disabled={uploading}
         >
