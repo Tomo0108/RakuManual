@@ -220,7 +220,7 @@ export function suggestedSectionNumber(
   return documentableNodes(flow).find((n) => n.id === stepId)?.data.sectionNumber
 }
 
-/** 意図的差分にする */
+/** フローと不一致のまま残す（意図的差分） */
 export function markIntentionalDifference(section: ManualSection): ManualSection {
   return { ...section, syncStatus: "intentional_difference" }
 }

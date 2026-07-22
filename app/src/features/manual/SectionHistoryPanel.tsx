@@ -33,9 +33,9 @@ export function SectionHistoryButton({
   return (
     <>
       <Button
-        variant="outline"
+        variant={isMobile ? "outline" : "ghost"}
         size={isMobile ? "default" : "sm"}
-        className={cn("gap-1", isMobile && "h-10 flex-1")}
+        className={cn("gap-1", isMobile ? "h-10 flex-1" : "text-muted-foreground")}
         onClick={() => setOpen(true)}
         disabled={revisions.length === 0}
       >
