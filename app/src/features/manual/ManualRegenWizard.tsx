@@ -156,8 +156,8 @@ export function ManualRegenWizard({
                           ? "追加しない"
                           : item.kind === "unplaced" && opt === "regenerate"
                             ? "追加して生成"
-                            : item.kind === "orphan" && opt === "keep"
-                              ? "残す（意図的）"
+                              : item.kind === "orphan" && opt === "keep"
+                              ? "残す（不一致のまま）"
                               : CHOICE_LABEL[opt]}
                       </button>
                     ))}

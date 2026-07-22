@@ -163,7 +163,7 @@ export type ManualSyncStatus =
 export const MANUAL_SYNC_LABEL: Record<ManualSyncStatus, string> = {
   ok: "同期済み",
   needs_review: "要確認",
-  intentional_difference: "意図的差分",
+  intentional_difference: "フローと不一致",
   orphaned: "廃止候補",
   unplaced: "未配置",
 }
