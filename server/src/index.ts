@@ -6,7 +6,16 @@ import fastifyStatic from "@fastify/static"
 import fs from "node:fs"
 import path from "node:path"
 import { getDb, getProjectForUser, UPLOADS_DIR } from "./db.js"
-import { registerAuthRoutes, registerMetricsRoutes, registerProjectRoutes, registerPublishExportRoutes, registerQaRoutes, requireAuth } from "./routes.js"
+import {
+  registerAdminRoutes,
+  registerAuthRoutes,
+  registerMetricsRoutes,
+  registerNotificationRoutes,
+  registerProjectRoutes,
+  registerPublishExportRoutes,
+  registerQaRoutes,
+  requireAuth,
+} from "./routes.js"
 
 const PORT = Number(process.env.PORT ?? 3001)
 const HOST = process.env.HOST ?? "127.0.0.1"
@@ -36,6 +45,8 @@ async function main() {
   await registerQaRoutes(app)
   await registerPublishExportRoutes(app)
   await registerMetricsRoutes(app)
+  await registerNotificationRoutes(app)
+  await registerAdminRoutes(app)
 
   app.post<{ Params: { projectId: string } }>(
     "/api/projects/:projectId/images",

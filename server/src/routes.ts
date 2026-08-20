@@ -1,15 +1,22 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import {
+  averageCsat,
   createSession,
+  deleteDesignTemplate,
   deleteSession,
   getProjectForUser,
   getSessionUser,
   getUserById,
+  insertCsat,
   insertProject,
   insertQaFeedback,
   insertQaMessage,
+  listDesignTemplates,
   listProjectsForUser,
+  listUsers,
   updateProject as dbUpdateProject,
+  updateUserRole,
+  upsertDesignTemplate,
 } from "./db.js"
 import { buildManualHtml } from "./export/manual-html.js"
 import { buildManualPdf } from "./export/manual-pdf.js"
@@ -18,7 +25,18 @@ import { applyPublish, validatePublish } from "./publish.js"
 import { answerQuestion } from "./qa.js"
 import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
-import type { AuthUser, HearingAnswer, Project } from "./types.js"
+import { assertGenerationAllowed, getLlmBudgetYen, recordLlmUsage, setLlmBudgetYen } from "./llm-cost.js"
+import { getLlmAdapter, getLlmProviderName } from "./llm/adapter.js"
+import {
+  getNotificationSettings,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  setNotificationSettings,
+  createNotification,
+} from "./notifications.js"
+import { recordOperationLog } from "./operation-log.js"
+import type { AuthUser, HearingAnswer, Project, UserRole } from "./types.js"
 
 const SESSION_COOKIE = "rakumanual_session"
 
@@ -41,6 +59,23 @@ export async function requireAuth(
     return null
   }
   return user
+}
+
+async function requireAdmin(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<AuthUser | null> {
+  const user = await requireAuth(request, reply)
+  if (!user) return null
+  if (user.role !== "admin") {
+    reply.status(403).send({ error: "Admin only" })
+    return null
+  }
+  return user
+}
+
+function canEditProjects(user: AuthUser): boolean {
+  return user.role === "creator" || user.role === "admin"
 }
 
 function todayStamp(): string {
@@ -251,6 +286,9 @@ export async function registerProjectRoutes(app: FastifyInstance) {
   app.post("/api/projects", async (request, reply) => {
     const user = await requireAuth(request, reply)
     if (!user) return
+    if (!canEditProjects(user)) {
+      return reply.status(403).send({ error: "閲覧者はプロジェクトを作成できません" })
+    }
     const body = request.body as Project
     if (!body?.id || !body?.name) {
       return reply.status(400).send({ error: "Invalid project payload" })
@@ -265,6 +303,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       "プロジェクトを作成",
     )
     insertProject(user.id, project)
+    recordOperationLog({ userId: user.id, actionType: "edit", projectId: project.id, payload: { kind: "create" } })
     reply.status(201)
     return project
   })
@@ -304,7 +343,16 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         user,
         `ヒアリング回答を更新(${answer.questionId})`,
       )
-      return saveOwned(user, next, reply)
+      const saved = saveOwned(user, next, reply)
+      if (saved) {
+        recordOperationLog({
+          userId: user.id,
+          actionType: "hearing",
+          projectId: existing.id,
+          payload: { questionId: answer.questionId, status: answer.status },
+        })
+      }
+      return saved
     },
   )
 
@@ -360,15 +408,37 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     },
   )
 
-  // ===== Phase2: LLM連携入口（まずはモック生成）=====
+  // ===== Phase2: LLM連携入口（Adapter経由・コスト制限付き）=====
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/generate", async (request, reply) => {
     const user = await requireAuth(request, reply)
     if (!user) return
     const existing = loadOwned(request.params.id, user, reply)
     if (!existing) return
 
+    const allowed = assertGenerationAllowed(user.id)
+    if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+    const adapter = getLlmAdapter()
+    const llm = await adapter.complete([
+      {
+        role: "system",
+        content: "業務マニュアル用のスイムレーンフローを生成するための要約を出力せよ。",
+      },
+      {
+        role: "user",
+        content: `プロジェクト「${existing.name}」のフローを生成。ヒアリング: ${JSON.stringify(existing.hearingAnswers).slice(0, 1500)}`,
+      },
+    ])
+    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_generate", tokens: llm.tokens })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "generate",
+      projectId: existing.id,
+      payload: { kind: "flow", provider: llm.provider, tokens: llm.tokens },
+    })
+
     const flow = generateFlowMock(existing.name)
-    return { flow }
+    return { flow, meta: { provider: llm.provider, tokens: llm.tokens } }
   })
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/manual/generate", async (request, reply) => {
@@ -377,8 +447,30 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const existing = loadOwned(request.params.id, user, reply)
     if (!existing) return
 
+    const allowed = assertGenerationAllowed(user.id)
+    if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+    const adapter = getLlmAdapter()
+    const llm = await adapter.complete([
+      {
+        role: "system",
+        content: "業務マニュアルのセクション構成を生成するための要約を出力せよ。",
+      },
+      {
+        role: "user",
+        content: `プロジェクト「${existing.name}」のマニュアルを生成。深掘り件数: ${existing.deepdive?.length ?? 0}`,
+      },
+    ])
+    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "manual_generate", tokens: llm.tokens })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "generate",
+      projectId: existing.id,
+      payload: { kind: "manual", provider: llm.provider, tokens: llm.tokens },
+    })
+
     const sections = generateManualSectionsMock(existing)
-    return { sections }
+    return { sections, meta: { provider: llm.provider, tokens: llm.tokens } }
   })
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/nl-edit", async (request, reply) => {
@@ -387,13 +479,29 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const existing = loadOwned(request.params.id, user, reply)
     if (!existing) return
 
+    const allowed = assertGenerationAllowed(user.id)
+    if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
     const body = (request.body ?? {}) as { instruction?: string; flow?: Project["flow"] }
     const instruction = body.instruction?.trim()
     if (!instruction) return reply.status(400).send({ error: "instruction is required" })
     if (!body.flow) return reply.status(400).send({ error: "flow is required" })
 
+    const adapter = getLlmAdapter()
+    const llm = await adapter.complete([
+      { role: "system", content: "フロー図の自然言語修正指示を解釈せよ。" },
+      { role: "user", content: instruction },
+    ])
+    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_nl_edit", tokens: llm.tokens })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "generate",
+      projectId: existing.id,
+      payload: { kind: "nl-edit", provider: llm.provider, tokens: llm.tokens },
+    })
+
     const result = proposeNlEdit(instruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
-    return result
+    return { ...result, meta: { provider: llm.provider, tokens: llm.tokens } }
   })
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/regenerate", async (request, reply) => {
@@ -402,8 +510,19 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const existing = loadOwned(request.params.id, user, reply)
     if (!existing) return
 
+    const allowed = assertGenerationAllowed(user.id)
+    if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
     const body = (request.body ?? {}) as { flow?: Project["flow"] }
     if (!body.flow) return reply.status(400).send({ error: "flow is required" })
+
+    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_regenerate", tokens: 150 })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "generate",
+      projectId: existing.id,
+      payload: { kind: "flow_regenerate" },
+    })
 
     const flow = regenerateFlowPreservingManual(
       body.flow as unknown as Parameters<typeof regenerateFlowPreservingManual>[0],
@@ -420,7 +539,22 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       const existing = loadOwned(request.params.id, user, reply)
       if (!existing) return
 
+      const allowed = assertGenerationAllowed(user.id)
+      if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
       try {
+        recordLlmUsage({
+          userId: user.id,
+          projectId: existing.id,
+          action: "section_regenerate",
+          tokens: 180,
+        })
+        recordOperationLog({
+          userId: user.id,
+          actionType: "generate",
+          projectId: existing.id,
+          payload: { kind: "section_regenerate", sectionId: request.params.sectionId },
+        })
         const section = regenerateSectionMock(existing, request.params.sectionId)
         return { section }
       } catch {
@@ -442,6 +576,19 @@ export async function registerQaRoutes(app: FastifyInstance) {
     const result = answerQuestion(question, projects)
     const messageId = `qa-${Date.now()}`
     insertQaMessage(user.id, messageId, question)
+    recordOperationLog({
+      userId: user.id,
+      actionType: "qa",
+      payload: { messageId, noSource: result.noSource },
+    })
+    if (result.noSource) {
+      createNotification({
+        userId: user.id,
+        type: "qa_unanswered",
+        title: "QAで回答根拠が見つかりませんでした",
+        body: `質問: ${question.slice(0, 80)}`,
+      })
+    }
     return { ...result, messageId }
   })
 
@@ -457,6 +604,11 @@ export async function registerQaRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "Invalid feedback payload" })
     }
     insertQaFeedback(user.id, body.messageId, body.question, body.feedback)
+    recordOperationLog({
+      userId: user.id,
+      actionType: "qa",
+      payload: { kind: "feedback", feedback: body.feedback, messageId: body.messageId },
+    })
     return { ok: true }
   })
 }
@@ -476,6 +628,11 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
     const published = applyPublish(existing, user.name)
     const saved = saveOwned(user, published, reply)
     if (!saved) return
+    recordOperationLog({
+      userId: user.id,
+      actionType: "publish",
+      projectId: saved.id,
+    })
     return saved
   })
 
@@ -493,6 +650,12 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
     }
 
     const html = buildManualHtml(existing, body)
+    recordOperationLog({
+      userId: user.id,
+      actionType: "export",
+      projectId: existing.id,
+      payload: { format: "html", template: body.template },
+    })
     return { html, filename: `${existing.name}.html` }
   })
 
@@ -510,6 +673,12 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
     }
 
     const pdf = await buildManualPdf(existing, body)
+    recordOperationLog({
+      userId: user.id,
+      actionType: "export",
+      projectId: existing.id,
+      payload: { format: "pdf", template: body.template },
+    })
     return {
       pdfBase64: pdf.toString("base64"),
       filename: `${existing.name}.pdf`,
@@ -523,6 +692,201 @@ export async function registerMetricsRoutes(app: FastifyInstance) {
     const user = await requireAuth(request, reply)
     if (!user) return
     return getDashboardMetrics(user.id)
+  })
+
+  app.post("/api/metrics/csat", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as {
+      score?: number
+      source?: string
+      projectId?: string
+      comment?: string
+    }
+    if (!body.score || body.score < 1 || body.score > 5) {
+      return reply.status(400).send({ error: "score must be 1-5" })
+    }
+    insertCsat({
+      userId: user.id,
+      projectId: body.projectId,
+      source: body.source ?? "general",
+      score: body.score,
+      comment: body.comment,
+    })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "csat",
+      projectId: body.projectId,
+      payload: { score: body.score, source: body.source ?? "general" },
+    })
+    return { ok: true, average: averageCsat(user.id) }
+  })
+}
+
+export async function registerNotificationRoutes(app: FastifyInstance) {
+  app.get("/api/notifications", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    // 見直し期限が近いプロジェクトを通知
+    const prefs = getNotificationSettings(user.id)
+    if (prefs.reviewDeadline) {
+      const today = new Date()
+      const in14 = new Date(today)
+      in14.setDate(in14.getDate() + 14)
+      const todayStr = today.toISOString().slice(0, 10)
+      const in14Str = in14.toISOString().slice(0, 10)
+      for (const p of listProjectsForUser(user.id)) {
+        if (p.reviewDeadline && p.reviewDeadline >= todayStr && p.reviewDeadline <= in14Str) {
+          createNotification({
+            userId: user.id,
+            type: "review_deadline",
+            title: "見直し期限が近づいています",
+            body: `「${p.name}」の見直し期限は ${p.reviewDeadline} です。`,
+          })
+        }
+      }
+    }
+    return { items: listNotifications(user.id) }
+  })
+
+  app.post("/api/notifications/read-all", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    markAllNotificationsRead(user.id)
+    return { ok: true }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/notifications/:id/read", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    if (!markNotificationRead(user.id, request.params.id)) {
+      return reply.status(404).send({ error: "Not found" })
+    }
+    return { ok: true }
+  })
+
+  app.get("/api/notifications/settings", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    return getNotificationSettings(user.id)
+  })
+
+  app.put("/api/notifications/settings", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as {
+      reviewDeadline?: boolean
+      qaUnanswered?: boolean
+      llmBudget?: boolean
+    }
+    const current = getNotificationSettings(user.id)
+    const next = {
+      reviewDeadline: body.reviewDeadline ?? current.reviewDeadline,
+      qaUnanswered: body.qaUnanswered ?? current.qaUnanswered,
+      llmBudget: body.llmBudget ?? current.llmBudget,
+    }
+    setNotificationSettings(user.id, next)
+    return next
+  })
+}
+
+export async function registerAdminRoutes(app: FastifyInstance) {
+  app.get("/api/admin/users", async (request, reply) => {
+    const user = await requireAdmin(request, reply)
+    if (!user) return
+    return { users: listUsers() }
+  })
+
+  app.patch<{ Params: { id: string } }>("/api/admin/users/:id", async (request, reply) => {
+    const user = await requireAdmin(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as { role?: UserRole }
+    if (!body.role || !["viewer", "creator", "admin"].includes(body.role)) {
+      return reply.status(400).send({ error: "Invalid role" })
+    }
+    const updated = updateUserRole(request.params.id, body.role)
+    if (!updated) return reply.status(404).send({ error: "User not found" })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      payload: { kind: "role", targetUserId: updated.id, role: body.role },
+    })
+    return { user: updated }
+  })
+
+  app.get("/api/admin/templates", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    return { templates: listDesignTemplates() }
+  })
+
+  app.put<{ Params: { id: string } }>("/api/admin/templates/:id", async (request, reply) => {
+    const user = await requireAdmin(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as {
+      name?: string
+      theme?: string
+      description?: string
+      color?: string
+    }
+    if (!body.name || !body.theme) {
+      return reply.status(400).send({ error: "name and theme are required" })
+    }
+    const tpl = upsertDesignTemplate({
+      id: request.params.id,
+      name: body.name,
+      theme: body.theme,
+      description: body.description ?? "",
+      color: body.color ?? "#2563eb",
+    })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      payload: { kind: "template_upsert", templateId: tpl.id },
+    })
+    return { template: tpl }
+  })
+
+  app.delete<{ Params: { id: string } }>("/api/admin/templates/:id", async (request, reply) => {
+    const user = await requireAdmin(request, reply)
+    if (!user) return
+    if (!deleteDesignTemplate(request.params.id)) {
+      return reply.status(404).send({ error: "Template not found" })
+    }
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      payload: { kind: "template_delete", templateId: request.params.id },
+    })
+    return { ok: true }
+  })
+
+  app.get("/api/admin/settings", async (request, reply) => {
+    const user = await requireAdmin(request, reply)
+    if (!user) return
+    return {
+      llmBudgetYen: getLlmBudgetYen(),
+      llmProvider: getLlmProviderName(),
+      notificationDefaults: getNotificationSettings(user.id),
+    }
+  })
+
+  app.put("/api/admin/settings", async (request, reply) => {
+    const user = await requireAdmin(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as { llmBudgetYen?: number }
+    if (typeof body.llmBudgetYen === "number" && body.llmBudgetYen > 0) {
+      setLlmBudgetYen(body.llmBudgetYen)
+    }
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      payload: { kind: "settings", llmBudgetYen: getLlmBudgetYen() },
+    })
+    return {
+      llmBudgetYen: getLlmBudgetYen(),
+      llmProvider: getLlmProviderName(),
+    }
   })
 }
 

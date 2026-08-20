@@ -1,4 +1,6 @@
-import { getDb, listProjectsForUser } from "./db.js"
+import { averageCsat, getDb, listProjectsForUser } from "./db.js"
+import { getMonthlyLlmUsageYen } from "./llm-cost.js"
+import { countOperations } from "./operation-log.js"
 
 export interface DashboardMetrics {
   publishedCount: number
@@ -9,6 +11,14 @@ export interface DashboardMetrics {
   completionRate: number
   llmCostYen: number
   llmBudgetYen: number
+  llmUsagePercent: number
+  generationBlocked: boolean
+  csatAverage: number | null
+  generateCount: number
+  exportCount: number
+  editCount: number
+  publishCount: number
+  llmProvider: "mock" | "openai"
 }
 
 export function getDashboardMetrics(userId: string): DashboardMetrics {
@@ -23,11 +33,13 @@ export function getDashboardMetrics(userId: string): DashboardMetrics {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM qa_messages WHERE user_id = ?) AS total,
-         SUM(CASE WHEN feedback = 'up' THEN 1 ELSE 0 END) AS up_count,
-         SUM(CASE WHEN feedback = 'down' THEN 1 ELSE 0 END) AS down_count
-       FROM qa_feedback WHERE user_id = ?`,
+         COALESCE((SELECT SUM(CASE WHEN feedback = 'up' THEN 1 ELSE 0 END) FROM qa_feedback WHERE user_id = ?), 0) AS up_count,
+         COALESCE((SELECT SUM(CASE WHEN feedback = 'down' THEN 1 ELSE 0 END) FROM qa_feedback WHERE user_id = ?), 0) AS down_count`,
     )
-    .get(userId, userId) as { total: number; up_count: number | null; down_count: number | null }
+    .get(userId, userId, userId) as { total: number; up_count: number; down_count: number }
+
+  const thirtyDays = Date.now() - 30 * 24 * 60 * 60 * 1000
+  const usage = getMonthlyLlmUsageYen(userId)
 
   return {
     publishedCount,
@@ -36,7 +48,15 @@ export function getDashboardMetrics(userId: string): DashboardMetrics {
     qaUpCount: qaStats?.up_count ?? 0,
     qaDownCount: qaStats?.down_count ?? 0,
     completionRate,
-    llmCostYen: 31200,
-    llmBudgetYen: 50000,
+    llmCostYen: usage.costYen,
+    llmBudgetYen: usage.budgetYen,
+    llmUsagePercent: usage.usagePercent,
+    generationBlocked: usage.usagePercent >= 100,
+    csatAverage: averageCsat(userId),
+    generateCount: countOperations(userId, "generate", thirtyDays),
+    exportCount: countOperations(userId, "export", thirtyDays),
+    editCount: countOperations(userId, "edit", thirtyDays),
+    publishCount: countOperations(userId, "publish", thirtyDays),
+    llmProvider: process.env.OPENAI_API_KEY?.trim() ? "openai" : "mock",
   }
 }

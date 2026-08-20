@@ -5,6 +5,7 @@ import {
   MessageCircleQuestion,
   LogOut,
   Palette,
+  Settings,
   Settings2,
 } from "lucide-react"
 import logo from "@/assets/logo.png"
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { NotificationBell } from "@/components/NotificationBell"
 
 export interface SidebarContentProps {
   view: View
@@ -30,6 +32,7 @@ export interface SidebarContentProps {
   accent: AccentId
   setAccent: (a: AccentId) => void
   userName?: string
+  userRole?: string
   onLogout?: () => void
   onNavigate?: () => void
   className?: string
@@ -42,6 +45,7 @@ export function SidebarContent({
   accent,
   setAccent,
   userName = "山田 太郎",
+  userRole,
   onLogout,
   onNavigate,
   className,
@@ -125,6 +129,7 @@ export function SidebarContent({
       </div>
 
       <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <NotificationBell />
         <button
           type="button"
           onClick={() => go({ name: "dashboard" })}
@@ -137,6 +142,19 @@ export function SidebarContent({
         >
           <LayoutDashboard className="size-3.5 shrink-0" />
           KPIダッシュボード
+        </button>
+        <button
+          type="button"
+          onClick={() => go({ name: "admin" })}
+          className={cn(
+            "mb-1 flex min-h-10 w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] transition-colors",
+            view.name === "admin"
+              ? "bg-primary-subtle font-medium text-primary"
+              : "text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+          )}
+        >
+          <Settings className="size-3.5 shrink-0" />
+          管理設定
         </button>
 
         <DropdownMenu>
@@ -152,7 +170,9 @@ export function SidebarContent({
               </Avatar>
               <div className="min-w-0 flex-1 text-left">
                 <div className="truncate text-[13px] font-medium text-sidebar-foreground">{userName}</div>
-                <div className="truncate text-[10px] text-muted-foreground">SSOログイン済み(社内)</div>
+                <div className="truncate text-[10px] text-muted-foreground">
+                  {userRole ?? "SSOログイン済み"}
+                </div>
               </div>
               <Settings2 className="size-3.5 shrink-0 opacity-60" />
             </Button>

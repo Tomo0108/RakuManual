@@ -9,6 +9,7 @@ interface SidebarProps {
   accent: AccentId
   setAccent: (a: AccentId) => void
   userName?: string
+  userRole?: string
   onLogout?: () => void
 }
 

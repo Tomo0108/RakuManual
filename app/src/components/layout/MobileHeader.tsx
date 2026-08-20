@@ -17,6 +17,8 @@ function pageTitle(view: View, projects: Project[]): string {
       return "業務QAチャット"
     case "dashboard":
       return "KPIダッシュボード"
+    case "admin":
+      return "管理設定"
     case "project":
       return projects.find((p) => p.id === view.projectId)?.name ?? "プロジェクト"
     case "viewer":

@@ -16,6 +16,7 @@ import { QAChatPage } from "@/pages/QAChatPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { ManualViewerPage } from "@/pages/ManualViewerPage"
 import { LoginPage } from "@/pages/LoginPage"
+import { AdminSettingsPage } from "@/pages/AdminSettingsPage"
 
 export default function App() {
   const [view, setView] = useState<View>({ name: "projects" })
@@ -72,6 +73,7 @@ export default function App() {
           accent={accent}
           setAccent={setAccent}
           userName={session.user?.name ?? "山田 太郎"}
+          userRole={session.user?.role}
           onLogout={session.apiAvailable ? () => void session.logout() : undefined}
         />
 
@@ -118,6 +120,9 @@ export default function App() {
               />
             )}
             {view.name === "dashboard" && <DashboardPage projects={projects} />}
+            {view.name === "admin" && (
+              <AdminSettingsPage isAdmin={session.user?.role === "admin"} />
+            )}
             {view.name === "viewer" && currentProject && (
               <ManualViewerPage
                 project={currentProject}
@@ -154,6 +159,7 @@ export default function App() {
             accent={accent}
             setAccent={setAccent}
             userName={session.user?.name ?? "山田 太郎"}
+            userRole={session.user?.role}
             onLogout={session.apiAvailable ? () => void session.logout() : undefined}
             onNavigate={() => setMobileMenuOpen(false)}
             className="h-full"

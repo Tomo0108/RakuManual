@@ -63,6 +63,63 @@ function migrate(database: DatabaseSync) {
       question TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS operation_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      project_id TEXT,
+      action_type TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oplogs_user ON operation_logs(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_oplogs_action ON operation_logs(action_type, created_at);
+
+    CREATE TABLE IF NOT EXISTS llm_usage (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      project_id TEXT,
+      action TEXT NOT NULL,
+      tokens INTEGER NOT NULL,
+      cost_yen REAL NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_user ON llm_usage(user_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS design_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      theme TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '#2563eb',
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS csat_responses (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      project_id TEXT,
+      source TEXT NOT NULL,
+      score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+      comment TEXT,
+      created_at INTEGER NOT NULL
+    );
   `)
 
   const schema = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'projects'").get() as
@@ -91,12 +148,143 @@ function migrate(database: DatabaseSync) {
   }
   database.prepare("UPDATE users SET role = 'creator' WHERE id = 'user-yamada'").run()
   database.prepare("UPDATE users SET role = 'viewer' WHERE id = 'user-sato'").run()
+  database.prepare("UPDATE users SET role = 'admin' WHERE id = 'user-admin'").run()
 
   const insertUser = database.prepare(
     "INSERT OR IGNORE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)",
   )
   insertUser.run("user-yamada", "山田 太郎", "yamada.taro@example.com", "creator")
   insertUser.run("user-sato", "佐藤 太郎", "sato.taro@example.com", "viewer")
+  insertUser.run("user-admin", "管理 花子", "admin@example.com", "admin")
+
+  const budget = database
+    .prepare(`SELECT value FROM app_settings WHERE key = 'llm_budget_yen'`)
+    .get() as { value: string } | undefined
+  if (!budget) {
+    database
+      .prepare(`INSERT INTO app_settings (key, value) VALUES ('llm_budget_yen', '50000')`)
+      .run()
+  }
+
+  const templateCount = database.prepare(`SELECT COUNT(*) AS c FROM design_templates`).get() as {
+    c: number
+  }
+  if (templateCount.c === 0) {
+    const now = Date.now()
+    const insertTpl = database.prepare(
+      `INSERT INTO design_templates (id, name, theme, description, color, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    insertTpl.run(
+      "corporate",
+      "コーポレート標準",
+      "corporate",
+      "社内ブランドガイドライン準拠",
+      "#2563eb",
+      now,
+    )
+    insertTpl.run(
+      "simple",
+      "シンプル",
+      "simple",
+      "余白多めの読みやすいレイアウト",
+      "#0f766e",
+      now,
+    )
+    insertTpl.run(
+      "training",
+      "研修用",
+      "training",
+      "ステップ強調・初心者向け",
+      "#c2410c",
+      now,
+    )
+  }
+}
+
+export interface DesignTemplate {
+  id: string
+  name: string
+  theme: string
+  description: string
+  color: string
+  updatedAt: number
+}
+
+export function listUsers(): AuthUser[] {
+  const rows = getDb()
+    .prepare(`SELECT id, name, email, role FROM users ORDER BY name`)
+    .all() as unknown as AuthUser[]
+  return rows.map((r) => ({ ...r, role: r.role ?? "creator" }))
+}
+
+export function updateUserRole(userId: string, role: AuthUser["role"]): AuthUser | null {
+  getDb().prepare(`UPDATE users SET role = ? WHERE id = ?`).run(role, userId)
+  return getUserById(userId)
+}
+
+export function listDesignTemplates(): DesignTemplate[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, name, theme, description, color, updated_at AS updatedAt FROM design_templates ORDER BY name`,
+    )
+    .all() as unknown as DesignTemplate[]
+  return rows
+}
+
+export function upsertDesignTemplate(tpl: Omit<DesignTemplate, "updatedAt"> & { updatedAt?: number }) {
+  const updatedAt = tpl.updatedAt ?? Date.now()
+  getDb()
+    .prepare(
+      `INSERT INTO design_templates (id, name, theme, description, color, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         theme = excluded.theme,
+         description = excluded.description,
+         color = excluded.color,
+         updated_at = excluded.updated_at`,
+    )
+    .run(tpl.id, tpl.name, tpl.theme, tpl.description, tpl.color, updatedAt)
+  return listDesignTemplates().find((t) => t.id === tpl.id)!
+}
+
+export function deleteDesignTemplate(id: string): boolean {
+  const result = getDb().prepare(`DELETE FROM design_templates WHERE id = ?`).run(id)
+  return result.changes > 0
+}
+
+export function insertCsat(input: {
+  userId: string
+  projectId?: string
+  source: string
+  score: number
+  comment?: string
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO csat_responses (id, user_id, project_id, source, score, comment, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.userId,
+      input.projectId ?? null,
+      input.source,
+      input.score,
+      input.comment ?? null,
+      Date.now(),
+    )
+}
+
+export function averageCsat(userId?: string): number | null {
+  const row = userId
+    ? (getDb()
+        .prepare(`SELECT AVG(score) AS avg FROM csat_responses WHERE user_id = ?`)
+        .get(userId) as { avg: number | null })
+    : (getDb().prepare(`SELECT AVG(score) AS avg FROM csat_responses`).get() as {
+        avg: number | null
+      })
+  return row.avg == null ? null : Math.round(row.avg * 10) / 10
 }
 
 export function getUserById(id: string): AuthUser | null {

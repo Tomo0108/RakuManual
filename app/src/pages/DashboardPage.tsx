@@ -40,22 +40,21 @@ export function DashboardPage({ projects }: Props) {
   }, [projects.length])
 
   const published = metrics?.publishedCount ?? projects.filter((p) => p.status === "published").length
-  const tokenUsage = metrics
-    ? Math.round((metrics.llmCostYen / metrics.llmBudgetYen) * 100)
-    : 62
+  const tokenUsage = metrics?.llmUsagePercent ?? (
+    metrics
+      ? Math.round((metrics.llmCostYen / metrics.llmBudgetYen) * 100)
+      : 0
+  )
 
   const kpis = [
-    { icon: Clock, label: "作成完了率", value: `${metrics?.completionRate ?? 83}%`, good: true },
+    { icon: Clock, label: "作成完了率", value: `${metrics?.completionRate ?? 0}%`, good: true },
     { icon: CircleGauge, label: "公開済み", value: String(published), good: published > 0 },
     { icon: MessageCircleQuestion, label: "QA質問数", value: String(metrics?.qaQuestionCount ?? 0), good: true },
     {
       icon: Smile,
-      label: "QA高評価率",
-      value:
-        metrics && metrics.qaQuestionCount > 0
-          ? `${Math.round((metrics.qaUpCount / metrics.qaQuestionCount) * 100)}%`
-          : "—",
-      good: true,
+      label: "CSAT平均",
+      value: metrics?.csatAverage != null ? String(metrics.csatAverage) : "—",
+      good: (metrics?.csatAverage ?? 0) >= 4,
     },
   ]
 
@@ -98,13 +97,18 @@ export function DashboardPage({ projects }: Props) {
             <CardContent>
               <div className="flex items-end justify-between gap-2">
                 <span className="text-2xl font-bold">
-                  ¥{(metrics?.llmCostYen ?? 31200).toLocaleString()}
+                  ¥{(metrics?.llmCostYen ?? 0).toLocaleString()}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {tokenUsage}% / ¥{(metrics?.llmBudgetYen ?? 50000).toLocaleString()}
+                  {metrics?.generationBlocked ? " · 生成制限中" : ""}
                 </span>
               </div>
-              <Progress value={tokenUsage} className="mt-3 h-2" />
+              <Progress value={Math.min(100, tokenUsage)} className="mt-3 h-2" />
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                provider: {metrics?.llmProvider ?? "mock"} / 生成 {metrics?.generateCount ?? 0} /
+                出力 {metrics?.exportCount ?? 0} / 公開 {metrics?.publishCount ?? 0}
+              </p>
             </CardContent>
           </Card>
 

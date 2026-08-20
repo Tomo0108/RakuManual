@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 const DEMO_USERS = [
   { id: "user-yamada", name: "山田 太郎", role: "作成者" },
   { id: "user-sato", name: "佐藤 太郎", role: "閲覧者" },
+  { id: "user-admin", name: "管理 花子", role: "管理者" },
 ] as const
 
 interface Props {

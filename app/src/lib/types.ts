@@ -5,6 +5,7 @@ export type View =
   | { name: "projects" }
   | { name: "dashboard" }
   | { name: "qa" }
+  | { name: "admin" }
   | { name: "project"; projectId: string; tab: ProjectTab }
   | { name: "viewer"; projectId: string; sectionId?: string }
 

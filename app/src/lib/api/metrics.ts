@@ -9,6 +9,14 @@ export interface DashboardMetrics {
   completionRate: number
   llmCostYen: number
   llmBudgetYen: number
+  llmUsagePercent: number
+  generationBlocked: boolean
+  csatAverage: number | null
+  generateCount: number
+  exportCount: number
+  editCount: number
+  publishCount: number
+  llmProvider: "mock" | "openai"
 }
 
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
