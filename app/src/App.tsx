@@ -14,6 +14,7 @@ import { ProjectList } from "@/pages/ProjectList"
 import { ProjectPage } from "@/pages/ProjectPage"
 import { QAChatPage } from "@/pages/QAChatPage"
 import { DashboardPage } from "@/pages/DashboardPage"
+import { ManualViewerPage } from "@/pages/ManualViewerPage"
 import { LoginPage } from "@/pages/LoginPage"
 
 export default function App() {
@@ -39,7 +40,9 @@ export default function App() {
   const { projects, updateProject, addProject } = session
 
   const currentProject =
-    view.name === "project" ? projects.find((p) => p.id === view.projectId) : undefined
+    view.name === "project" || view.name === "viewer"
+      ? projects.find((p) => p.id === view.projectId)
+      : undefined
 
   if (session.booting) {
     return (
@@ -100,9 +103,20 @@ export default function App() {
               />
             )}
             {view.name === "qa" && (
-              <QAChatPage onOpenProject={(id) => setView({ name: "project", projectId: id, tab: "manual" })} />
+              <QAChatPage
+                onOpenSource={(projectId, sectionId) =>
+                  setView({ name: "viewer", projectId, sectionId })
+                }
+              />
             )}
             {view.name === "dashboard" && <DashboardPage projects={projects} />}
+            {view.name === "viewer" && currentProject && (
+              <ManualViewerPage
+                project={currentProject}
+                sectionId={view.sectionId}
+                onBack={() => setView({ name: "qa" })}
+              />
+            )}
             {view.name === "project" && currentProject && (
               <ProjectPage
                 key={currentProject.id}

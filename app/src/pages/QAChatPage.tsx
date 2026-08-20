@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { BookOpenText, MessageCircleQuestion, Send, ThumbsDown, ThumbsUp } from "lucide-react"
-import { QA_PATTERNS } from "@/lib/mock-data"
 import { uid } from "@/lib/project-utils"
+import { askQuestion, sendQaFeedback, type QASource } from "@/lib/api/qa"
 import { SUCCESS_TEXT, DANGER_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,9 +12,10 @@ interface Message {
   id: string
   role: "user" | "ai"
   text: string
-  source?: { projectId: string; projectName: string; section: string }
+  source?: QASource
   noSource?: boolean
   feedback?: "up" | "down"
+  question?: string
 }
 
 const SUGGESTIONS = [
@@ -26,10 +27,10 @@ const SUGGESTIONS = [
 ]
 
 interface Props {
-  onOpenProject: (id: string) => void
+  onOpenSource: (projectId: string, sectionId?: string) => void
 }
 
-export function QAChatPage({ onOpenProject }: Props) {
+export function QAChatPage({ onOpenSource }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [thinking, setThinking] = useState(false)
@@ -39,31 +40,49 @@ export function QAChatPage({ onOpenProject }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [messages.length, thinking])
 
-  const ask = (question: string) => {
+  const ask = async (question: string) => {
     if (!question.trim() || thinking) return
-    setMessages((prev) => [...prev, { id: uid("m"), role: "user", text: question.trim() }])
+    const q = question.trim()
+    setMessages((prev) => [...prev, { id: uid("m"), role: "user", text: q }])
     setInput("")
     setThinking(true)
-    window.setTimeout(() => {
-      const q = question.toLowerCase()
-      const hit = QA_PATTERNS.find((p) => p.keywords.some((k) => q.includes(k.toLowerCase())))
+    try {
+      const res = await askQuestion(q)
       setMessages((prev) => [
         ...prev,
-        hit
-          ? { id: uid("m"), role: "ai", text: hit.answer, source: hit.source, noSource: !hit.source }
-          : {
-              id: uid("m"),
-              role: "ai",
-              text: "該当するマニュアルがありません。推測での回答は行わない設計のため、お答えできません。この質問はマニュアル整備の需要シグナルとして記録され、作成者に通知されます。",
-              noSource: true,
-            },
+        {
+          id: res.messageId,
+          role: "ai",
+          text: res.text,
+          source: res.source,
+          noSource: res.noSource,
+          question: q,
+        },
       ])
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid("m"),
+          role: "ai",
+          text: "回答の取得に失敗しました。しばらくしてから再度お試しください。",
+          noSource: true,
+        },
+      ])
+    } finally {
       setThinking(false)
-    }, 800)
+    }
   }
 
-  const setFeedback = (id: string, fb: "up" | "down") => {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback: fb } : m)))
+  const setFeedback = async (msg: Message, fb: "up" | "down") => {
+    setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, feedback: fb } : m)))
+    if (msg.question) {
+      try {
+        await sendQaFeedback({ messageId: msg.id, question: msg.question, feedback: fb })
+      } catch {
+        /* UI はローカル反映済み */
+      }
+    }
   }
 
   return (
@@ -91,7 +110,7 @@ export function QAChatPage({ onOpenProject }: Props) {
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
-                  <Button key={s} variant="outline" size="sm" className="text-xs" onClick={() => ask(s)}>
+                  <Button key={s} variant="outline" size="sm" className="text-xs" onClick={() => void ask(s)}>
                     {s}
                   </Button>
                 ))}
@@ -108,7 +127,7 @@ export function QAChatPage({ onOpenProject }: Props) {
                   {m.text}
                   {m.source && (
                     <button
-                      onClick={() => onOpenProject(m.source!.projectId)}
+                      onClick={() => onOpenSource(m.source!.projectId, m.source!.sectionId)}
                       className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-left text-xs transition-colors hover:border-primary-muted hover:bg-primary-subtle/50"
                     >
                       <BookOpenText className="size-3.5 shrink-0 text-primary" />
@@ -123,14 +142,14 @@ export function QAChatPage({ onOpenProject }: Props) {
                   <span className="text-[11px] text-muted-foreground">この回答は役に立ちましたか?</span>
                   <button
                     className={cn("rounded p-1 hover:bg-muted", m.feedback === "up" && SUCCESS_TEXT)}
-                    onClick={() => setFeedback(m.id, "up")}
+                    onClick={() => void setFeedback(m, "up")}
                     aria-label="役に立った"
                   >
                     <ThumbsUp className="size-3.5" />
                   </button>
                   <button
                     className={cn("rounded p-1 hover:bg-muted", m.feedback === "down" && DANGER_TEXT)}
-                    onClick={() => setFeedback(m.id, "down")}
+                    onClick={() => void setFeedback(m, "down")}
                     aria-label="役に立たなかった"
                   >
                     <ThumbsDown className="size-3.5" />
@@ -152,10 +171,10 @@ export function QAChatPage({ onOpenProject }: Props) {
             onChange={(e) => setInput(e.target.value)}
             placeholder="例: ○○の申請ってどうやるの?"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) ask(input)
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) void ask(input)
             }}
           />
-          <Button size="icon" onClick={() => ask(input)} disabled={!input.trim() || thinking} aria-label="質問する">
+          <Button size="icon" onClick={() => void ask(input)} disabled={!input.trim() || thinking} aria-label="質問する">
             <Send className="size-4" />
           </Button>
         </div>

@@ -6,9 +6,13 @@ import {
   getSessionUser,
   getUserById,
   insertProject,
+  insertQaFeedback,
   listProjectsForUser,
   updateProject as dbUpdateProject,
 } from "./db.js"
+import { buildManualHtml } from "./export/manual-html.js"
+import { applyPublish, validatePublish } from "./publish.js"
+import { answerQuestion } from "./qa.js"
 import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
 import type { AuthUser, HearingAnswer, Project } from "./types.js"
@@ -421,6 +425,71 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       }
     },
   )
+}
+
+export async function registerQaRoutes(app: FastifyInstance) {
+  app.post("/api/qa/ask", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as { question?: string }
+    const question = body.question?.trim()
+    if (!question) return reply.status(400).send({ error: "question is required" })
+
+    const projects = listProjectsForUser(user.id)
+    const result = answerQuestion(question, projects)
+    return { ...result, messageId: `qa-${Date.now()}` }
+  })
+
+  app.post("/api/qa/feedback", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const body = (request.body ?? {}) as {
+      messageId?: string
+      question?: string
+      feedback?: "up" | "down"
+    }
+    if (!body.messageId || !body.question || !body.feedback) {
+      return reply.status(400).send({ error: "Invalid feedback payload" })
+    }
+    insertQaFeedback(user.id, body.messageId, body.question, body.feedback)
+    return { ok: true }
+  })
+}
+
+export async function registerPublishExportRoutes(app: FastifyInstance) {
+  app.post<{ Params: { id: string } }>("/api/projects/:id/publish", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const validation = validatePublish(existing)
+    if (!validation.ok) {
+      return reply.status(400).send({ error: validation.errors.join(" / "), errors: validation.errors })
+    }
+
+    const published = applyPublish(existing, user.name)
+    const saved = saveOwned(user, published, reply)
+    if (!saved) return
+    return saved
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/export/html", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const body = (request.body ?? {}) as {
+      template?: string
+      includeFlow?: boolean
+      imageMode?: "expand" | "appendix" | "none"
+      sectionIds?: string[]
+    }
+
+    const html = buildManualHtml(existing, body)
+    return { html, filename: `${existing.name}.html` }
+  })
 }
 
 export { SESSION_COOKIE }

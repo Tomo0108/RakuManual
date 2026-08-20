@@ -48,7 +48,7 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
         {tab === "flow" && <FlowEditorTab project={project} updateProject={updateProject} setTab={setTab} />}
         {tab === "deepdive" && <DeepDiveTab project={project} updateProject={updateProject} setTab={setTab} />}
         {tab === "manual" && <ManualTab project={project} updateProject={updateProject} setTab={setTab} />}
-        {tab === "export" && <ExportTab project={project} />}
+        {tab === "export" && <ExportTab project={project} updateProject={updateProject} />}
       </div>
     </div>
   )

@@ -19,6 +19,8 @@ function pageTitle(view: View, projects: Project[]): string {
       return "KPIダッシュボード"
     case "project":
       return projects.find((p) => p.id === view.projectId)?.name ?? "プロジェクト"
+    case "viewer":
+      return projects.find((p) => p.id === view.projectId)?.name ?? "マニュアル閲覧"
     default:
       return "RakuManual"
   }

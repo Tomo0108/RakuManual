@@ -1,10 +1,13 @@
 import { useState } from "react"
-import { AlertTriangle, Check, Download, FileText, Presentation } from "lucide-react"
+import { AlertTriangle, Check, Download, FileText, Globe, Presentation } from "lucide-react"
 import type { Project } from "@/lib/types"
+import type { UpdateProject } from "@/pages/ProjectPage"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
 import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
+import { publishProject } from "@/lib/api/publish"
+import { downloadHtmlFile, exportProjectHtml } from "@/lib/api/export"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -26,9 +29,10 @@ const TEMPLATES = [
 
 interface Props {
   project: Project
+  updateProject: UpdateProject
 }
 
-export function ExportTab({ project }: Props) {
+export function ExportTab({ project, updateProject }: Props) {
   const [format, setFormat] = useState<"pdf" | "pptx">("pdf")
   const [template, setTemplate] = useState("corporate")
   const [range, setRange] = useState("all")
@@ -36,8 +40,18 @@ export function ExportTab({ project }: Props) {
   const [includeFlow, setIncludeFlow] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(null)
 
   const [exportError, setExportError] = useState<string | null>(null)
+
+  const approved = project.sections.filter((s) => s.status === "approved").length
+  const allApproved = project.sections.length > 0 && approved === project.sections.length
+  const needsConfirm = project.sections.reduce(
+    (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
+    0,
+  )
+  const canPublish = allApproved && needsConfirm === 0 && project.status !== "published"
 
   const sortedSections = [...project.sections].sort((a, b) =>
     compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
@@ -60,13 +74,32 @@ export function ExportTab({ project }: Props) {
           includeImages: imageMode !== "none",
         })
       } else {
-        await new Promise((r) => window.setTimeout(r, 800))
+        const { html, filename } = await exportProjectHtml(project.id, {
+          template,
+          includeFlow,
+          imageMode: imageMode as "expand" | "appendix" | "none",
+          sectionIds: range === "all" ? undefined : [range],
+        })
+        downloadHtmlFile(html, filename)
       }
       setExported(true)
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "出力に失敗しました")
     } finally {
       setExporting(false)
+    }
+  }
+
+  const doPublish = async () => {
+    setPublishing(true)
+    setPublishError(null)
+    try {
+      const published = await publishProject(project.id)
+      updateProject(project.id, () => published)
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "公開に失敗しました")
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -84,6 +117,47 @@ export function ExportTab({ project }: Props) {
             フローとの見直し候補が {syncReviewCount} 件残っています。出力前にマニュアルタブで確認することを推奨します。
           </div>
         )}
+
+        {/* 公開 */}
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Globe className="size-4 text-muted-foreground" />
+              マニュアル公開
+            </CardTitle>
+            <CardDescription>
+              全セクション承認後に公開できます。公開版は QA チャットの検索対象になります。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {project.status === "published" ? (
+              <p className={cn("text-sm", SUCCESS_TEXT)}>
+                <Check className="mr-1 inline size-4" />
+                公開済み（{project.publishedAt?.slice(0, 10) ?? project.updatedAt}）
+              </p>
+            ) : (
+              <>
+                {!allApproved && (
+                  <p className="text-xs text-muted-foreground">
+                    承認済み {approved} / {project.sections.length} セクション
+                  </p>
+                )}
+                {needsConfirm > 0 && (
+                  <p className={cn("text-xs", WARNING_TEXT)}>要確認ブロックが {needsConfirm} 件残っています</p>
+                )}
+                <Button
+                  className="w-fit gap-1.5"
+                  disabled={!canPublish || publishing}
+                  onClick={() => void doPublish()}
+                >
+                  <Globe className="size-4" />
+                  {publishing ? "公開中…" : "マニュアルを公開する"}
+                </Button>
+                {publishError && <p className="text-sm text-destructive">{publishError}</p>}
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {/* 形式 */}
         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -221,7 +295,7 @@ export function ExportTab({ project }: Props) {
           {exported && format === "pdf" && (
             <span className={cn("flex items-center justify-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
-              {project.name}.pdf を出力しました(デモのためダウンロードは行われません)
+              {project.name}.html をダウンロードしました（ブラウザの印刷で PDF 化できます）
             </span>
           )}
           {exportError && (

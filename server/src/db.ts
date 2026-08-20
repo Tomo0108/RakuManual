@@ -47,6 +47,15 @@ function migrate(database: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+    CREATE TABLE IF NOT EXISTS qa_feedback (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      message_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      feedback TEXT NOT NULL CHECK (feedback IN ('up', 'down')),
+      created_at INTEGER NOT NULL
+    );
   `)
 
   const schema = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'projects'").get() as
@@ -157,4 +166,17 @@ export function upsertProject(userId: string, project: Project) {
        ON CONFLICT(id, owner_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
     )
     .run(project.id, userId, JSON.stringify(project), project.updatedAt)
+}
+
+export function insertQaFeedback(
+  userId: string,
+  messageId: string,
+  question: string,
+  feedback: "up" | "down",
+) {
+  getDb()
+    .prepare(
+      "INSERT INTO qa_feedback (id, user_id, message_id, question, feedback, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .run(crypto.randomUUID(), userId, messageId, question, feedback, Date.now())
 }

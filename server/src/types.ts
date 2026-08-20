@@ -35,4 +35,8 @@ export interface Project {
   history: { id: string; date: string; user: string; action: string }[]
   sectionRevisions?: Record<string, unknown>[]
   restorePoints?: Record<string, unknown>[]
+  /** 公開日時 ISO */
+  publishedAt?: string
+  /** 公開時点のマニュアルスナップショット */
+  publishedSections?: Record<string, unknown>[]
 }

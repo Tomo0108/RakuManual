@@ -6,6 +6,7 @@ export type View =
   | { name: "dashboard" }
   | { name: "qa" }
   | { name: "project"; projectId: string; tab: ProjectTab }
+  | { name: "viewer"; projectId: string; sectionId?: string }
 
 export type ProjectTab =
   | "overview"
@@ -265,4 +266,8 @@ export interface Project {
   sectionRevisions?: ManualSectionRevision[]
   /** 一括復元ポイント */
   restorePoints?: ManualRestorePoint[]
+  /** 公開日時（ISO） */
+  publishedAt?: string
+  /** 公開時点のマニュアルスナップショット（閲覧者向け） */
+  publishedSections?: ManualSection[]
 }

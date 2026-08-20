@@ -1,0 +1,112 @@
+import type { Project } from "../types.js"
+
+export interface ExportOptions {
+  template?: string
+  includeFlow?: boolean
+  imageMode?: "expand" | "appendix" | "none"
+  sectionIds?: string[]
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function templateAccent(template: string): string {
+  if (template === "simple") return "#333"
+  if (template === "training") return "#0d9488"
+  return "#2563eb"
+}
+
+export function buildManualHtml(project: Project, options: ExportOptions = {}): string {
+  const template = options.template ?? "corporate"
+  const accent = templateAccent(template)
+  const includeFlow = options.includeFlow !== false
+  const imageMode = options.imageMode ?? "expand"
+
+  const allSections = (project.sections ?? []) as Array<{
+    id: string
+    title?: string
+    sectionNumber?: string
+    majorTitle?: string
+    mediumTitle?: string
+    blocks?: Array<{ type?: string; text?: string; image?: { url?: string; caption?: string } }>
+  }>
+
+  const sections =
+    options.sectionIds && options.sectionIds.length > 0
+      ? allSections.filter((s) => options.sectionIds!.includes(s.id))
+      : allSections
+
+  const appendixImages: string[] = []
+
+  let body = ""
+  for (const section of sections) {
+    const num = section.sectionNumber ? `${section.sectionNumber} ` : ""
+    if (section.majorTitle) {
+      body += `<h1 class="major">${escapeHtml(section.majorTitle)}</h1>`
+    }
+    if (section.mediumTitle) {
+      body += `<h2 class="medium">${escapeHtml(section.mediumTitle)}</h2>`
+    }
+    body += `<h3 class="section">${escapeHtml(num + (section.title ?? ""))}</h3>`
+
+    for (const block of section.blocks ?? []) {
+      const text = escapeHtml(block.text ?? "")
+      if (block.type === "step") {
+        body += `<p class="step">${text}</p>`
+      } else if (block.type === "note") {
+        body += `<aside class="note">${text}</aside>`
+      } else {
+        body += `<p>${text}</p>`
+      }
+      if (block.image?.url && imageMode !== "none") {
+        const img = `<figure><img src="${escapeHtml(block.image.url)}" alt="${escapeHtml(block.image.caption ?? "")}" /><figcaption>${escapeHtml(block.image.caption ?? "")}</figcaption></figure>`
+        if (imageMode === "appendix") appendixImages.push(img)
+        else body += img
+      }
+    }
+  }
+
+  if (appendixImages.length > 0) {
+    body += `<h2 class="medium">巻末: 添付画像</h2>${appendixImages.join("")}`
+  }
+
+  let flowBlock = ""
+  if (includeFlow && (project.flow as { nodes?: unknown[] })?.nodes?.length) {
+    const nodes = (project.flow as { nodes: Array<{ data?: { label?: string; lane?: string } }> }).nodes
+    flowBlock = `<section class="flow"><h2>業務フロー概要</h2><ol>${nodes
+      .map((n) => `<li><strong>${escapeHtml(n.data?.lane ?? "")}</strong>: ${escapeHtml(n.data?.label ?? "")}</li>`)
+      .join("")}</ol></section>`
+  }
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(project.name)}</title>
+  <style>
+    @page { margin: 20mm; }
+    body { font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: #1a1a1a; line-height: 1.7; max-width: 800px; margin: 0 auto; padding: 24px; }
+    h1.major { color: ${accent}; font-size: 1.5rem; border-bottom: 2px solid ${accent}; padding-bottom: 0.25rem; }
+    h2.medium { font-size: 1.15rem; margin-top: 1.5rem; color: #444; }
+    h3.section { font-size: 1rem; margin-top: 1.25rem; }
+    p.step { padding-left: 1rem; border-left: 3px solid ${accent}; }
+    aside.note { background: #f5f5f5; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9rem; }
+    figure { margin: 1rem 0; }
+    figure img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
+    figcaption { font-size: 0.8rem; color: #666; margin-top: 0.25rem; }
+    .flow ol { padding-left: 1.25rem; }
+    .meta { font-size: 0.85rem; color: #666; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <p class="meta">${escapeHtml(project.name)} — 出力日 ${new Date().toISOString().slice(0, 10)} / テンプレート: ${escapeHtml(template)}</p>
+  ${flowBlock}
+  ${body}
+</body>
+</html>`
+}
