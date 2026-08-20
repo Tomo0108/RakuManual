@@ -4,8 +4,9 @@
  */
 
 import { getLlmAdapter } from "../llm/adapter.js"
-import type { FlowState } from "../flow-types.js"
+import type { FlowState, StepKind } from "../flow-types.js"
 import type { Project } from "../types.js"
+import { hearingQuestionText } from "./hearing.js"
 
 function uid(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
@@ -113,9 +114,9 @@ function normalizeFlow(raw: unknown, fallbackName: string): FlowState | null {
     const data = (node.data ?? node) as Record<string, unknown>
     const id = String(node.id ?? `n-${i}`)
     const kindRaw = String(data.kind ?? "process")
-    const kind =
+    const kind: StepKind =
       kindRaw === "start" || kindRaw === "end" || kindRaw === "decision" || kindRaw === "process"
-        ? kindRaw
+        ? (kindRaw as StepKind)
         : "process"
     return {
       id,
@@ -167,7 +168,13 @@ start と end を各1つ含め、ヒアリング回答を反映せよ。`,
         role: "user",
         content: JSON.stringify({
           name: project.name,
-          hearingAnswers: project.hearingAnswers,
+          // 質問文を添えて回答の意味が伝わるようにする
+          hearingAnswers: project.hearingAnswers.map((a) => ({
+            id: a.questionId,
+            question: a.questionText ?? hearingQuestionText(a.questionId) ?? a.questionId,
+            value: a.value,
+            status: a.status,
+          })),
         }).slice(0, 3500),
       },
     ],
@@ -203,6 +210,32 @@ start と end を各1つ含め、ヒアリング回答を反映せよ。`,
   return { flow, provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false }
 }
 
+type DeepdiveLike = {
+  stepId?: string
+  stepLabel?: string
+  sectionNumber?: string
+  majorTitle?: string
+  mediumTitle?: string
+}
+
+/** 大項目は業務名(q1)、中項目は担当レーン名を既定値にする */
+function resolveSectionTitles(
+  project: Project,
+  deep?: DeepdiveLike,
+): { majorTitle: string; mediumTitle?: string } {
+  const businessName =
+    project.hearingAnswers
+      ?.find((a) => a.questionId === "q1" && String(a.value ?? "").trim())
+      ?.value?.trim() || project.name
+  const lane = (project.flow as unknown as FlowState | undefined)?.nodes?.find(
+    (n) => n.id === deep?.stepId,
+  )?.data?.lane
+  return {
+    majorTitle: deep?.majorTitle ?? businessName,
+    mediumTitle: deep?.mediumTitle ?? (lane ? String(lane) : undefined),
+  }
+}
+
 export function generateManualSectionsMock(existing: Project) {
   const deepdive = existing.deepdive ?? []
   if (deepdive.length === 0) {
@@ -211,6 +244,7 @@ export function generateManualSectionsMock(existing: Project) {
         id: uid("s"),
         title: `${existing.name}の概要`,
         sectionNumber: "1",
+        majorTitle: resolveSectionTitles(existing).majorTitle,
         status: "draft",
         version: 1,
         blocks: [
@@ -228,6 +262,7 @@ export function generateManualSectionsMock(existing: Project) {
     id: uid("s"),
     title: String((d as { stepLabel?: string }).stepLabel ?? `ステップ${i + 1}`),
     sectionNumber: String((d as { sectionNumber?: string }).sectionNumber ?? `${i + 1}`),
+    ...resolveSectionTitles(existing, d as DeepdiveLike),
     stepId: d.stepId,
     status: "draft",
     version: 1,
@@ -277,12 +312,16 @@ function normalizeSections(raw: unknown, project: Project): Project["sections"] 
         needsConfirm: true,
       })
     }
-    const deep = project.deepdive[i]
+    const deep = project.deepdive[i] as DeepdiveLike | undefined
+    const stepId = sec.stepId != null ? String(sec.stepId) : deep?.stepId
+    const titles = resolveSectionTitles(project, { ...deep, stepId })
     return {
       id: uid("s"),
       title: String(sec.title ?? deep?.stepLabel ?? `セクション${i + 1}`),
       sectionNumber: String(sec.sectionNumber ?? deep?.sectionNumber ?? `${i + 1}`),
-      stepId: sec.stepId != null ? String(sec.stepId) : deep?.stepId,
+      majorTitle: sec.majorTitle != null ? String(sec.majorTitle) : titles.majorTitle,
+      mediumTitle: sec.mediumTitle != null ? String(sec.mediumTitle) : titles.mediumTitle,
+      stepId,
       status: "draft",
       version: 1,
       blocks,
@@ -305,7 +344,7 @@ export async function generateManualFromLlm(
       {
         role: "system",
         content: `業務マニュアルのセクション配列を JSON のみで返せ。形式:
-{"sections":[{"title":"...","sectionNumber":"1.1","stepId":"...","blocks":[{"type":"paragraph|step|warning","text":"...","needsConfirm":true}]}]}
+{"sections":[{"title":"...","sectionNumber":"1.1","majorTitle":"業務名","mediumTitle":"中項目","stepId":"...","blocks":[{"type":"paragraph|step|warning","text":"...","needsConfirm":true}]}]}
 推測箇所は needsConfirm:true。深掘り回答を反映し、具体的な手順文にせよ。`,
       },
       {
@@ -383,7 +422,7 @@ export async function regenerateSectionFromLlm(
         content: JSON.stringify({
           section,
           deepdive: project.deepdive.find((d) => d.stepId === (section as { stepId?: string }).stepId),
-          flowNode: (project.flow as FlowState)?.nodes?.find(
+          flowNode: (project.flow as unknown as FlowState | undefined)?.nodes?.find(
             (n) => n.id === (section as { stepId?: string }).stepId,
           ),
         }).slice(0, 3000),

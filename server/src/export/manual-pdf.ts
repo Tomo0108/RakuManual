@@ -1,6 +1,8 @@
 import PDFDocument from "pdfkit"
 import fs from "node:fs"
+import path from "node:path"
 import { finished } from "node:stream/promises"
+import { UPLOADS_DIR } from "../db.js"
 import type { Project } from "../types.js"
 import type { ExportOptions } from "./manual-html.js"
 
@@ -15,13 +17,49 @@ function resolveJapaneseFont(): string | null {
   return null
 }
 
+interface BlockImage {
+  url?: string
+  storageKey?: string
+  caption?: string
+}
+
 type SectionRow = {
   id: string
   title?: string
   sectionNumber?: string
   majorTitle?: string
   mediumTitle?: string
-  blocks?: Array<{ type?: string; text?: string }>
+  blocks?: Array<{ type?: string; text?: string; image?: BlockImage }>
+}
+
+const UPLOADS_ROOT = path.resolve(UPLOADS_DIR)
+const UPLOADS_PREFIX = "/api/uploads/"
+
+/** data URL とサーバー保存済みアップロードの両方を読み込む */
+function loadImageBuffer(image: BlockImage): Buffer | null {
+  const url = image.url ?? ""
+  if (url.startsWith("data:")) {
+    const marker = url.indexOf("base64,")
+    if (marker < 0) return null
+    try {
+      return Buffer.from(url.slice(marker + "base64,".length), "base64")
+    } catch {
+      return null
+    }
+  }
+
+  const key =
+    image.storageKey ?? (url.startsWith(UPLOADS_PREFIX) ? url.slice(UPLOADS_PREFIX.length) : null)
+  if (!key) return null
+  const resolved = path.resolve(UPLOADS_ROOT, decodeURIComponent(key))
+  // uploads 配下から出るパスは読み込まない
+  if (resolved !== UPLOADS_ROOT && !resolved.startsWith(`${UPLOADS_ROOT}${path.sep}`)) return null
+  if (!fs.existsSync(resolved)) return null
+  try {
+    return fs.readFileSync(resolved)
+  } catch {
+    return null
+  }
 }
 
 export async function buildManualPdf(project: Project, options: ExportOptions = {}): Promise<Buffer> {
@@ -30,6 +68,7 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
     options.sectionIds && options.sectionIds.length > 0
       ? allSections.filter((s) => options.sectionIds!.includes(s.id))
       : allSections
+  const imageMode = options.imageMode ?? "expand"
 
   const doc = new PDFDocument({ margin: 50, size: "A4", autoFirstPage: true })
   const chunks: Buffer[] = []
@@ -42,6 +81,26 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
   } catch {
     doc.font("Helvetica")
   }
+
+  /** pdfkit は PNG/JPEG のみ対応。非対応形式はキャプションのみ残す */
+  const drawImage = (image: BlockImage) => {
+    const buffer = loadImageBuffer(image)
+    if (!buffer) return false
+    try {
+      doc.image(buffer, { fit: [420, 260], align: "center" })
+      doc.moveDown(0.2)
+      if (image.caption) {
+        doc.fontSize(9).fillColor("#555555").text(image.caption)
+        doc.fillColor("#000000").fontSize(11)
+      }
+      doc.moveDown(0.3)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const appendix: BlockImage[] = []
 
   const template = options.template ?? "corporate"
   doc.fontSize(20).text(project.name)
@@ -81,8 +140,26 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
       const prefix = block.type === "step" ? "▸ " : block.type === "note" ? "※ " : ""
       doc.text(`${prefix}${block.text ?? ""}`, { indent: block.type === "step" ? 12 : 0 })
       doc.moveDown(0.2)
+      if (block.image && imageMode !== "none") {
+        if (imageMode === "appendix") appendix.push(block.image)
+        else drawImage(block.image)
+      }
     }
     doc.moveDown(0.5)
+  }
+
+  if (appendix.length > 0) {
+    doc.addPage()
+    doc.fontSize(14).text("巻末: 添付画像", { underline: true })
+    doc.moveDown(0.5)
+    doc.fontSize(11)
+    for (const image of appendix) {
+      if (!drawImage(image) && image.caption) {
+        doc.fontSize(9).fillColor("#555555").text(`（画像を読み込めませんでした）${image.caption}`)
+        doc.fillColor("#000000").fontSize(11)
+        doc.moveDown(0.3)
+      }
+    }
   }
 
   doc.end()

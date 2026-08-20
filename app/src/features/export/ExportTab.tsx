@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { AlertTriangle, Check, Download, FileText, Globe, Presentation } from "lucide-react"
-import type { Project } from "@/lib/types"
+import type { Project, ProjectVisibility } from "@/lib/types"
+import { VISIBILITY_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
@@ -90,6 +91,9 @@ export function ExportTab({ project, updateProject }: Props) {
     0,
   )
   const canPublish = allApproved && needsConfirm === 0 && project.status !== "published"
+  // 未設定の既存公開分は組織全体公開（後方互換）、未公開はメンバー限定を既定にする
+  const visibility: ProjectVisibility =
+    project.visibility ?? (project.status === "published" ? "org" : "members")
 
   const sortedSections = [...project.sections].sort((a, b) =>
     compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
@@ -134,7 +138,7 @@ export function ExportTab({ project, updateProject }: Props) {
     setPublishing(true)
     setPublishError(null)
     try {
-      const published = await publishProject(project.id)
+      const published = await publishProject(project.id, visibility)
       const { askCsat, ...rest } = published
       updateProject(project.id, () => rest)
       if (askCsat) setCsatPrompt(true)
@@ -182,6 +186,29 @@ export function ExportTab({ project, updateProject }: Props) {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-[13px]">公開範囲</Label>
+              <Select
+                value={visibility}
+                onValueChange={(v) =>
+                  updateProject(project.id, (p) => ({ ...p, visibility: v as ProjectVisibility }))
+                }
+              >
+                <SelectTrigger size="sm" className="w-full text-xs sm:w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="members">{VISIBILITY_LABEL.members}</SelectItem>
+                  <SelectItem value="org">{VISIBILITY_LABEL.org}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                {visibility === "members"
+                  ? "招待したメンバーとオーナーだけが閲覧・QA検索できます。"
+                  : "社内の全ユーザーが公開版を閲覧・QA検索できます。ヒアリング回答や下書きは公開されません。"}
+              </p>
+            </div>
+
             {project.status === "published" ? (
               <p className={cn("text-sm", SUCCESS_TEXT)}>
                 <Check className="mr-1 inline size-4" />

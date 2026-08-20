@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { RefreshCw, WifiOff } from "lucide-react"
 import type { View } from "@/lib/types"
 import type { AccentId } from "@/lib/mock-data"
 import { loadAccent, saveAccent } from "@/lib/accent-storage"
@@ -38,7 +39,7 @@ export default function App() {
     )
   }, [accent])
 
-  const { projects, updateProject, addProject } = session
+  const { projects, updateProject, updateProjectLocal, addProject } = session
 
   const currentProject =
     view.name === "project" || view.name === "viewer"
@@ -49,6 +50,27 @@ export default function App() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         読み込み中…
+      </div>
+    )
+  }
+
+  if (session.apiOffline) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background px-6">
+        <div className="max-w-md text-center">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+            <WifiOff className="size-7" />
+          </div>
+          <h1 className="mt-4 text-lg font-bold">サーバーに接続できません</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            マニュアルの読み込み・保存ができないため、編集は行えません。
+            ネットワーク状況を確認し、しばらく待ってから再試行してください。
+          </p>
+          <Button className="mt-5 gap-1.5" onClick={() => session.retryConnection()}>
+            <RefreshCw className="size-4" />
+            再試行
+          </Button>
+        </div>
       </div>
     )
   }
@@ -111,6 +133,9 @@ export default function App() {
                   setView({ name: "project", projectId: id, tab: tab ?? "overview" })
                 }}
                 onCreate={addProject}
+                onDelete={(id) => void session.removeProject(id)}
+                onSeedSamples={() => void session.seedSamples()}
+                seeding={session.seeding}
               />
             )}
             {view.name === "qa" && (
@@ -144,6 +169,7 @@ export default function App() {
                 tab={view.tab}
                 setTab={(tab) => setView({ name: "project", projectId: currentProject.id, tab })}
                 updateProject={updateProject}
+                updateProjectLocal={updateProjectLocal}
                 onBack={() => setView({ name: "projects" })}
               />
             )}

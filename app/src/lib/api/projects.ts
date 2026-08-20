@@ -24,6 +24,10 @@ export async function updateProjectApi(project: Project): Promise<Project> {
   })
 }
 
+export async function deleteProjectApi(projectId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/projects/${projectId}`, { method: "DELETE" })
+}
+
 export async function updateProjectMeta(
   projectId: string,
   body: { description?: string; reviewDeadline?: string | null },

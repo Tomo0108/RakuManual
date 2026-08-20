@@ -50,6 +50,8 @@ export interface HearingAnswer {
   questionId: string
   value: string
   status: AnswerStatus
+  /** 追加質問（follow-up）は設問マスタに無いため質問文を保持する */
+  questionText?: string
 }
 
 /* ---------- フロー図 ---------- */
@@ -248,6 +250,14 @@ export interface HistoryEntry {
 }
 
 /* ---------- プロジェクト本体 ---------- */
+/** 公開範囲。未設定の既存プロジェクトは "org" 扱い（後方互換） */
+export type ProjectVisibility = "org" | "members"
+
+export const VISIBILITY_LABEL: Record<ProjectVisibility, string> = {
+  org: "社内全体に公開",
+  members: "メンバーとオーナーのみ",
+}
+
 export interface Project {
   id: string
   name: string
@@ -256,6 +266,8 @@ export interface Project {
   ownerId?: string
   updatedAt: string
   status: ProjectStatus
+  /** 公開範囲。未設定は "org"（後方互換）、新規公開の既定は "members" */
+  visibility?: ProjectVisibility
   description: string
   reviewDeadline?: string
   hearingAnswers: HearingAnswer[]

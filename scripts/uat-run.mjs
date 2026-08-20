@@ -264,7 +264,11 @@ async function main() {
     }))
     project = { ...(await api(yamada, `/api/projects/${id}`)).body, sections: approved, status: "manual" }
     await api(yamada, `/api/projects/${id}`, { method: "PUT", body: JSON.stringify(project) })
-    const pub = await api(yamada, `/api/projects/${id}/publish`, { method: "POST", body: "{}" })
+    // 組織全体公開を明示（既定はメンバー限定）
+    const pub = await api(yamada, `/api/projects/${id}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ visibility: "org" }),
+    })
     record("U-07b", "公開", pub.status === 200 && pub.body.status === "published", pub.body?.error)
   } else {
     record("U-07b", "公開", false, "no sections")
@@ -272,8 +276,17 @@ async function main() {
 
   // U-08/U-10 published visible to viewer + QA
   const satoList = await api(sato, "/api/projects")
-  const visible = satoList.body.some((p) => p.id === id && p.status === "published")
-  record("U-08", "閲覧者に公開版が見える", visible)
+  const shared = satoList.body.find((p) => p.id === id && p.status === "published")
+  record("U-08", "閲覧者に公開版が見える", !!shared)
+
+  // U-08b 閲覧者向けはヒアリング回答・履歴・下書きを含まない
+  const detail = await api(sato, `/api/projects/${id}`)
+  const sanitized =
+    detail.status === 200 &&
+    (detail.body.hearingAnswers ?? []).length === 0 &&
+    (detail.body.history ?? []).length === 0 &&
+    (detail.body.deepdive ?? []).every((d) => (d.answers ?? []).length === 0)
+  record("U-08b", "閲覧者向けはサニタイズ済み", sanitized)
 
   const qa = await api(sato, "/api/qa/ask", {
     method: "POST",

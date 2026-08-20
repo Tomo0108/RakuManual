@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import type { AuthUser, Project } from "./types.js"
+import type { AuthUser, Project, ProjectVisibility } from "./types.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const DATA_DIR = path.join(__dirname, "..", "data")
@@ -368,7 +368,30 @@ export function listProjectsForUser(userId: string): Project[] {
   return rows.map((r) => JSON.parse(r.data) as Project)
 }
 
-/** 自分のプロジェクト + 他ユーザーの公開済み + メンバー招待分 */
+/** 未設定の既存プロジェクトは組織全体公開（後方互換） */
+export function effectiveVisibility(project: Project): ProjectVisibility {
+  return project.visibility === "members" ? "members" : "org"
+}
+
+/**
+ * 公開マニュアルを他ユーザーへ返すときの閲覧用サニタイズ。
+ * ヒアリング回答・深掘り回答・変更履歴・下書き本文は業務内部情報のため除去し、
+ * 公開スナップショットのみを本文として返す。
+ */
+export function sanitizeProjectForReader(project: Project): Project {
+  const published = (project.publishedSections ?? []) as Project["sections"]
+  return {
+    ...project,
+    hearingAnswers: [],
+    deepdive: (project.deepdive ?? []).map((d) => ({ ...d, answers: [] })),
+    sections: published,
+    history: [],
+    sectionRevisions: [],
+    restorePoints: [],
+  }
+}
+
+/** 自分のプロジェクト + 他ユーザーの公開済み(組織公開) + メンバー招待分 */
 export function listAccessibleProjects(userId: string): Project[] {
   const own = listProjectsForUser(userId)
   const ownIds = new Set(own.map((p) => p.id))
@@ -377,6 +400,7 @@ export function listAccessibleProjects(userId: string): Project[] {
     .prepare(
       `SELECT data FROM projects
        WHERE json_extract(data, '$.status') = 'published' AND owner_id != ?
+         AND COALESCE(json_extract(data, '$.visibility'), 'org') != 'members'
        ORDER BY updated_at DESC`,
     )
     .all(userId) as { data: string }[]
@@ -390,12 +414,14 @@ export function listAccessibleProjects(userId: string): Project[] {
     .all(userId, userId) as { data: string }[]
 
   const merged = [...own]
+  const memberIds = new Set(
+    memberRows.map((row) => (JSON.parse(row.data) as Project).id),
+  )
   for (const row of [...publishedRows, ...memberRows]) {
     const p = JSON.parse(row.data) as Project
-    if (!ownIds.has(p.id)) {
-      merged.push(p)
-      ownIds.add(p.id)
-    }
+    if (ownIds.has(p.id)) continue
+    merged.push(memberIds.has(p.id) ? p : sanitizeProjectForReader(p))
+    ownIds.add(p.id)
   }
   return merged.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
@@ -405,6 +431,14 @@ export function getProjectForUser(projectId: string, userId: string): Project | 
     .prepare("SELECT data FROM projects WHERE id = ? AND owner_id = ?")
     .get(projectId, userId) as { data: string } | undefined
   return row ? (JSON.parse(row.data) as Project) : null
+}
+
+/** 楽観ロック用。保存済みの更新日時のみを引く */
+export function getProjectUpdatedAt(projectId: string, ownerId: string): string | null {
+  const row = getDb()
+    .prepare("SELECT updated_at AS updatedAt FROM projects WHERE id = ? AND owner_id = ?")
+    .get(projectId, ownerId) as { updatedAt: string } | undefined
+  return row?.updatedAt ?? null
 }
 
 export type ProjectAccess = "owner" | "member" | "published_reader"
@@ -430,11 +464,13 @@ export function getAccessibleProject(
   const published = getDb()
     .prepare(
       `SELECT data FROM projects
-       WHERE id = ? AND owner_id != ? AND json_extract(data, '$.status') = 'published'`,
+       WHERE id = ? AND owner_id != ? AND json_extract(data, '$.status') = 'published'
+         AND COALESCE(json_extract(data, '$.visibility'), 'org') != 'members'`,
     )
     .get(projectId, userId) as { data: string } | undefined
   if (published) {
-    return { project: JSON.parse(published.data) as Project, access: "published_reader" }
+    const project = JSON.parse(published.data) as Project
+    return { project: sanitizeProjectForReader(project), access: "published_reader" }
   }
 
   return null

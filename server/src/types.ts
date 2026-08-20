@@ -13,7 +13,12 @@ export interface HearingAnswer {
   questionId: string
   value: string
   status: "answered" | "skipped" | "unknown" | "later"
+  /** 追加質問（follow-up）は設問マスタに無いため質問文を保持する */
+  questionText?: string
 }
+
+/** 公開範囲。未設定の既存プロジェクトは "org" 扱い（後方互換） */
+export type ProjectVisibility = "org" | "members"
 
 export interface ManualBlock {
   id: string
@@ -29,6 +34,8 @@ export interface Project {
   ownerId?: string
   updatedAt: string
   status: "hearing" | "flow" | "deepdive" | "manual" | "published"
+  /** 公開範囲。未設定は "org"（後方互換）、新規公開は "members" */
+  visibility?: ProjectVisibility
   description: string
   reviewDeadline?: string
   hearingAnswers: HearingAnswer[]

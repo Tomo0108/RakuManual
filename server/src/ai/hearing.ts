@@ -1,18 +1,29 @@
 import type { HearingAnswer, Project } from "../types.js"
 import { getLlmAdapter } from "../llm/adapter.js"
 
-const BASE_QUESTIONS = [
-  { id: "q1", text: "この業務の正式名称（または通称）は何ですか？", type: "text" },
-  { id: "q2", text: "この業務の目的・成果物は何ですか？", type: "text" },
-  { id: "q3", text: "主な関係者（担当・確認・承認）は誰ですか？", type: "text" },
-  { id: "q4", text: "業務の開始条件（トリガー）は何ですか？", type: "text" },
-  { id: "q5", text: "利用する主なシステム・ツールは何ですか？", type: "multi" },
-  { id: "q6", text: "業務の終了条件は何ですか？", type: "text" },
-  { id: "q7", text: "頻度（日次/週次/月次など）はどのくらいですか？", type: "choice" },
-  { id: "q8", text: "大まかな手順を3〜5ステップで教えてください。", type: "text" },
-  { id: "q9", text: "よくある例外やトラブルはありますか？", type: "text" },
-  { id: "q10", text: "マニュアル読者に特に伝えたい注意点は？", type: "text" },
+/**
+ * 骨組みヒアリングの設問マスタ。
+ * app/src/lib/mock-data.ts の HEARING_QUESTIONS と同じ ID = 同じ質問に揃える。
+ */
+export const BASE_QUESTIONS = [
+  { id: "q1", text: "これからマニュアル化する業務の名前を教えてください。", type: "text" },
+  { id: "q2", text: "この業務の目的はなんですか?この業務が完了すると、何が達成されますか?", type: "text" },
+  { id: "q3", text: "この業務はどのくらいの頻度で発生しますか?", type: "choice" },
+  { id: "q4", text: "業務の開始のきっかけ(トリガー)はなんですか?", type: "text" },
+  { id: "q5", text: "この業務には誰が関わりますか?当てはまるものをすべて選んでください。", type: "multi" },
+  { id: "q6", text: "誰から仕事を受け取り、完了後は誰に渡しますか?", type: "text" },
+  { id: "q7", text: "業務が「完了した」と言える状態はどんな状態ですか?", type: "text" },
+  { id: "q8", text: "業務のおおまかな手順を、思いつく順で構わないので教えてください。", type: "text" },
+  { id: "q9", text: "途中で判断が分かれるポイント(条件分岐)はありますか?", type: "text" },
+  { id: "q10", text: "例外的なケースや、イレギュラー対応があれば教えてください。", type: "text" },
 ]
+
+/** 追加質問は無制限に増やさない */
+const MAX_FOLLOW_UPS = 2
+
+export function hearingQuestionText(questionId: string): string | undefined {
+  return BASE_QUESTIONS.find((q) => q.id === questionId)?.text
+}
 
 export async function nextHearingQuestion(
   project: Project,
@@ -39,7 +50,11 @@ export async function nextHearingQuestion(
         role: "user",
         content: JSON.stringify({
           project: project.name,
-          answers: project.hearingAnswers,
+          answers: project.hearingAnswers.map((a) => ({
+            question: a.questionText ?? hearingQuestionText(a.questionId) ?? a.questionId,
+            value: a.value,
+            status: a.status,
+          })),
           nextBaseId: nextBase?.id ?? null,
         }).slice(0, 2500),
       },
@@ -66,9 +81,12 @@ export async function nextHearingQuestion(
   }
 
   if (!nextBase) {
-    if (followUp && !answeredIds.has("follow-up")) {
+    const followUpCount = project.hearingAnswers.filter((a) =>
+      a.questionId.startsWith("follow-up"),
+    ).length
+    if (followUp && followUpCount < MAX_FOLLOW_UPS) {
       return {
-        question: { id: "follow-up", text: followUp, type: "text" },
+        question: { id: `follow-up-${Date.now()}`, text: followUp, type: "text" },
         done: false,
         contradictionHint,
         provider: llm.provider,

@@ -31,7 +31,15 @@ import { cn } from "@/lib/utils"
 interface Props {
   project: Project
   updateProject: UpdateProject
+  /** 回答は専用APIで保存済みのため、全体PUTを伴わない反映に使う */
+  updateProjectLocal: UpdateProject
   setTab: (t: ProjectTab) => void
+}
+
+const BASE_QUESTION_IDS = new Set(HEARING_QUESTIONS.map((q) => q.id))
+
+function isFollowUpId(questionId: string): boolean {
+  return !BASE_QUESTION_IDS.has(questionId)
 }
 
 const STATUS_TEXT: Record<AnswerStatus, string> = {
@@ -41,7 +49,7 @@ const STATUS_TEXT: Record<AnswerStatus, string> = {
   later: "後で答える",
 }
 
-export function HearingTab({ project, updateProject, setTab }: Props) {
+export function HearingTab({ project, updateProject, updateProjectLocal, setTab }: Props) {
   const answers = project.hearingAnswers
   const answeredIds = new Set(answers.map((a) => a.questionId))
   const currentIndex = HEARING_QUESTIONS.findIndex((q) => !answeredIds.has(q.id))
@@ -61,7 +69,13 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
 
   const activeQuestion = followUp ?? currentQuestion
   const done = baseDone && !followUp
-  const progress = Math.round((answers.length / HEARING_QUESTIONS.length) * 100)
+  const followUpAnswers = useMemo(
+    () => answers.filter((a) => isFollowUpId(a.questionId)),
+    [answers],
+  )
+  // AIの追加質問も進捗の母数に含める
+  const totalQuestions = HEARING_QUESTIONS.length + followUpAnswers.length + (followUp ? 1 : 0)
+  const progress = Math.round((answers.length / Math.max(totalQuestions, 1)) * 100)
   const pendingList = useMemo(
     () => answers.filter((a) => a.status !== "answered"),
     [answers],
@@ -77,7 +91,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
       .then((res) => {
         if (cancelled) return
         setHint(res.contradictionHint)
-        if (res.question && res.question.id === "follow-up") {
+        if (res.question && isFollowUpId(res.question.id)) {
           setFollowUp(res.question)
         } else if (res.done) {
           setFollowUp(null)
@@ -91,22 +105,41 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
     }
   }, [project.id, answers.length])
 
+  /**
+   * 回答は専用APIで保存する。全体PUTを併用するとサーバー側で追記された
+   * 更新履歴を上書きしてしまうため、成功時は返却プロジェクトで置き換える。
+   */
+  const persistAnswer = (answer: HearingAnswer) => {
+    const applyLocally = (p: Project): Project => ({
+      ...p,
+      hearingAnswers: [...p.hearingAnswers.filter((a) => a.questionId !== answer.questionId), answer],
+    })
+    updateProjectLocal(project.id, applyLocally)
+    void upsertHearingAnswer(project.id, answer)
+      .then((saved) => updateProjectLocal(project.id, () => saved))
+      .catch(() => {
+        // 専用APIが使えない場合のみ全体保存へフォールバック
+        updateProject(project.id, (p) => ({
+          ...applyLocally(p),
+          updatedAt: now().slice(0, 10),
+        }))
+      })
+  }
+
   const saveAnswer = (value: string, status: AnswerStatus) => {
     if (!activeQuestion) return
-    const answer: HearingAnswer = { questionId: activeQuestion.id, value, status }
+    const answer: HearingAnswer = {
+      questionId: activeQuestion.id,
+      value,
+      status,
+      ...(isFollowUpId(activeQuestion.id) ? { questionText: activeQuestion.text } : {}),
+    }
     streamAbortRef.current?.abort()
     const ac = new AbortController()
     streamAbortRef.current = ac
     setThinking(true)
     setStreamText("")
-    updateProject(project.id, (p) => ({
-      ...p,
-      updatedAt: now().slice(0, 10),
-      hearingAnswers: [...p.hearingAnswers.filter((a) => a.questionId !== answer.questionId), answer],
-    }))
-    void upsertHearingAnswer(project.id, answer).catch(() => {
-      /* updateProject の永続化にフォールバック */
-    })
+    persistAnswer(answer)
     setDraft("")
     setMultiSelection([])
     setFollowUp(null)
@@ -130,16 +163,14 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
   }
 
   const saveEdit = (questionId: string) => {
-    const answer: HearingAnswer = { questionId, value: editDraft, status: "answered" }
-    updateProject(project.id, (p) => ({
-      ...p,
-      hearingAnswers: p.hearingAnswers.map((a) =>
-        a.questionId === questionId ? answer : a,
-      ),
-    }))
-    void upsertHearingAnswer(project.id, answer).catch(() => {
-      /* updateProject の永続化にフォールバック */
-    })
+    const existing = answers.find((a) => a.questionId === questionId)
+    const answer: HearingAnswer = {
+      questionId,
+      value: editDraft,
+      status: "answered",
+      ...(existing?.questionText ? { questionText: existing.questionText } : {}),
+    }
+    persistAnswer(answer)
     setEditingId(null)
   }
 
@@ -151,10 +182,10 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
         <div className="border-b bg-muted/30 px-6 py-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium">
-              骨組みヒアリング {done ? "完了" : `${answers.length + 1} / ${HEARING_QUESTIONS.length} 問目`}
+              骨組みヒアリング {done ? "完了" : `${answers.length + 1} / ${totalQuestions} 問目`}
             </span>
             <span className="text-muted-foreground">
-              {done ? "すべて回答済み" : `残り約 ${HEARING_QUESTIONS.length - answers.length} 問`}
+              {done ? "すべて回答済み" : `残り約 ${Math.max(totalQuestions - answers.length, 1)} 問`}
             </span>
           </div>
           <Progress value={done ? 100 : progress} className="mt-2 h-2" />
@@ -171,10 +202,10 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
 
             {answers.map((a) => {
               const q = HEARING_QUESTIONS.find((x) => x.id === a.questionId)
-              if (!q) return null
+              const text = q?.text ?? a.questionText ?? "AIからの追加質問"
               return (
                 <div key={a.questionId} className="flex flex-col gap-5">
-                  <AiBubble hint={q.hint}>{q.text}</AiBubble>
+                  <AiBubble hint={q?.hint}>{text}</AiBubble>
                   <UserBubble
                     answer={a}
                     editing={editingId === a.questionId}
@@ -388,6 +419,27 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                 </button>
               )
             })}
+            {followUpAnswers.map((a, i) => (
+              <button
+                key={a.questionId}
+                className="rounded-md border bg-background px-3 py-2 text-left text-xs transition-colors hover:border-primary/30"
+                onClick={() => {
+                  setEditingId(a.questionId)
+                  setEditDraft(a.value)
+                }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium">追加Q{i + 1}</span>
+                  {a.status === "answered" && <Check className={cn("size-3", SUCCESS_TEXT)} />}
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-muted-foreground">
+                  {a.questionText ?? "AIからの追加質問"}
+                </div>
+                {a.value && (
+                  <div className="mt-1 line-clamp-2 font-medium text-foreground">{a.value}</div>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       </aside>

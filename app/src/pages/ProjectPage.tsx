@@ -20,10 +20,19 @@ interface Props {
   tab: ProjectTab
   setTab: (t: ProjectTab) => void
   updateProject: UpdateProject
+  /** 専用エンドポイントで保存済みの内容を、全体PUTなしで画面へ反映する */
+  updateProjectLocal: UpdateProject
   onBack: () => void
 }
 
-export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Props) {
+export function ProjectPage({
+  project,
+  tab,
+  setTab,
+  updateProject,
+  updateProjectLocal,
+  onBack,
+}: Props) {
   return (
     <div className="flex h-full flex-col">
       <header className="page-header px-4 pt-2 pb-2 md:px-6 md:pt-4 md:pb-3">
@@ -46,7 +55,14 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
         {tab === "overview" && (
           <OverviewTab project={project} setTab={setTab} updateProject={updateProject} />
         )}
-        {tab === "hearing" && <HearingTab project={project} updateProject={updateProject} setTab={setTab} />}
+        {tab === "hearing" && (
+          <HearingTab
+            project={project}
+            updateProject={updateProject}
+            updateProjectLocal={updateProjectLocal}
+            setTab={setTab}
+          />
+        )}
         {tab === "flow" && <FlowEditorTab project={project} updateProject={updateProject} setTab={setTab} />}
         {tab === "deepdive" && <DeepDiveTab project={project} updateProject={updateProject} setTab={setTab} />}
         {tab === "manual" && <ManualTab project={project} updateProject={updateProject} setTab={setTab} />}

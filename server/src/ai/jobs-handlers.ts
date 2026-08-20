@@ -81,6 +81,10 @@ export function registerAiJobHandlers() {
     const pdf = await buildManualPdf(project, {
       template: typeof payload.template === "string" ? payload.template : undefined,
       includeFlow: payload.includeFlow !== false,
+      imageMode:
+        payload.imageMode === "appendix" || payload.imageMode === "none"
+          ? payload.imageMode
+          : "expand",
       sectionIds: Array.isArray(payload.sectionIds) ? (payload.sectionIds as string[]) : undefined,
     })
     update(80)

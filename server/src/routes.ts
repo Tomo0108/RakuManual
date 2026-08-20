@@ -3,9 +3,11 @@ import {
   averageCsat,
   createSession,
   deleteDesignTemplate,
+  deleteProject,
   deleteSession,
   getAccessibleProject,
   getProjectForUser,
+  getProjectUpdatedAt,
   getSessionUser,
   getUserById,
   insertCsat,
@@ -538,6 +540,16 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     }
     const editable = loadEditable(request.params.id, user, reply)
     if (!editable) return
+
+    // 楽観ロック（簡易版）: 送られてきた updatedAt が保存済みより古ければ衝突扱い
+    const storedUpdatedAt = getProjectUpdatedAt(request.params.id, editable.ownerId)
+    if (body.updatedAt && storedUpdatedAt && body.updatedAt < storedUpdatedAt) {
+      return reply.status(409).send({
+        error: "他のユーザーまたは別の画面で更新されています。再読み込みしてください。",
+        updatedAt: storedUpdatedAt,
+      })
+    }
+
     const project: Project = {
       ...body,
       owner: editable.project.owner,
@@ -545,6 +557,23 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       updatedAt: todayStamp(),
     }
     return saveForOwner(editable.ownerId, project, reply)
+  })
+
+  app.delete<{ Params: { id: string } }>("/api/projects/:id", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+    if (!deleteProject(existing.id, user.id)) {
+      return reply.status(500).send({ error: "Delete failed" })
+    }
+    recordOperationLog({
+      userId: user.id,
+      actionType: "edit",
+      projectId: existing.id,
+      payload: { kind: "delete", name: existing.name },
+    })
+    return { ok: true, id: existing.id }
   })
 
   app.patch<{ Params: { id: string } }>("/api/projects/:id/meta", async (request, reply) => {
@@ -1050,7 +1079,12 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: validation.errors.join(" / "), errors: validation.errors })
     }
 
-    const published = applyPublish(existing, user.name)
+    const body = (request.body ?? {}) as { visibility?: Project["visibility"] }
+    const visibility = body.visibility === "org" || body.visibility === "members" ? body.visibility : undefined
+    const published = applyPublish(
+      visibility ? { ...existing, visibility } : existing,
+      user.name,
+    )
     const saved = saveOwned(user, published, reply)
     if (!saved) return
     recordOperationLog({
@@ -1102,6 +1136,7 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
       const job = enqueuePdfExport(user.id, existing.id, {
         template: body.template,
         includeFlow: body.includeFlow,
+        imageMode: body.imageMode,
         sectionIds: body.sectionIds,
       })
       reply.status(202)

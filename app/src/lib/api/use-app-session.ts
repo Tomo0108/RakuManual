@@ -4,9 +4,17 @@ import { INITIAL_PROJECTS } from "@/lib/mock-data"
 import { today } from "@/lib/project-utils"
 import { ApiError } from "@/lib/api/client"
 import { fetchMe, login as apiLogin, loginWithOidcCode, logout as apiLogout, type AuthUser } from "@/lib/api/auth"
-import { createProject, fetchProjects, updateProjectApi } from "@/lib/api/projects"
+import {
+  createProject,
+  deleteProjectApi,
+  fetchProject,
+  fetchProjects,
+  updateProjectApi,
+} from "@/lib/api/projects"
 
 const PERSIST_MS = 500
+
+const CONFLICT_MESSAGE = "他で更新されました。再読み込みしてください"
 
 async function apiReachable(): Promise<boolean> {
   try {
@@ -17,23 +25,17 @@ async function apiReachable(): Promise<boolean> {
   }
 }
 
-async function loadOrSeedProjects(): Promise<Project[]> {
-  const existing = await fetchProjects()
-  if (existing.length > 0) return existing
-  for (const p of INITIAL_PROJECTS) {
-    await createProject(p)
-  }
-  return fetchProjects()
-}
-
 export function useAppSession() {
   const [booting, setBooting] = useState(true)
+  const [bootAttempt, setBootAttempt] = useState(0)
   const [apiAvailable, setApiAvailable] = useState(false)
+  const [apiOffline, setApiOffline] = useState(false)
   const [user, setUser] = useState<AuthUser | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [loginError, setLoginError] = useState<string | null>(null)
   const [loginBusy, setLoginBusy] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
   const projectsRef = useRef(projects)
   const persistTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
@@ -50,8 +52,10 @@ export function useAppSession() {
       if (cancelled) return
       setApiAvailable(reachable)
 
+      // API に到達できない場合はモックデータを編集させない（保存できない編集を防ぐ）
       if (!reachable) {
-        setProjects(INITIAL_PROJECTS)
+        setProjects([])
+        setApiOffline(true)
         setBooting(false)
         return
       }
@@ -63,23 +67,27 @@ export function useAppSession() {
           if (cancelled) return
           setUser(me)
           window.history.replaceState({}, "", window.location.pathname)
-          const list = await loadOrSeedProjects()
+          const list = await fetchProjects()
           if (cancelled) return
           setProjects(list)
         } else {
           const me = await fetchMe()
           if (cancelled) return
           setUser(me)
-          const list = await loadOrSeedProjects()
+          const list = await fetchProjects()
           if (cancelled) return
           setProjects(list)
         }
+        if (!cancelled) setApiOffline(false)
       } catch (err) {
+        if (cancelled) return
         if (err instanceof ApiError && err.status === 401) {
           setUser(null)
+          setApiOffline(false)
         } else {
-          setProjects(INITIAL_PROJECTS)
-          setApiAvailable(false)
+          // 401 以外はデモデータへフォールバックせず接続エラーとして扱う
+          setProjects([])
+          setApiOffline(true)
         }
       } finally {
         if (!cancelled) setBooting(false)
@@ -88,6 +96,13 @@ export function useAppSession() {
     return () => {
       cancelled = true
     }
+  }, [bootAttempt])
+
+  const retryConnection = useCallback(() => {
+    setBooting(true)
+    setApiOffline(false)
+    setSaveError(null)
+    setBootAttempt((n) => n + 1)
   }, [])
 
   const flushPersist = useCallback(async (id: string) => {
@@ -99,6 +114,17 @@ export function useAppSession() {
       setProjects((prev) => prev.map((p) => (p.id === id ? saved : p)))
       setSaveError(null)
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // 保存競合: サーバー側の最新を取り込み、ユーザーに再読み込みを促す
+        try {
+          const latest = await fetchProject(id)
+          setProjects((prev) => prev.map((p) => (p.id === id ? latest : p)))
+        } catch {
+          /* 取得失敗時はローカル状態を維持 */
+        }
+        setSaveError(CONFLICT_MESSAGE)
+        return
+      }
       setSaveError(err instanceof Error ? err.message : "保存に失敗しました")
     }
   }, [])
@@ -135,6 +161,17 @@ export function useAppSession() {
     [schedulePersist],
   )
 
+  /**
+   * 専用エンドポイントで既に永続化済みの変更を画面へ反映する。
+   * 全体 PUT を発行しないため、サーバー側で追記された履歴を消さない。
+   */
+  const updateProjectLocal = useCallback(
+    (id: string, updater: (p: Project) => Project) => {
+      setProjects((prev) => prev.map((p) => (p.id === id ? updater(p) : p)))
+    },
+    [],
+  )
+
   const addProject = useCallback(
     (project: Project) => {
       setProjects((prev) => [project, ...prev])
@@ -152,13 +189,49 @@ export function useAppSession() {
     [apiAvailable, user],
   )
 
+  const removeProject = useCallback(
+    async (id: string) => {
+      const snapshot = projectsRef.current
+      setProjects((prev) => prev.filter((p) => p.id !== id))
+      const timer = persistTimers.current.get(id)
+      if (timer) clearTimeout(timer)
+      persistTimers.current.delete(id)
+      persistQueue.current.delete(id)
+      try {
+        await deleteProjectApi(id)
+        setSaveError(null)
+      } catch (err) {
+        setProjects(snapshot)
+        setSaveError(err instanceof Error ? err.message : "削除に失敗しました")
+      }
+    },
+    [],
+  )
+
+  /** サンプルデータの手動投入（自動シードは行わない） */
+  const seedSamples = useCallback(async () => {
+    setSeeding(true)
+    try {
+      const created: Project[] = []
+      for (const sample of INITIAL_PROJECTS) {
+        created.push(await createProject({ ...sample, id: `${sample.id}-${Date.now()}` }))
+      }
+      setProjects((prev) => [...created, ...prev])
+      setSaveError(null)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "サンプル投入に失敗しました")
+    } finally {
+      setSeeding(false)
+    }
+  }, [])
+
   const login = useCallback(async (userId = "user-yamada") => {
     setLoginBusy(true)
     setLoginError(null)
     try {
       const me = await apiLogin(userId)
       setUser(me)
-      const list = await loadOrSeedProjects()
+      const list = await fetchProjects()
       setProjects(list)
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : "ログインに失敗しました")
@@ -192,16 +265,22 @@ export function useAppSession() {
   return {
     booting,
     apiAvailable,
-    needsLogin: apiAvailable && !user,
+    apiOffline,
+    needsLogin: apiAvailable && !apiOffline && !user,
     user,
     projects,
     saveError,
     loginError,
     loginBusy,
+    seeding,
     login,
     logout,
     updateProject,
+    updateProjectLocal,
     addProject,
+    removeProject,
+    seedSamples,
     retrySave,
+    retryConnection,
   }
 }

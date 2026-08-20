@@ -41,6 +41,8 @@ export function applyPublish(project: Project, userName: string): Project {
   return {
     ...project,
     status: "published",
+    // 明示指定が無い新規公開はメンバー＋オーナーのみに絞る
+    visibility: project.visibility ?? "members",
     updatedAt: now,
     publishedAt: new Date().toISOString(),
     publishedSections,

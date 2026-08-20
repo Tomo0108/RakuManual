@@ -56,6 +56,8 @@ import {
   type NlProposal,
 } from "./flow-logic"
 import { aiGenerateFlow, aiProposeFlowNl, aiRegenerateFlow } from "@/lib/api/ai"
+import { describeAiError } from "@/lib/api/errors"
+import { fetchProject } from "@/lib/api/projects"
 import {
   FLOW_MINIMAP_HEIGHT,
   FLOW_MINIMAP_WIDTH,
@@ -150,6 +152,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [errorsPanelOpen, setErrorsPanelOpen] = useState(true)
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [confirmBlockedOpen, setConfirmBlockedOpen] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const zoomBy = useCallback((factor: number) => {
     const inst = rfRef.current
@@ -792,19 +795,28 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const generate = async () => {
     setGenerating(true)
     setGenProgress(0)
+    setAiError(null)
     try {
       const { flow: aiFlow } = await aiGenerateFlow(project.id, (p) => setGenProgress(p))
       const generated = polishFlow(autoLayout(aiFlow))
       commit(() => generated)
-      updateProject(project.id, (p) => ({
-        ...p,
-        status: p.status === "hearing" ? "flow" : p.status,
-        history: [
-          { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: "フロー図をAI生成" },
-          ...p.history,
-        ],
-      }))
+      // ジョブ実行中にサーバー側が更新されている可能性があるため最新を取り直して合成する
+      const latest = await fetchProject(project.id).catch(() => null)
+      updateProject(project.id, (p) => {
+        const base = latest ?? p
+        return {
+          ...base,
+          flow: generated,
+          status: base.status === "hearing" ? "flow" : base.status,
+          history: [
+            { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: "フロー図をAI生成" },
+            ...base.history,
+          ],
+        }
+      })
       fitCanvas()
+    } catch (err) {
+      setAiError(describeAiError(err, "フロー図の生成に失敗しました"))
     } finally {
       setGenerating(false)
     }
@@ -813,6 +825,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   /* 再生成(F-2): 手動修正ノードは保護。Undoでも復元可能 */
   const regenerate = async () => {
     setRegenConfirmOpen(false)
+    setAiError(null)
     try {
       const { flow: regenFlow } = await aiRegenerateFlow(project.id, flow)
       commit(() => polishFlow(regenFlow))
@@ -829,8 +842,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           ...p.history,
         ],
       }))
-    } catch {
-      /* 保存エラーは useAppSession 側で表示 */
+    } catch (err) {
+      setAiError(describeAiError(err, "フロー図の再生成に失敗しました"))
     }
   }
 
@@ -838,6 +851,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const askAi = async () => {
     if (!instruction.trim()) return
     setAiThinking(true)
+    setAiError(null)
     try {
       const { description, previewFlow, appliedFlow } = await aiProposeFlowNl(
         project.id,
@@ -850,6 +864,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         apply: () => appliedFlow,
       }
       setProposal(remoteProposal)
+    } catch (err) {
+      setAiError(describeAiError(err, "AIによる修正案の作成に失敗しました"))
     } finally {
       setAiThinking(false)
     }
@@ -879,13 +895,36 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     confirmFlow()
   }
 
+  /** 確定時にフローから消えたステップの深掘り回答は失われる */
+  const countDiscardedDeepdive = (finalized: FlowState) => {
+    const keptIds = new Set(
+      finalized.nodes
+        .filter((n) => n.data.kind === "process" || n.data.kind === "decision")
+        .map((n) => n.id),
+    )
+    return project.deepdive.filter((d) => !keptIds.has(d.stepId) && d.answers.length > 0).length
+  }
+
   const confirmFlow = () => {
     setConfirmBlockedOpen(false)
     const finalized = polishFlow(flow)
+    const discarded = countDiscardedDeepdive(finalized)
+    if (
+      discarded > 0 &&
+      !window.confirm(
+        `フローから削除されたステップの深掘り回答 ${discarded} 件が破棄されます。確定しますか?`,
+      )
+    ) {
+      return
+    }
     setFlow(finalized)
     persist(finalized)
     updateProject(project.id, (p) => {
       const known = new Map(p.deepdive.map((d) => [d.stepId, d]))
+      // 大項目は業務名(q1)、中項目は担当レーン名を既定値にする
+      const majorTitle =
+        p.hearingAnswers.find((a) => a.questionId === "q1" && a.value.trim())?.value.trim() ||
+        p.name
       const nextDeepdive = finalized.nodes
         .filter((n) => n.data.kind === "process" || n.data.kind === "decision")
         .map((n) => {
@@ -895,6 +934,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               stepId: n.id,
               stepLabel: n.data.label,
               sectionNumber: n.data.sectionNumber,
+              majorTitle,
+              mediumTitle: n.data.lane,
               importance: "normal" as const,
               status: "not-started" as const,
               answers: [],
@@ -905,6 +946,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             ...existing,
             stepLabel: n.data.label,
             sectionNumber: n.data.sectionNumber,
+            majorTitle: existing.majorTitle ?? majorTitle,
+            mediumTitle: existing.mediumTitle ?? n.data.lane,
             status:
               labelChanged && (existing.status === "done" || existing.status === "in-progress")
                 ? ("recheck" as const)
@@ -992,6 +1035,13 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               ヒアリングの回答がまだ少ないため、生成精度が下がる可能性があります
             </p>
           )}
+          {aiError && (
+            <Alert variant="destructive" className="mt-4 text-left">
+              <AlertTriangle className="size-4" />
+              <AlertTitle>フロー図を生成できませんでした</AlertTitle>
+              <AlertDescription>{aiError}</AlertDescription>
+            </Alert>
+          )}
           <div className="mt-5 flex justify-center gap-3">
             <Button variant="outline" onClick={() => setTab("hearing")} className="gap-1.5">
               <ArrowLeft className="size-4" />
@@ -1009,6 +1059,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   return (
     <div className="flex h-full flex-col">
+      {aiError && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive md:text-[13px]">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0 flex-1">AI処理に失敗しました: {aiError}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 px-2 text-destructive"
+            onClick={() => setAiError(null)}
+          >
+            閉じる
+          </Button>
+        </div>
+      )}
       {/* ツールバー: 編集 / 生成・整列 / モード・確定 にグループ化(機能は維持) */}
       <div className="shrink-0 border-b bg-background">
         <div className="scrollbar-none scroll-touch flex items-center gap-0.5 overflow-x-auto px-2 py-1.5 md:gap-1 md:px-3">

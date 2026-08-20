@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from "react"
-import { AlertTriangle, ArrowLeft, BookCheck, Check, ChevronRight, Send, Workflow } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BookCheck,
+  Check,
+  ChevronRight,
+  Pencil,
+  Send,
+  Trash2,
+  Workflow,
+} from "lucide-react"
 import type { DeepDiveItem, DeepDiveStatus, Project, ProjectTab } from "@/lib/types"
 import { DEEPDIVE_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
 import { fetchDeepdiveQuestions } from "@/lib/api/ai"
+import { describeAiError } from "@/lib/api/errors"
 import { REVIEW_STATUS, WARNING_BOX, SUCCESS_BOX } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -74,6 +85,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
 
   const selected = items.find((i) => i.stepId === selectedId) ?? null
   const [dynamicQuestions, setDynamicQuestions] = useState<string[] | null>(null)
+  const [questionsError, setQuestionsError] = useState<string | null>(null)
   const fallbackQuestions = selected ? QUESTIONS_BY_IMPORTANCE[selected.importance] : []
   const questions = dynamicQuestions ?? fallbackQuestions
   const currentQuestion = selected ? questions[selected.answers.length] : undefined
@@ -81,16 +93,21 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
   useEffect(() => {
     if (!selected) {
       setDynamicQuestions(null)
+      setQuestionsError(null)
       return
     }
     let cancelled = false
     setDynamicQuestions(null)
+    setQuestionsError(null)
     void fetchDeepdiveQuestions(project.id, selected.stepId)
       .then((res) => {
         if (!cancelled && res.questions?.length) setDynamicQuestions(res.questions)
       })
-      .catch(() => {
-        /* 固定質問へフォールバック */
+      .catch((err: unknown) => {
+        // 固定質問で継続できるが、AI質問が使えていないことは明示する
+        if (!cancelled) {
+          setQuestionsError(describeAiError(err, "AIによる質問の取得に失敗しました"))
+        }
       })
     return () => {
       cancelled = true
@@ -122,6 +139,28 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
       answers: [...d.answers, { question: currentQuestion, answer }],
     }))
     setDraft("")
+  }
+
+  const statusForAnswerCount = (count: number, current: DeepDiveStatus): DeepDiveStatus => {
+    if (current === "recheck") return current
+    if (count >= questions.length) return "done"
+    return count > 0 ? "in-progress" : "not-started"
+  }
+
+  const editAnswer = (index: number, answer: string) => {
+    if (!selected) return
+    update(selected.stepId, (d) => ({
+      ...d,
+      answers: d.answers.map((qa, i) => (i === index ? { ...qa, answer } : qa)),
+    }))
+  }
+
+  const deleteAnswer = (index: number) => {
+    if (!selected) return
+    update(selected.stepId, (d) => {
+      const answers = d.answers.filter((_, i) => i !== index)
+      return { ...d, answers, status: statusForAnswerCount(answers.length, d.status) }
+    })
   }
 
   const goToManual = () => {
@@ -173,10 +212,13 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
         selected={selected}
         questions={questions}
         currentQuestion={currentQuestion}
+        questionsError={questionsError}
         draft={draft}
         setDraft={setDraft}
         onSubmit={submitAnswer}
         onUpdate={(updater) => update(selected.stepId, updater)}
+        onEditAnswer={editAnswer}
+        onDeleteAnswer={deleteAnswer}
         isMobile
         onBack={() => setMobileView("list")}
       />
@@ -199,10 +241,13 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
             selected={selected}
             questions={questions}
             currentQuestion={currentQuestion}
+            questionsError={questionsError}
             draft={draft}
             setDraft={setDraft}
             onSubmit={submitAnswer}
             onUpdate={(updater) => update(selected.stepId, updater)}
+            onEditAnswer={editAnswer}
+            onDeleteAnswer={deleteAnswer}
           />
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -301,20 +346,26 @@ function StepDetailPanel({
   selected,
   questions,
   currentQuestion,
+  questionsError,
   draft,
   setDraft,
   onSubmit,
   onUpdate,
+  onEditAnswer,
+  onDeleteAnswer,
   isMobile,
   onBack,
 }: {
   selected: DeepDiveItem
   questions: string[]
   currentQuestion: string | undefined
+  questionsError: string | null
   draft: string
   setDraft: (v: string) => void
   onSubmit: () => void
   onUpdate: (updater: (d: DeepDiveItem) => DeepDiveItem) => void
+  onEditAnswer: (index: number, answer: string) => void
+  onDeleteAnswer: (index: number) => void
   isMobile?: boolean
   onBack?: () => void
 }) {
@@ -403,11 +454,23 @@ function StepDetailPanel({
             </div>
           )}
 
-          {selected.answers.map((qa, i) => (
-            <div key={i} className="rounded-lg border bg-card px-4 py-3">
-              <div className="text-xs font-medium text-muted-foreground">Q. {qa.question}</div>
-              <div className="mt-1.5 text-sm leading-relaxed">{qa.answer}</div>
+          {questionsError && (
+            <div className={cn("flex items-start gap-2 px-4 py-3 text-[13px]", WARNING_BOX)}>
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                AIによる質問生成が使えないため、標準の質問を表示しています（{questionsError}）
+              </span>
             </div>
+          )}
+
+          {selected.answers.map((qa, i) => (
+            <AnswerCard
+              key={`${i}-${qa.question}`}
+              question={qa.question}
+              answer={qa.answer}
+              onSave={(next) => onEditAnswer(i, next)}
+              onDelete={() => onDeleteAnswer(i)}
+            />
           ))}
 
           {currentQuestion && !isMobile && (
@@ -447,6 +510,84 @@ function StepDetailPanel({
             回答する
           </Button>
         </div>
+      )}
+    </div>
+  )
+}
+
+function AnswerCard({
+  question,
+  answer,
+  onSave,
+  onDelete,
+}: {
+  question: string
+  answer: string
+  onSave: (next: string) => void
+  onDelete: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editDraft, setEditDraft] = useState(answer)
+
+  const startEdit = () => {
+    setEditDraft(answer)
+    setEditing(true)
+  }
+
+  return (
+    <div className="group rounded-lg border bg-card px-4 py-3">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">Q. {question}</div>
+        {!editing && (
+          <div className="flex shrink-0 gap-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7 text-muted-foreground"
+              aria-label="回答を編集"
+              onClick={startEdit}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7 text-muted-foreground hover:text-destructive"
+              aria-label="回答を削除"
+              onClick={onDelete}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+      {editing ? (
+        <div className="mt-2">
+          <Textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            className="min-h-20 bg-background"
+            autoFocus
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              キャンセル
+            </Button>
+            <Button
+              size="sm"
+              disabled={!editDraft.trim()}
+              onClick={() => {
+                onSave(editDraft.trim())
+                setEditing(false)
+              }}
+            >
+              <Check className="size-3.5" />
+              保存
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1.5 text-sm leading-relaxed">{answer}</div>
       )}
     </div>
   )

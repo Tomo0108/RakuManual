@@ -50,6 +50,8 @@ import {
 import { ManualRegenWizard } from "@/features/manual/ManualRegenWizard"
 import { SectionHistoryButton } from "@/features/manual/SectionHistoryPanel"
 import { aiGenerateManualSections, aiRegenerateSection } from "@/lib/api/ai"
+import { describeAiError } from "@/lib/api/errors"
+import { fetchProject } from "@/lib/api/projects"
 
 const SECTION_STYLE = {
   draft: REVIEW_STATUS.draft,
@@ -92,6 +94,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null)
   const [generating, setGenerating] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
+  const [genError, setGenError] = useState<string | null>(null)
   const [impactFilter, setImpactFilter] = useState<ImpactFilter>("all")
   const [regenOpen, setRegenOpen] = useState(false)
   const documentRef = useRef<HTMLDivElement>(null)
@@ -121,19 +124,23 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const generateSections = async () => {
     setGenerating(true)
     setGenProgress(0)
+    setGenError(null)
     try {
       const { sections: generated } = await aiGenerateManualSections(project.id, (p) =>
         setGenProgress(p),
       )
+      // ジョブ実行中にサーバー側が更新されている可能性があるため最新を取り直して合成する
+      const latest = await fetchProject(project.id).catch(() => null)
 
       updateProject(project.id, (p) => {
+        const base = latest ?? p
         let next: Project = {
-          ...p,
-          status: p.status === "deepdive" ? "manual" : p.status,
+          ...base,
+          status: base.status === "deepdive" ? "manual" : base.status,
           sections: generated,
           history: [
             { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: `マニュアルを生成(全${generated.length}セクション)` },
-            ...p.history,
+            ...base.history,
           ],
         }
         for (const section of generated) {
@@ -141,6 +148,8 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
         }
         return next
       })
+    } catch (err) {
+      setGenError(describeAiError(err, "マニュアルの生成に失敗しました"))
     } finally {
       setGenerating(false)
     }
@@ -184,6 +193,15 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
             <Sparkles className="size-4" />
             {generating ? `生成中… ${genProgress}%` : "マニュアルを生成する"}
           </Button>
+          {genError && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-left text-xs leading-relaxed text-destructive">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <span className="font-medium">生成に失敗しました: </span>
+                {genError}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -637,6 +655,7 @@ function SectionEditor({
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [blockDraft, setBlockDraft] = useState("")
   const [regenerating, setRegenerating] = useState(false)
+  const [regenError, setRegenError] = useState<string | null>(null)
 
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
   const canApprove = confirms === 0 && section.status !== "approved"
@@ -674,6 +693,7 @@ function SectionEditor({
 
   const regenerate = async () => {
     setRegenerating(true)
+    setRegenError(null)
     try {
       const { section: regenerated } = await aiRegenerateSection(project.id, section.id)
       const withSnapshot = appendRevision(
@@ -685,6 +705,8 @@ function SectionEditor({
         sections: withSnapshot.sections.map((s) => (s.id === section.id ? regenerated : s)),
       })
       onLog(`セクション「${section.title}」をAIで部分再生成(他セクションへの影響なし)`)
+    } catch (err) {
+      setRegenError(describeAiError(err, "セクションの再生成に失敗しました"))
     } finally {
       setRegenerating(false)
     }
@@ -857,6 +879,24 @@ function SectionEditor({
               </div>
               {actionToolbar}
             </div>
+          </div>
+        )}
+
+        {regenError && (
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-[12px] leading-relaxed text-destructive md:text-[13px]">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="font-medium">AI再生成に失敗しました: </span>
+              {regenError}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 shrink-0 px-2 text-destructive"
+              onClick={() => setRegenError(null)}
+            >
+              閉じる
+            </Button>
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CalendarClock, FolderOpen, Plus, Search, User } from "lucide-react"
+import { CalendarClock, FolderOpen, Plus, Search, Sparkles, Trash2, User } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
 import { STATUS_LABEL } from "@/lib/types"
 import { STATUS_BADGE, STATUS_TAB, projectProgress, uid, today } from "@/lib/project-utils"
@@ -33,14 +33,26 @@ interface Props {
   projects: Project[]
   onOpen: (id: string, tab?: ProjectTab) => void
   onCreate: (p: Project) => void
+  onDelete?: (id: string) => void
+  onSeedSamples?: () => void
+  seeding?: boolean
   readOnly?: boolean
 }
 
-export function ProjectList({ projects, onOpen, onCreate, readOnly }: Props) {
+export function ProjectList({
+  projects,
+  onOpen,
+  onCreate,
+  onDelete,
+  onSeedSamples,
+  seeding,
+  readOnly,
+}: Props) {
   const [query, setQuery] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [newDesc, setNewDesc] = useState("")
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
 
   const filtered = projects.filter(
     (p) => p.name.includes(query) || p.description.includes(query) || p.owner.includes(query),
@@ -172,17 +184,33 @@ export function ProjectList({ projects, onOpen, onCreate, readOnly }: Props) {
                     更新 {p.updatedAt}
                   </span>
                 </div>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8 w-full shrink-0 gap-1 sm:w-auto"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpen(p.id, STATUS_TAB[p.status])
-                  }}
-                >
-                  続きから →
-                </Button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 w-full gap-1 sm:w-auto"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpen(p.id, STATUS_TAB[p.status])
+                    }}
+                  >
+                    続きから →
+                  </Button>
+                  {!readOnly && onDelete && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      aria-label={`${p.name} を削除`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget(p)
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
               </CardFooter>
             </Card>
           ))}
@@ -201,10 +229,48 @@ export function ProjectList({ projects, onOpen, onCreate, readOnly }: Props) {
                   ? { label: "新規プロジェクトを作成", onClick: () => setDialogOpen(true) }
                   : undefined
               }
-            />
+            >
+              {!query && !readOnly && onSeedSamples && (
+                <Button
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={seeding}
+                  onClick={onSeedSamples}
+                >
+                  <Sparkles className="size-4" />
+                  {seeding ? "投入中…" : "サンプルデータを投入"}
+                </Button>
+              )}
+            </EmptyState>
           )}
         </div>
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>プロジェクトを削除しますか?</DialogTitle>
+            <DialogDescription>
+              「{deleteTarget?.name}」のヒアリング回答・フロー図・マニュアル本文がすべて削除されます。
+              この操作は取り消せません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteTarget) onDelete?.(deleteTarget.id)
+                setDeleteTarget(null)
+              }}
+            >
+              削除する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

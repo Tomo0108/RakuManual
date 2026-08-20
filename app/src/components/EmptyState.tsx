@@ -7,10 +7,19 @@ interface EmptyStateProps {
   title: string
   description?: string
   action?: { label: string; onClick: () => void }
+  /** 主アクションの下に並べる補助アクション */
+  children?: React.ReactNode
   className?: string
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  children,
+  className,
+}: EmptyStateProps) {
   return (
     <div
       className={cn(
@@ -30,6 +39,7 @@ export function EmptyState({ icon: Icon, title, description, action, className }
           {action.label}
         </Button>
       )}
+      {children && <div className="mt-3 flex flex-wrap justify-center gap-2">{children}</div>}
     </div>
   )
 }
