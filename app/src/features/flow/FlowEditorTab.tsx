@@ -49,7 +49,6 @@ import { FlowMobileControls } from "./FlowMobileControls"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   autoLayout,
-  generateFlowFromHearing,
   interpretInstruction,
   makeNode,
   regeneratePreservingManual,
@@ -58,6 +57,7 @@ import {
   appendConnector,
   type NlProposal,
 } from "./flow-logic"
+import { aiGenerateFlow } from "@/lib/api/ai"
 import {
   FLOW_MINIMAP_HEIGHT,
   FLOW_MINIMAP_WIDTH,
@@ -790,10 +790,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   }
 
   /* AI生成(空の場合) */
-  const generate = () => {
+  const generate = async () => {
     setGenerating(true)
-    window.setTimeout(() => {
-      const generated = generateFlowFromHearing(project.name)
+    try {
+      const { flow: aiFlow } = await aiGenerateFlow(project.id)
+      const generated = polishFlow(autoLayout(aiFlow))
       commit(() => generated)
       updateProject(project.id, (p) => ({
         ...p,
@@ -803,9 +804,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           ...p.history,
         ],
       }))
-      setGenerating(false)
       fitCanvas()
-    }, 900)
+    } finally {
+      setGenerating(false)
+    }
   }
 
   /* 再生成(F-2): 手動修正ノードは保護。Undoでも復元可能 */

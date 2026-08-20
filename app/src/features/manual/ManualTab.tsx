@@ -19,7 +19,7 @@ import {
 import type { ManualBlock, ManualSection, Project, ProjectTab } from "@/lib/types"
 import { SECTION_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
-import { now, today, uid } from "@/lib/project-utils"
+import { now, today } from "@/lib/project-utils"
 import {
   buildManualOutline,
   displaySectionTitle,
@@ -49,6 +49,7 @@ import {
 } from "@/features/manual/ManualImpactBanner"
 import { ManualRegenWizard } from "@/features/manual/ManualRegenWizard"
 import { SectionHistoryButton } from "@/features/manual/SectionHistoryPanel"
+import { aiGenerateManualSections } from "@/lib/api/ai"
 
 const SECTION_STYLE = {
   draft: REVIEW_STATUS.draft,
@@ -116,49 +117,12 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   }
 
   /* セクション生成(モック): 深掘り回答からセクションを作る */
-  const generateSections = () => {
+  const generateSections = async () => {
     setGenerating(true)
-    window.setTimeout(() => {
+    try {
+      const { sections: generated } = await aiGenerateManualSections(project.id)
+
       updateProject(project.id, (p) => {
-        const nodeMap = new Map(p.flow.nodes.map((n) => [n.id, n]))
-        const businessName = p.hearingAnswers.find((a) => a.questionId === "q1" && a.value.trim())?.value.trim()
-        const generated: ManualSection[] = p.deepdive.map((d) => {
-          const sectionNum = d.sectionNumber ?? nodeMap.get(d.stepId)?.data.sectionNumber
-          const majorNum = sectionNum?.split(".")[0]
-          const node = nodeMap.get(d.stepId)
-          return {
-            id: uid("s"),
-            title: d.stepLabel,
-            sectionNumber: sectionNum,
-            majorTitle: d.majorTitle ?? (majorNum === "1" ? businessName : undefined),
-            mediumTitle: d.mediumTitle,
-            stepId: d.stepId,
-            status: "draft" as const,
-            version: 1,
-            updatedAt: today(),
-            syncStatus: "ok" as const,
-            sourceSnapshot: {
-              label: d.stepLabel,
-              kind: node?.data.kind,
-              sectionNumber: sectionNum,
-            },
-            blocks:
-              d.status === "done" || d.answers.length > 0
-                ? d.answers.map((qa, j) => ({
-                    id: uid("b"),
-                    type: (j === 0 ? "paragraph" : "step") as ManualBlock["type"],
-                    text: qa.answer,
-                    needsConfirm: j === d.answers.length - 1 && d.status !== "done",
-                  }))
-                : [
-                    {
-                      id: uid("b"),
-                      type: "paragraph" as const,
-                      text: `項番 ${sectionNum ?? "—"} のセクションです。深掘りヒアリングが未完了のため、プレースホルダ表示です。`,
-                    },
-                  ],
-          }
-        })
         let next: Project = {
           ...p,
           status: p.status === "deepdive" ? "manual" : p.status,
@@ -169,15 +133,13 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           ],
         }
         for (const section of generated) {
-          next = appendRevision(
-            next,
-            snapshotSection(section, { reason: "generate", user: "山田 太郎" }),
-          )
+          next = appendRevision(next, snapshotSection(section, { reason: "generate", user: "山田 太郎" }))
         }
         return next
       })
+    } finally {
       setGenerating(false)
-    }, 1100)
+    }
   }
 
   if (sections.length === 0) {

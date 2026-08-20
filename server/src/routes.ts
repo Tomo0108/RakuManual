@@ -54,6 +54,121 @@ function appendHistory(project: Project, user: AuthUser, action: string): Projec
   }
 }
 
+function uid(prefix: string): string {
+  // Fastify/Node 側では既存の ui 用 uid() の互換が不要なためランダムで生成する
+  return `${prefix}-${crypto.randomUUID()}`
+}
+
+/**
+ * Phase2: LLM連携の前段として、現行UIのモック生成と同等の形で返す
+ * (後で「実LLM呼び出し」へ置き換え可能にする)
+ */
+function generateFlowMock(projectName: string) {
+  const lanes = ["担当者", "確認者"]
+  const n0 = uid("n")
+  const n1 = uid("n")
+  const n2 = uid("n")
+  const n3 = uid("n")
+  const n4 = uid("n")
+
+  const nodes = [
+    {
+      id: n0,
+      type: "step",
+      position: { x: 0, y: 0 },
+      data: { label: "業務開始(トリガー受領)", lane: "担当者", kind: "start", system: "—", source: "q4: 開始条件" },
+    },
+    {
+      id: n1,
+      type: "step",
+      position: { x: 0, y: 0 },
+      data: { label: `${projectName}の準備作業`, lane: "担当者", kind: "process", system: "業務システム", source: "q8: 手順1" },
+    },
+    {
+      id: n2,
+      type: "step",
+      position: { x: 0, y: 0 },
+      data: { label: "メインの作業を実施", lane: "担当者", kind: "process", system: "業務システム", source: "q8: 手順2" },
+    },
+    {
+      id: n3,
+      type: "step",
+      position: { x: 0, y: 0 },
+      data: { label: "内容に問題ない?", lane: "確認者", kind: "decision", source: "q9: 分岐" },
+    },
+    {
+      id: n4,
+      type: "step",
+      position: { x: 0, y: 0 },
+      data: { label: "完了処理・記録", lane: "確認者", kind: "end", system: "業務システム", source: "q7: 完了条件" },
+    },
+  ]
+
+  const edges = [
+    { id: uid("e"), source: n0, target: n1 },
+    { id: uid("e"), source: n1, target: n2 },
+    { id: uid("e"), source: n2, target: n3 },
+    { id: uid("e"), source: n3, target: n4, label: "はい" },
+    { id: uid("e"), source: n3, target: n1, label: "いいえ(やり直し)" },
+  ]
+
+  return { lanes, nodes, edges }
+}
+
+function generateManualSectionsMock(existing: Project) {
+  const flow = existing.flow as any
+  const flowNodes: any[] = Array.isArray(flow?.nodes) ? flow.nodes : []
+  const nodeMap = new Map(flowNodes.map((n) => [n.id, n]))
+
+  const businessName = existing.hearingAnswers.find((a) => a.questionId === "q1" && String(a.value ?? "").trim())?.value?.trim() ?? existing.name
+
+  const today = todayStamp()
+
+  const sections = (existing.deepdive as any[]).map((d) => {
+    const stepId: string = d.stepId
+    const node = nodeMap.get(stepId)
+
+    const sectionNumber: string | undefined =
+      d.sectionNumber ?? (node?.data?.sectionNumber ? String(node.data.sectionNumber) : undefined)
+
+    const majorNum = sectionNumber?.split(".")?.[0]
+    return {
+      id: uid("s"),
+      title: d.stepLabel,
+      sectionNumber,
+      majorTitle: d.majorTitle ?? (majorNum === "1" ? businessName : undefined),
+      mediumTitle: d.mediumTitle,
+      stepId: d.stepId,
+      status: "draft" as const,
+      version: 1,
+      updatedAt: today,
+      syncStatus: "ok" as const,
+      sourceSnapshot: {
+        label: d.stepLabel,
+        kind: node?.data?.kind,
+        sectionNumber,
+      },
+      blocks:
+        d.status === "done" || (Array.isArray(d.answers) && d.answers.length > 0)
+          ? (d.answers as any[]).map((qa, j) => ({
+              id: uid("b"),
+              type: (j === 0 ? "paragraph" : "step") as "paragraph" | "step",
+              text: qa.answer,
+              needsConfirm: j === d.answers.length - 1 && d.status !== "done",
+            }))
+          : [
+              {
+                id: uid("b"),
+                type: "paragraph" as const,
+                text: `項番 ${sectionNumber ?? "—"} のセクションです。深掘りヒアリングが未完了のため、プレースホルダ表示です。`,
+              },
+            ],
+    }
+  })
+
+  return sections
+}
+
 function loadOwned(
   projectId: string,
   user: AuthUser,
@@ -235,6 +350,27 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       return saveOwned(user, next, reply)
     },
   )
+
+  // ===== Phase2: LLM連携入口（まずはモック生成）=====
+  app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/generate", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const flow = generateFlowMock(existing.name)
+    return { flow }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/ai/manual/generate", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const sections = generateManualSectionsMock(existing)
+    return { sections }
+  })
 }
 
 export { SESSION_COOKIE }
