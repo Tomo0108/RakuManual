@@ -135,6 +135,27 @@ function migrate(database: DatabaseSync) {
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at);
+
+    CREATE TABLE IF NOT EXISTS project_members (
+      project_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      permission TEXT NOT NULL CHECK (permission IN ('view', 'edit', 'admin')),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS llm_io_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      project_id TEXT,
+      action TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      response TEXT NOT NULL,
+      tokens INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_io_user ON llm_io_logs(user_id, created_at);
   `)
 
   const schema = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'projects'").get() as
@@ -344,11 +365,119 @@ export function listProjectsForUser(userId: string): Project[] {
   return rows.map((r) => JSON.parse(r.data) as Project)
 }
 
+/** 自分のプロジェクト + 他ユーザーの公開済み + メンバー招待分 */
+export function listAccessibleProjects(userId: string): Project[] {
+  const own = listProjectsForUser(userId)
+  const ownIds = new Set(own.map((p) => p.id))
+
+  const publishedRows = getDb()
+    .prepare(
+      `SELECT data FROM projects
+       WHERE json_extract(data, '$.status') = 'published' AND owner_id != ?
+       ORDER BY updated_at DESC`,
+    )
+    .all(userId) as { data: string }[]
+
+  const memberRows = getDb()
+    .prepare(
+      `SELECT p.data FROM project_members m
+       JOIN projects p ON p.id = m.project_id AND p.owner_id != ?
+       WHERE m.user_id = ?`,
+    )
+    .all(userId, userId) as { data: string }[]
+
+  const merged = [...own]
+  for (const row of [...publishedRows, ...memberRows]) {
+    const p = JSON.parse(row.data) as Project
+    if (!ownIds.has(p.id)) {
+      merged.push(p)
+      ownIds.add(p.id)
+    }
+  }
+  return merged.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+}
+
 export function getProjectForUser(projectId: string, userId: string): Project | null {
   const row = getDb()
     .prepare("SELECT data FROM projects WHERE id = ? AND owner_id = ?")
     .get(projectId, userId) as { data: string } | undefined
   return row ? (JSON.parse(row.data) as Project) : null
+}
+
+export type ProjectAccess = "owner" | "member" | "published_reader"
+
+export function getAccessibleProject(
+  projectId: string,
+  userId: string,
+): { project: Project; access: ProjectAccess } | null {
+  const owned = getProjectForUser(projectId, userId)
+  if (owned) return { project: owned, access: "owner" }
+
+  const member = getDb()
+    .prepare(
+      `SELECT p.data FROM project_members m
+       JOIN projects p ON p.id = m.project_id
+       WHERE m.project_id = ? AND m.user_id = ?`,
+    )
+    .get(projectId, userId) as { data: string } | undefined
+  if (member) {
+    return { project: JSON.parse(member.data) as Project, access: "member" }
+  }
+
+  const published = getDb()
+    .prepare(
+      `SELECT data FROM projects
+       WHERE id = ? AND owner_id != ? AND json_extract(data, '$.status') = 'published'`,
+    )
+    .get(projectId, userId) as { data: string } | undefined
+  if (published) {
+    return { project: JSON.parse(published.data) as Project, access: "published_reader" }
+  }
+
+  return null
+}
+
+export function listProjectMembers(projectId: string): Array<{ userId: string; permission: string }> {
+  return getDb()
+    .prepare(`SELECT user_id AS userId, permission FROM project_members WHERE project_id = ?`)
+    .all(projectId) as Array<{ userId: string; permission: string }>
+}
+
+export function upsertProjectMember(projectId: string, userId: string, permission: "view" | "edit" | "admin") {
+  getDb()
+    .prepare(
+      `INSERT INTO project_members (project_id, user_id, permission, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(project_id, user_id) DO UPDATE SET permission = excluded.permission`,
+    )
+    .run(projectId, userId, permission, Date.now())
+}
+
+export function insertLlmIoLog(input: {
+  userId: string
+  projectId?: string
+  action: string
+  provider: string
+  prompt: string
+  response: string
+  tokens: number
+}) {
+  getDb()
+    .prepare(
+      `INSERT INTO llm_io_logs (id, user_id, project_id, action, provider, prompt, response, tokens, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      crypto.randomUUID(),
+      input.userId,
+      input.projectId ?? null,
+      input.action,
+      input.provider,
+      input.prompt.slice(0, 8000),
+      input.response.slice(0, 8000),
+      input.tokens,
+      Date.now(),
+    )
 }
 
 export function insertProject(userId: string, project: Project) {

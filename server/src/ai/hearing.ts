@@ -14,7 +14,10 @@ const BASE_QUESTIONS = [
   { id: "q10", text: "マニュアル読者に特に伝えたい注意点は？", type: "text" },
 ]
 
-export async function nextHearingQuestion(project: Project): Promise<{
+export async function nextHearingQuestion(
+  project: Project,
+  userId: string,
+): Promise<{
   question: { id: string; text: string; type: string } | null
   done: boolean
   contradictionHint: string | null
@@ -25,21 +28,24 @@ export async function nextHearingQuestion(project: Project): Promise<{
   const nextBase = BASE_QUESTIONS.find((q) => !answeredIds.has(q.id))
 
   const adapter = getLlmAdapter()
-  const llm = await adapter.complete([
-    {
-      role: "system",
-      content:
-        "業務マニュアル作成のヒアリング支援。矛盾があれば短く指摘し、次に聞くべき追加質問があれば1文で提案せよ。JSONのみで {contradiction, followUp} を返す。",
-    },
-    {
-      role: "user",
-      content: JSON.stringify({
-        project: project.name,
-        answers: project.hearingAnswers,
-        nextBaseId: nextBase?.id ?? null,
-      }).slice(0, 2500),
-    },
-  ])
+  const llm = await adapter.complete(
+    [
+      {
+        role: "system",
+        content:
+          "業務マニュアル作成のヒアリング支援。矛盾があれば短く指摘し、次に聞くべき追加質問があれば1文で提案せよ。JSONのみで {contradiction, followUp} を返す。",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          project: project.name,
+          answers: project.hearingAnswers,
+          nextBaseId: nextBase?.id ?? null,
+        }).slice(0, 2500),
+      },
+    ],
+    { context: { userId, projectId: project.id, action: "hearing_next" } },
+  )
 
   let contradictionHint: string | null = null
   let followUp: string | null = null
@@ -89,27 +95,38 @@ export async function nextHearingQuestion(project: Project): Promise<{
 
 export async function generateDeepdiveQuestions(input: {
   projectName: string
+  projectId: string
+  userId: string
   stepLabel: string
   importance: string
   existingAnswers: HearingAnswer[] | Array<{ question?: string; value?: string }>
 }): Promise<{ questions: string[]; provider: string; tokens: number }> {
   const adapter = getLlmAdapter()
-  const llm = await adapter.complete([
+  const llm = await adapter.complete(
+    [
+      {
+        role: "system",
+        content:
+          "深掘りヒアリング用の質問を重要度に応じて生成せよ。JSONのみで {questions: string[]} を返す。",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          project: input.projectName,
+          step: input.stepLabel,
+          importance: input.importance,
+          answered: input.existingAnswers,
+        }).slice(0, 2000),
+      },
+    ],
     {
-      role: "system",
-      content:
-        "深掘りヒアリング用の質問を重要度に応じて生成せよ。JSONのみで {questions: string[]} を返す。",
+      context: {
+        userId: input.userId,
+        projectId: input.projectId,
+        action: "deepdive_questions",
+      },
     },
-    {
-      role: "user",
-      content: JSON.stringify({
-        project: input.projectName,
-        step: input.stepLabel,
-        importance: input.importance,
-        answered: input.existingAnswers,
-      }).slice(0, 2000),
-    },
-  ])
+  )
 
   try {
     const parsed = JSON.parse(extractJson(llm.text)) as { questions?: string[] }

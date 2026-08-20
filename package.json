@@ -13,7 +13,8 @@
     "build": "npm run build -w app",
     "dev:docs": "npm run dev -w visualization",
     "build:docs": "npm run build -w visualization",
-    "security:check": "node scripts/security-check.mjs"
+    "security:check": "node scripts/security-check.mjs",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs"
   },
   "engines": {
     "node": "22.x"

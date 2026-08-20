@@ -107,6 +107,25 @@ async function main() {
     }
   })
 
+  await check("unpublished project hidden from other users", async () => {
+    const list = await req(yamada, "/api/projects")
+    const pid = list.body[0]?.id
+    assert(pid, "no project for yamada")
+    const detail = await req(yamada, `/api/projects/${pid}`)
+    if (detail.body.status === "published") return
+    const other = await req(sato, `/api/projects/${pid}`)
+    assert(other.status === 404, `expected 404 got ${other.status}`)
+  })
+
+  await check("qa only uses accessible published corpus", async () => {
+    const r = await req(sato, "/api/qa/ask", {
+      method: "POST",
+      body: JSON.stringify({ question: "業務開始" }),
+    })
+    assert(r.status === 200, `qa failed ${r.status}`)
+    assert(typeof r.body.text === "string", "qa text missing")
+  })
+
   const failed = results.filter((r) => !r.ok)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) process.exit(1)

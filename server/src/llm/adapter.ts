@@ -3,6 +3,8 @@
  * OPENAI_API_KEY があれば実 API、なければモック（デモ用）にフォールバック。
  */
 
+import { insertLlmIoLog } from "../db.js"
+
 export interface LlmMessage {
   role: "system" | "user" | "assistant"
   content: string
@@ -14,23 +16,57 @@ export interface LlmCompletionResult {
   provider: "mock" | "openai"
 }
 
+export interface LlmCallContext {
+  userId: string
+  projectId?: string
+  action: string
+}
+
+export interface LlmCompleteOptions {
+  maxTokens?: number
+  context?: LlmCallContext
+}
+
 export interface LlmAdapter {
-  complete(messages: LlmMessage[], opts?: { maxTokens?: number }): Promise<LlmCompletionResult>
+  complete(messages: LlmMessage[], opts?: LlmCompleteOptions): Promise<LlmCompletionResult>
+}
+
+function summarizeMessages(messages: LlmMessage[]): string {
+  return messages.map((m) => `[${m.role}] ${m.content}`).join("\n").slice(0, 4000)
+}
+
+function maybeLog(
+  messages: LlmMessage[],
+  result: LlmCompletionResult,
+  opts?: LlmCompleteOptions,
+) {
+  if (!opts?.context) return
+  insertLlmIoLog({
+    userId: opts.context.userId,
+    projectId: opts.context.projectId,
+    action: opts.context.action,
+    provider: result.provider,
+    prompt: summarizeMessages(messages),
+    response: result.text,
+    tokens: result.tokens,
+  })
 }
 
 class MockLlmAdapter implements LlmAdapter {
-  async complete(messages: LlmMessage[]): Promise<LlmCompletionResult> {
+  async complete(messages: LlmMessage[], opts?: LlmCompleteOptions): Promise<LlmCompletionResult> {
     const last = [...messages].reverse().find((m) => m.role === "user")?.content ?? ""
     const text = `[モック生成] ${last.slice(0, 200)}`
     const tokens = Math.max(80, Math.round(text.length / 2) + 120)
-    return { text, tokens, provider: "mock" }
+    const result = { text, tokens, provider: "mock" as const }
+    maybeLog(messages, result, opts)
+    return result
   }
 }
 
 class OpenAiAdapter implements LlmAdapter {
   constructor(private readonly apiKey: string) {}
 
-  async complete(messages: LlmMessage[], opts?: { maxTokens?: number }): Promise<LlmCompletionResult> {
+  async complete(messages: LlmMessage[], opts?: LlmCompleteOptions): Promise<LlmCompletionResult> {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -53,7 +89,9 @@ class OpenAiAdapter implements LlmAdapter {
     }
     const text = data.choices?.[0]?.message?.content ?? ""
     const tokens = data.usage?.total_tokens ?? Math.max(100, Math.round(text.length / 2))
-    return { text, tokens, provider: "openai" }
+    const result = { text, tokens, provider: "openai" as const }
+    maybeLog(messages, result, opts)
+    return result
   }
 }
 

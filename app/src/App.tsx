@@ -103,7 +103,8 @@ export default function App() {
                 readOnly={session.user?.role === "viewer"}
                 onOpen={(id, tab) => {
                   const p = projects.find((x) => x.id === id)
-                  if (session.user?.role === "viewer" && p?.status === "published") {
+                  const isOwner = !p?.ownerId || p.ownerId === session.user?.id
+                  if (p?.status === "published" && (!isOwner || session.user?.role === "viewer")) {
                     setView({ name: "viewer", projectId: id })
                     return
                   }

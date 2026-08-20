@@ -8,7 +8,13 @@ import {
   SkipForward,
   Workflow,
 } from "lucide-react"
-import type { AnswerStatus, HearingAnswer, Project, ProjectTab } from "@/lib/types"
+import type {
+  AnswerStatus,
+  HearingAnswer,
+  HearingQuestion,
+  Project,
+  ProjectTab,
+} from "@/lib/types"
 import { HEARING_QUESTIONS } from "@/lib/mock-data"
 import { fetchNextHearingQuestion } from "@/lib/api/ai"
 import { now } from "@/lib/project-utils"
@@ -47,7 +53,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
   const [editDraft, setEditDraft] = useState("")
   const [thinking, setThinking] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
-  const [followUp, setFollowUp] = useState<{ id: string; text: string; type: string } | null>(null)
+  const [followUp, setFollowUp] = useState<HearingQuestion | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const activeQuestion = followUp ?? currentQuestion
@@ -170,9 +176,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
             )}
 
             {!thinking && activeQuestion && (
-              <AiBubble hint={"hint" in activeQuestion ? activeQuestion.hint : undefined}>
-                {activeQuestion.text}
-              </AiBubble>
+              <AiBubble hint={activeQuestion.hint}>{activeQuestion.text}</AiBubble>
             )}
 
             {!thinking && done && (
@@ -201,7 +205,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
         {!done && activeQuestion && (
           <div className="border-t bg-background px-6 py-4">
             <div className="mx-auto max-w-2xl">
-              {(activeQuestion.type === "text" || !("options" in activeQuestion)) && (
+              {activeQuestion.type === "text" && (
                 <div className="flex items-end gap-2">
                   <Textarea
                     value={draft}
@@ -226,7 +230,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                 </div>
               )}
 
-              {activeQuestion.type === "choice" && "options" in activeQuestion && (
+              {activeQuestion.type === "choice" && (
                 <div className="flex flex-wrap gap-2">
                   {activeQuestion.options?.map((opt) => (
                     <Button
@@ -241,7 +245,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                 </div>
               )}
 
-              {activeQuestion.type === "multi" && "options" in activeQuestion && (
+              {activeQuestion.type === "multi" && (
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap gap-2">
                     {activeQuestion.options?.map((opt) => {

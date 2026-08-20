@@ -1,9 +1,10 @@
-import { ArrowLeft, BookOpenText } from "lucide-react"
+import { ArrowLeft, BookOpenText, Search } from "lucide-react"
 import type { ManualSection, Project } from "@/lib/types"
 import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { useEffect } from "react"
+import { Input } from "@/components/ui/input"
+import { useEffect, useMemo, useState } from "react"
 
 interface Props {
   project: Project
@@ -19,9 +20,22 @@ function viewerSections(project: Project): ManualSection[] {
 }
 
 export function ManualViewerPage({ project, sectionId, onBack }: Props) {
-  const sections = [...viewerSections(project)].sort((a, b) =>
-    compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
+  const [query, setQuery] = useState("")
+  const sections = useMemo(
+    () =>
+      [...viewerSections(project)].sort((a, b) =>
+        compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
+      ),
+    [project],
   )
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return sections
+    return sections.filter((s) => {
+      const hay = `${displaySectionTitle(s)} ${s.blocks.map((b) => b.text).join(" ")}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [sections, query])
 
   useEffect(() => {
     if (!sectionId) return
@@ -49,11 +63,24 @@ export function ManualViewerPage({ project, sectionId, onBack }: Props) {
       </header>
 
       <div className="scroll-touch min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
+        <div className="mx-auto mb-4 max-w-3xl">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="マニュアル内を検索…"
+              className="pl-9"
+            />
+          </div>
+        </div>
         <article className="mx-auto max-w-3xl">
-          {sections.length === 0 ? (
-            <p className="text-sm text-muted-foreground">閲覧可能なセクションがありません。</p>
+          {filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {sections.length === 0 ? "閲覧可能なセクションがありません。" : "検索に一致するセクションがありません。"}
+            </p>
           ) : (
-            sections.map((section) => {
+            filtered.map((section) => {
               const num = resolveSectionNumber(section)
               return (
                 <section

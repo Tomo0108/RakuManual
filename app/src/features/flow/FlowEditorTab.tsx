@@ -131,6 +131,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [proposal, setProposal] = useState<NlProposal | null>(null)
   const [aiThinking, setAiThinking] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [genProgress, setGenProgress] = useState(0)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
   const [isLocked, setIsLocked] = useState(true)
@@ -790,8 +791,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   /* AI生成(空の場合) */
   const generate = async () => {
     setGenerating(true)
+    setGenProgress(0)
     try {
-      const { flow: aiFlow } = await aiGenerateFlow(project.id)
+      const { flow: aiFlow } = await aiGenerateFlow(project.id, (p) => setGenProgress(p))
       const generated = polishFlow(autoLayout(aiFlow))
       commit(() => generated)
       updateProject(project.id, (p) => ({
@@ -997,7 +999,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             </Button>
             <Button onClick={generate} disabled={generating} className="gap-1.5">
               <Sparkles className="size-4" />
-              {generating ? "生成中…" : "フロー図を生成する"}
+              {generating ? `生成中… ${genProgress}%` : "フロー図を生成する"}
             </Button>
           </div>
         </div>

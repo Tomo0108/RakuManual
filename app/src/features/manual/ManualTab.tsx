@@ -91,6 +91,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const majorTitle = resolveMajorTitle(project)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null)
   const [generating, setGenerating] = useState(false)
+  const [genProgress, setGenProgress] = useState(0)
   const [impactFilter, setImpactFilter] = useState<ImpactFilter>("all")
   const [regenOpen, setRegenOpen] = useState(false)
   const documentRef = useRef<HTMLDivElement>(null)
@@ -119,8 +120,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   /* セクション生成(モック): 深掘り回答からセクションを作る */
   const generateSections = async () => {
     setGenerating(true)
+    setGenProgress(0)
     try {
-      const { sections: generated } = await aiGenerateManualSections(project.id)
+      const { sections: generated } = await aiGenerateManualSections(project.id, (p) =>
+        setGenProgress(p),
+      )
 
       updateProject(project.id, (p) => {
         let next: Project = {
@@ -178,7 +182,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           )}
           <Button className="mt-5 gap-1.5" onClick={generateSections} disabled={generating}>
             <Sparkles className="size-4" />
-            {generating ? "生成中…" : "マニュアルを生成する"}
+            {generating ? `生成中… ${genProgress}%` : "マニュアルを生成する"}
           </Button>
         </div>
       </div>

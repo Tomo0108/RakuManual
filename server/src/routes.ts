@@ -4,6 +4,7 @@ import {
   createSession,
   deleteDesignTemplate,
   deleteSession,
+  getAccessibleProject,
   getProjectForUser,
   getSessionUser,
   getUserById,
@@ -11,12 +12,15 @@ import {
   insertProject,
   insertQaFeedback,
   insertQaMessage,
+  listAccessibleProjects,
   listDesignTemplates,
+  listProjectMembers,
   listProjectsForUser,
   listUsers,
   updateProject as dbUpdateProject,
   updateUserRole,
   upsertDesignTemplate,
+  upsertProjectMember,
 } from "./db.js"
 import { buildManualHtml } from "./export/manual-html.js"
 import { buildManualPdf } from "./export/manual-pdf.js"
@@ -279,15 +283,43 @@ export async function registerProjectRoutes(app: FastifyInstance) {
   app.get("/api/projects", async (request, reply) => {
     const user = await requireAuth(request, reply)
     if (!user) return
-    return listProjectsForUser(user.id)
+    return listAccessibleProjects(user.id)
   })
 
   app.get<{ Params: { id: string } }>("/api/projects/:id", async (request, reply) => {
     const user = await requireAuth(request, reply)
     if (!user) return
-    const project = loadOwned(request.params.id, user, reply)
-    if (!project) return
-    return project
+    const found = getAccessibleProject(request.params.id, user.id)
+    if (!found) return reply.status(404).send({ error: "Project not found" })
+    return found.project
+  })
+
+  app.get<{ Params: { id: string } }>("/api/projects/:id/members", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const owned = loadOwned(request.params.id, user, reply)
+    if (!owned) return
+    return { members: listProjectMembers(request.params.id) }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/members", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const owned = loadOwned(request.params.id, user, reply)
+    if (!owned) return
+    const body = (request.body ?? {}) as { userId?: string; permission?: "view" | "edit" | "admin" }
+    if (!body.userId || !body.permission) {
+      return reply.status(400).send({ error: "userId and permission are required" })
+    }
+    if (!getUserById(body.userId)) return reply.status(404).send({ error: "User not found" })
+    upsertProjectMember(request.params.id, body.userId, body.permission)
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      projectId: request.params.id,
+      payload: { kind: "member_add", targetUserId: body.userId, permission: body.permission },
+    })
+    return { ok: true, members: listProjectMembers(request.params.id) }
   })
 
   app.post("/api/projects", async (request, reply) => {
@@ -453,7 +485,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const allowed = assertGenerationAllowed(user.id)
     if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
 
-    const result = await nextHearingQuestion(existing)
+    const result = await nextHearingQuestion(existing, user.id)
     recordLlmUsage({
       userId: user.id,
       projectId: existing.id,
@@ -485,6 +517,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
       const result = await generateDeepdiveQuestions({
         projectName: existing.name,
+        projectId: existing.id,
+        userId: user.id,
         stepLabel: String((item as { stepLabel?: string }).stepLabel ?? item.stepId),
         importance: String((item as { importance?: string }).importance ?? "normal"),
         existingAnswers: ((item as { answers?: unknown[] }).answers ?? []) as Array<{
@@ -523,10 +557,13 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     if (!body.flow) return reply.status(400).send({ error: "flow is required" })
 
     const adapter = getLlmAdapter()
-    const llm = await adapter.complete([
-      { role: "system", content: "フロー図の自然言語修正指示を解釈せよ。" },
-      { role: "user", content: instruction },
-    ])
+    const llm = await adapter.complete(
+      [
+        { role: "system", content: "フロー図の自然言語修正指示を解釈せよ。" },
+        { role: "user", content: instruction },
+      ],
+      { context: { userId: user.id, projectId: existing.id, action: "flow_nl_edit" } },
+    )
     recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_nl_edit", tokens: llm.tokens })
     recordOperationLog({
       userId: user.id,
@@ -607,7 +644,7 @@ export async function registerQaRoutes(app: FastifyInstance) {
     const question = body.question?.trim()
     if (!question) return reply.status(400).send({ error: "question is required" })
 
-    const projects = listProjectsForUser(user.id)
+    const projects = listAccessibleProjects(user.id)
     const result = answerQuestion(question, projects)
     const messageId = `qa-${Date.now()}`
     insertQaMessage(user.id, messageId, question)

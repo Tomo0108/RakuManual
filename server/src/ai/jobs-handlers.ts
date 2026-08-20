@@ -111,16 +111,19 @@ export function registerAiJobHandlers() {
 
     update(30)
     const adapter = getLlmAdapter()
-    const llm = await adapter.complete([
-      {
-        role: "system",
-        content: "業務マニュアル用のスイムレーンフローを生成するための要約を出力せよ。",
-      },
-      {
-        role: "user",
-        content: `プロジェクト「${project.name}」のフローを生成。ヒアリング: ${JSON.stringify(project.hearingAnswers).slice(0, 1500)}`,
-      },
-    ])
+    const llm = await adapter.complete(
+      [
+        {
+          role: "system",
+          content: "業務マニュアル用のスイムレーンフローを生成するための要約を出力せよ。",
+        },
+        {
+          role: "user",
+          content: `プロジェクト「${project.name}」のフローを生成。ヒアリング: ${JSON.stringify(project.hearingAnswers).slice(0, 1500)}`,
+        },
+      ],
+      { context: { userId: job.userId, projectId: project.id, action: "flow_generate" } },
+    )
     update(70)
     recordLlmUsage({ userId: job.userId, projectId: project.id, action: "flow_generate", tokens: llm.tokens })
     recordOperationLog({
@@ -143,16 +146,19 @@ export function registerAiJobHandlers() {
 
     update(35)
     const adapter = getLlmAdapter()
-    const llm = await adapter.complete([
-      {
-        role: "system",
-        content: "業務マニュアルのセクション構成を生成するための要約を出力せよ。",
-      },
-      {
-        role: "user",
-        content: `プロジェクト「${project.name}」のマニュアルを生成。深掘り件数: ${project.deepdive?.length ?? 0}`,
-      },
-    ])
+    const llm = await adapter.complete(
+      [
+        {
+          role: "system",
+          content: "業務マニュアルのセクション構成を生成するための要約を出力せよ。",
+        },
+        {
+          role: "user",
+          content: `プロジェクト「${project.name}」のマニュアルを生成。深掘り件数: ${project.deepdive?.length ?? 0}`,
+        },
+      ],
+      { context: { userId: job.userId, projectId: project.id, action: "manual_generate" } },
+    )
     update(70)
     recordLlmUsage({
       userId: job.userId,
