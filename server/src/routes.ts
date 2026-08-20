@@ -9,6 +9,8 @@ import {
   listProjectsForUser,
   updateProject as dbUpdateProject,
 } from "./db.js"
+import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
+import { regenerateSectionMock } from "./ai/manual.js"
 import type { AuthUser, HearingAnswer, Project } from "./types.js"
 
 const SESSION_COOKIE = "rakumanual_session"
@@ -371,6 +373,54 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const sections = generateManualSectionsMock(existing)
     return { sections }
   })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/nl-edit", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const body = (request.body ?? {}) as { instruction?: string; flow?: Project["flow"] }
+    const instruction = body.instruction?.trim()
+    if (!instruction) return reply.status(400).send({ error: "instruction is required" })
+    if (!body.flow) return reply.status(400).send({ error: "flow is required" })
+
+    const result = proposeNlEdit(instruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
+    return result
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/regenerate", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const body = (request.body ?? {}) as { flow?: Project["flow"] }
+    if (!body.flow) return reply.status(400).send({ error: "flow is required" })
+
+    const flow = regenerateFlowPreservingManual(
+      body.flow as unknown as Parameters<typeof regenerateFlowPreservingManual>[0],
+      existing.name,
+    )
+    return { flow }
+  })
+
+  app.post<{ Params: { id: string; sectionId: string } }>(
+    "/api/projects/:id/ai/sections/:sectionId/regenerate",
+    async (request, reply) => {
+      const user = await requireAuth(request, reply)
+      if (!user) return
+      const existing = loadOwned(request.params.id, user, reply)
+      if (!existing) return
+
+      try {
+        const section = regenerateSectionMock(existing, request.params.sectionId)
+        return { section }
+      } catch {
+        return reply.status(404).send({ error: "Section not found" })
+      }
+    },
+  )
 }
 
 export { SESSION_COOKIE }

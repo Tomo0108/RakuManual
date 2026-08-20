@@ -49,15 +49,13 @@ import { FlowMobileControls } from "./FlowMobileControls"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   autoLayout,
-  interpretInstruction,
   makeNode,
-  regeneratePreservingManual,
   insertConnectorBetween,
   insertConnectorAfter,
   appendConnector,
   type NlProposal,
 } from "./flow-logic"
-import { aiGenerateFlow } from "@/lib/api/ai"
+import { aiGenerateFlow, aiProposeFlowNl, aiRegenerateFlow } from "@/lib/api/ai"
 import {
   FLOW_MINIMAP_HEIGHT,
   FLOW_MINIMAP_WIDTH,
@@ -811,32 +809,48 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   }
 
   /* 再生成(F-2): 手動修正ノードは保護。Undoでも復元可能 */
-  const regenerate = () => {
+  const regenerate = async () => {
     setRegenConfirmOpen(false)
-    commit(() => regeneratePreservingManual(flow, project.name))
-    fitCanvas()
-    updateProject(project.id, (p) => ({
-      ...p,
-      history: [
-        {
-          id: `h-${Date.now()}`,
-          date: now(),
-          user: "山田 太郎",
-          action: "フロー図を再生成(手動修正ステップは保護)",
-        },
-        ...p.history,
-      ],
-    }))
+    try {
+      const { flow: regenFlow } = await aiRegenerateFlow(project.id, flow)
+      commit(() => polishFlow(regenFlow))
+      fitCanvas()
+      updateProject(project.id, (p) => ({
+        ...p,
+        history: [
+          {
+            id: `h-${Date.now()}`,
+            date: now(),
+            user: "山田 太郎",
+            action: "フロー図を再生成(手動修正ステップは保護)",
+          },
+          ...p.history,
+        ],
+      }))
+    } catch {
+      /* 保存エラーは useAppSession 側で表示 */
+    }
   }
 
   /* 自然言語修正: 提案の生成 → 差分プレビュー → 承認/却下 */
-  const askAi = () => {
+  const askAi = async () => {
     if (!instruction.trim()) return
     setAiThinking(true)
-    window.setTimeout(() => {
-      setProposal(interpretInstruction(instruction.trim(), flow))
+    try {
+      const { description, previewFlow, appliedFlow } = await aiProposeFlowNl(
+        project.id,
+        instruction.trim(),
+        flow,
+      )
+      const remoteProposal: NlProposal = {
+        description,
+        preview: () => previewFlow,
+        apply: () => appliedFlow,
+      }
+      setProposal(remoteProposal)
+    } finally {
       setAiThinking(false)
-    }, 700)
+    }
   }
 
   const approveProposal = () => {

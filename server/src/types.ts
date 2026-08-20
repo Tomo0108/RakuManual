@@ -12,6 +12,13 @@ export interface HearingAnswer {
   status: "answered" | "skipped" | "unknown" | "later"
 }
 
+export interface ManualBlock {
+  id: string
+  type: "paragraph" | "step" | "note"
+  text: string
+  needsConfirm?: boolean
+}
+
 export interface Project {
   id: string
   name: string

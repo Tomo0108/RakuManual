@@ -49,7 +49,7 @@ import {
 } from "@/features/manual/ManualImpactBanner"
 import { ManualRegenWizard } from "@/features/manual/ManualRegenWizard"
 import { SectionHistoryButton } from "@/features/manual/SectionHistoryPanel"
-import { aiGenerateManualSections } from "@/lib/api/ai"
+import { aiGenerateManualSections, aiRegenerateSection } from "@/lib/api/ai"
 
 const SECTION_STYLE = {
   draft: REVIEW_STATUS.draft,
@@ -668,30 +668,22 @@ function SectionEditor({
     onLog(`セクション「${section.title}」を承認(v${section.version + 1})`)
   }
 
-  const regenerate = () => {
+  const regenerate = async () => {
     setRegenerating(true)
-    window.setTimeout(() => {
+    try {
+      const { section: regenerated } = await aiRegenerateSection(project.id, section.id)
       const withSnapshot = appendRevision(
         project,
         snapshotSection(section, { reason: "regenerate", user: "山田 太郎" }),
       )
       onReplaceProject({
         ...withSnapshot,
-        sections: withSnapshot.sections.map((s) =>
-          s.id === section.id
-            ? {
-                ...s,
-                status: "draft",
-                version: s.version + 1,
-                updatedAt: today(),
-                blocks: s.blocks.map((b) => ({ ...b })),
-              }
-            : s,
-        ),
+        sections: withSnapshot.sections.map((s) => (s.id === section.id ? regenerated : s)),
       })
       onLog(`セクション「${section.title}」をAIで部分再生成(他セクションへの影響なし)`)
+    } finally {
       setRegenerating(false)
-    }, 900)
+    }
   }
 
   let stepNo = 0
