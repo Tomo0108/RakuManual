@@ -156,7 +156,9 @@ async function main() {
     const res = await fetch(`${BASE}/api/auth/oidc/config`)
     assert(res.ok, `status ${res.status}`)
     const body = await res.json()
-    assert(body.provider === "oidc-mock", "provider mismatch")
+    assert(body.provider === "oidc-mock" || body.provider === "oidc", "provider mismatch")
+    assert(typeof body.authorizeUrl === "string", "authorizeUrl missing")
+    assert(typeof body.configured === "boolean", "configured missing")
   })
 
   await check("qa only uses accessible published corpus", async () => {

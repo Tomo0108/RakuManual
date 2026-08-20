@@ -65,7 +65,7 @@ async function main() {
     const unauth = await fetch(`${BASE}/api/projects`)
     record("U-01a", "未認証は401", unauth.status === 401, `status=${unauth.status}`)
     const cfg = await fetch(`${BASE}/api/auth/oidc/config`).then((r) => r.json())
-    record("U-01b", "OIDCモック設定", cfg.provider === "oidc-mock")
+    record("U-01b", "OIDC設定", cfg.provider === "oidc-mock" || cfg.provider === "oidc", cfg.provider)
     const yamada = await login("user-yamada")
     const me = await api(yamada, "/api/auth/me")
     record("U-01c", "ログイン・me", me.status === 200 && me.body.user?.id === "user-yamada")
@@ -135,11 +135,19 @@ async function main() {
     body: "{}",
   })
   let flow = null
+  let flowMeta = null
   if (flowJob.status === 202) {
     const done = await waitJob(yamada, flowJob.body.jobId)
     flow = done.result?.flow
+    flowMeta = done.result?.meta
   }
   record("U-05a", "フロー生成ジョブ", !!flow?.nodes?.length)
+  record(
+    "U-05d",
+    "フローLLM構造出力",
+    flowMeta?.usedLlmStructure === true,
+    `used=${flowMeta?.usedLlmStructure}`,
+  )
   if (flow) {
     const saved = await api(yamada, `/api/projects/${id}/flow`, {
       method: "PUT",
@@ -279,6 +287,12 @@ async function main() {
     body: JSON.stringify({ template: "corporate" }),
   })
   record("U-09", "PDF出力", pdf.status === 200 && !!pdf.body.pdfBase64)
+  record(
+    "U-09b",
+    "PDF署名付きURL",
+    pdf.status === 200 && typeof pdf.body.downloadUrl === "string" && pdf.body.downloadUrl.includes("/api/exports/download/"),
+    pdf.body?.downloadUrl ?? "",
+  )
 
   // U-11 metrics
   const metrics = await api(yamada, "/api/metrics/dashboard")
@@ -295,6 +309,8 @@ async function main() {
   record("U-12b", "テンプレート一覧", templates.status === 200 && templates.body.templates?.length >= 1)
   const denied = await api(yamada, "/api/admin/users")
   record("U-12c", "非管理者は管理API拒否", denied.status === 403)
+  const audit = await api(admin, "/api/admin/audit-logs?limit=20")
+  record("U-12d", "監査ログ一覧", audit.status === 200 && Array.isArray(audit.body.logs))
 
   // U-13 budget gate (non-destructive: just read flag)
   record(

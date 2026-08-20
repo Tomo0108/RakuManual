@@ -1,4 +1,6 @@
 import type { Project } from "./types.js"
+import { getLlmAdapter } from "./llm/adapter.js"
+import { extractJson } from "./ai/structured.js"
 
 export interface QASource {
   projectId: string
@@ -11,6 +13,7 @@ export interface QAAnswer {
   text: string
   source?: QASource
   noSource: boolean
+  inProgressHint?: string
 }
 
 interface IndexedChunk {
@@ -20,6 +23,7 @@ interface IndexedChunk {
   sectionLabel: string
   text: string
   keywords: string[]
+  ownerId?: string
 }
 
 function tokenize(text: string): string[] {
@@ -53,46 +57,123 @@ function indexPublishedProjects(projects: Project[]): IndexedChunk[] {
         sectionLabel: label,
         text,
         keywords: tokenize(`${label} ${body} ${project.name}`),
+        ownerId: (project as { ownerId?: string }).ownerId,
       })
     }
   }
   return chunks
 }
 
-export function answerQuestion(question: string, projects: Project[]): QAAnswer {
-  const q = question.trim().toLowerCase()
-  if (!q) {
-    return {
-      text: "質問を入力してください。",
-      noSource: true,
-    }
-  }
-
-  const chunks = indexPublishedProjects(projects)
-  if (chunks.length === 0) {
-    return {
-      text: "公開済みマニュアルがまだありません。マニュアルが公開されると、ここから回答できるようになります。",
-      noSource: true,
-    }
-  }
-
-  const qTokens = tokenize(q)
-  let best: { chunk: IndexedChunk; score: number } | null = null
-
-  for (const chunk of chunks) {
+function rankChunks(question: string, chunks: IndexedChunk[], topK = 3) {
+  const qTokens = tokenize(question)
+  const scored = chunks.map((chunk) => {
     let score = 0
     for (const token of qTokens) {
       if (chunk.keywords.some((k) => k.includes(token) || token.includes(k))) score += 2
       if (chunk.text.toLowerCase().includes(token)) score += 1
     }
-    if (!best || score > best.score) best = { chunk, score }
+    return { chunk, score }
+  })
+  scored.sort((a, b) => b.score - a.score)
+  return scored.filter((s) => s.score >= 2).slice(0, topK)
+}
+
+export async function answerQuestion(
+  question: string,
+  projects: Project[],
+  opts?: { userId?: string },
+): Promise<QAAnswer & { notifyOwnerId?: string }> {
+  const q = question.trim()
+  if (!q) {
+    return { text: "質問を入力してください。", noSource: true }
   }
 
-  if (!best || best.score < 2) {
+  const drafting = projects.filter((p) => p.status !== "published")
+  const chunks = indexPublishedProjects(projects)
+  if (chunks.length === 0) {
+    return {
+      text:
+        drafting.length > 0
+          ? "閲覧可能な公開マニュアルがまだありません。作成中のマニュアルが公開されると、ここから回答できます。"
+          : "公開済みマニュアルがまだありません。マニュアルが公開されると、ここから回答できるようになります。",
+      noSource: true,
+      inProgressHint:
+        drafting.length > 0
+          ? `作成中プロジェクト: ${drafting
+              .slice(0, 3)
+              .map((p) => p.name)
+              .join("、")}`
+          : undefined,
+    }
+  }
+
+  const top = rankChunks(q, chunks, 3)
+  if (top.length === 0) {
+    const owners = [...new Set(projects.filter((p) => p.status === "published").map((p) => p.ownerId).filter(Boolean))]
     return {
       text: "該当する公開マニュアルが見つかりません。推測での回答は行わない設計のため、お答えできません。この質問はマニュアル整備の需要シグナルとして記録されます。",
       noSource: true,
+      notifyOwnerId: owners[0],
     }
+  }
+
+  const best = top[0]!
+  const context = top
+    .map(
+      (t, i) =>
+        `[出典${i + 1}] ${t.chunk.projectName} / ${t.chunk.sectionLabel}\n${t.chunk.text.slice(0, 500)}`,
+    )
+    .join("\n\n")
+
+  try {
+    const adapter = getLlmAdapter()
+    const llm = await adapter.complete(
+      [
+        {
+          role: "system",
+          content:
+            "公開マニュアルの出典のみに基づき回答せよ。根拠外は答えるな。JSONのみで {answer, grounded} を返せ。grounded=false なら answer に拒否理由。",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ question: q, context }).slice(0, 3500),
+        },
+      ],
+      {
+        maxTokens: 600,
+        context: opts?.userId
+          ? { userId: opts.userId, action: "qa_answer" }
+          : undefined,
+      },
+    )
+    try {
+      const parsed = JSON.parse(extractJson(llm.text)) as { answer?: string; grounded?: boolean }
+      if (parsed.grounded === false) {
+        return {
+          text:
+            parsed.answer?.trim() ||
+            "出典に根拠がないため回答できません。マニュアル整備の需要として記録します。",
+          noSource: true,
+          notifyOwnerId: best.chunk.ownerId,
+        }
+      }
+      if (parsed.answer?.trim()) {
+        return {
+          text: parsed.answer.trim(),
+          source: {
+            projectId: best.chunk.projectId,
+            projectName: best.chunk.projectName,
+            section: best.chunk.sectionLabel,
+            sectionId: best.chunk.sectionId,
+          },
+          noSource: false,
+        }
+      }
+    } catch {
+      /* excerpt fallback */
+    }
+  } catch {
+    /* excerpt fallback */
   }
 
   const excerpt = best.chunk.text.slice(0, 280).replace(/\n+/g, " ")

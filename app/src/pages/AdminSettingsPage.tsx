@@ -10,6 +10,7 @@ import {
   deleteTemplate,
   fetchAdminSettings,
   fetchAdminUsers,
+  fetchAuditLogs,
   fetchNotificationSettings,
   fetchTemplates,
   updateAdminSettings,
@@ -17,6 +18,7 @@ import {
   updateNotificationSettings,
   upsertTemplate,
   type AdminUser,
+  type AuditLogItem,
   type DesignTemplate,
   type NotificationSettings,
 } from "@/lib/api/admin"
@@ -29,6 +31,7 @@ interface Props {
 export function AdminSettingsPage({ isAdmin }: Props) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [templates, setTemplates] = useState<DesignTemplate[]>([])
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([])
   const [budget, setBudget] = useState(50000)
   const [provider, setProvider] = useState("mock")
   const [notify, setNotify] = useState<NotificationSettings>({
@@ -48,10 +51,15 @@ export function AdminSettingsPage({ isAdmin }: Props) {
       setTemplates(tpls)
       setNotify(prefs)
       if (isAdmin) {
-        const [u, settings] = await Promise.all([fetchAdminUsers(), fetchAdminSettings()])
+        const [u, settings, logs] = await Promise.all([
+          fetchAdminUsers(),
+          fetchAdminSettings(),
+          fetchAuditLogs({ limit: 30 }),
+        ])
         setUsers(u)
         setBudget(settings.llmBudgetYen)
         setProvider(settings.llmProvider)
+        setAuditLogs(logs)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "読み込みに失敗しました")
@@ -231,6 +239,31 @@ export function AdminSettingsPage({ isAdmin }: Props) {
                       <option value="creator">creator</option>
                       <option value="admin">admin</option>
                     </select>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">監査ログ（直近）</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-64 space-y-2 overflow-y-auto text-xs">
+                {auditLogs.length === 0 && (
+                  <p className="text-muted-foreground">ログがありません</p>
+                )}
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="rounded border px-2 py-1.5">
+                    <div className="flex justify-between gap-2">
+                      <span className="font-medium">{log.actionType}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      {log.userId}
+                      {log.projectId ? ` / ${log.projectId}` : ""}
+                    </div>
                   </div>
                 ))}
               </CardContent>

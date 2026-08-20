@@ -31,6 +31,7 @@ import { answerQuestion } from "./qa.js"
 import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
 import { generateDeepdiveQuestions, nextHearingQuestion } from "./ai/hearing.js"
+import { extractJson, regenerateSectionFromLlm } from "./ai/structured.js"
 import {
   enqueueFlowGenerate,
   enqueueManualGenerate,
@@ -47,7 +48,8 @@ import {
   setNotificationSettings,
   createNotification,
 } from "./notifications.js"
-import { recordOperationLog } from "./operation-log.js"
+import { listOperationLogs, recordOperationLog } from "./operation-log.js"
+import { getExportArtifact, storeExportArtifact } from "./export/artifacts.js"
 import type { AuthUser, HearingAnswer, Project, UserRole } from "./types.js"
 
 const SESSION_COOKIE = "rakumanual_session"
@@ -324,29 +326,105 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  /** OIDC風SSOモック: IdP認可エンドポイント相当 */
+  /** OIDC: OIDC_ISSUER 設定時は外部IdP、未設定時はモック */
   app.get("/api/auth/oidc/authorize", async (request, reply) => {
+    const issuer = process.env.OIDC_ISSUER?.trim()
+    const clientId = process.env.OIDC_CLIENT_ID?.trim()
     const query = request.query as { userId?: string; redirect_uri?: string; state?: string }
+
+    if (issuer && clientId) {
+      const redirectUri =
+        query.redirect_uri ??
+        process.env.OIDC_REDIRECT_URI ??
+        "http://127.0.0.1:5173/?sso=callback"
+      const authorizeEndpoint =
+        process.env.OIDC_AUTHORIZE_URL?.trim() ||
+        `${issuer.replace(/\/$/, "")}/authorize`
+      const url = new URL(authorizeEndpoint)
+      url.searchParams.set("client_id", clientId)
+      url.searchParams.set("response_type", "code")
+      url.searchParams.set("scope", process.env.OIDC_SCOPE ?? "openid profile email")
+      url.searchParams.set("redirect_uri", redirectUri)
+      if (query.state) url.searchParams.set("state", query.state)
+      return reply.redirect(url.toString())
+    }
+
     const userId = query.userId ?? "user-yamada"
     const user = getUserById(userId)
     if (!user) return reply.status(400).send({ error: "User not found" })
-    const code = createSession(user.id) // 一時コードとしてセッションを兼用
-    const redirect =
-      query.redirect_uri ??
-      "http://127.0.0.1:5173/?sso=callback"
+    const code = createSession(user.id)
+    const redirect = query.redirect_uri ?? "http://127.0.0.1:5173/?sso=callback"
     const url = new URL(redirect)
     url.searchParams.set("code", code)
     if (query.state) url.searchParams.set("state", query.state)
     return reply.redirect(url.toString())
   })
 
-  /** OIDC風SSOモック: コールバックでセッションCookieを確立 */
   app.post("/api/auth/oidc/callback", async (request, reply) => {
     const body = (request.body ?? {}) as { code?: string }
     if (!body.code) return reply.status(400).send({ error: "code is required" })
+
+    const issuer = process.env.OIDC_ISSUER?.trim()
+    const clientId = process.env.OIDC_CLIENT_ID?.trim()
+    const clientSecret = process.env.OIDC_CLIENT_SECRET?.trim()
+
+    if (issuer && clientId && clientSecret) {
+      const tokenUrl =
+        process.env.OIDC_TOKEN_URL?.trim() || `${issuer.replace(/\/$/, "")}/token`
+      const redirectUri = process.env.OIDC_REDIRECT_URI ?? "http://127.0.0.1:5173/?sso=callback"
+      const tokenRes = await fetch(tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: body.code,
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          client_secret: clientSecret,
+        }),
+      })
+      if (!tokenRes.ok) {
+        return reply.status(401).send({ error: "OIDC token exchange failed" })
+      }
+      const tokenJson = (await tokenRes.json()) as { access_token?: string; id_token?: string }
+      const userInfoUrl =
+        process.env.OIDC_USERINFO_URL?.trim() || `${issuer.replace(/\/$/, "")}/userinfo`
+      let email = ""
+      let name = ""
+      let sub = ""
+      if (tokenJson.access_token) {
+        const ui = await fetch(userInfoUrl, {
+          headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+        })
+        if (ui.ok) {
+          const info = (await ui.json()) as { sub?: string; email?: string; name?: string }
+          sub = info.sub ?? ""
+          email = info.email ?? ""
+          name = info.name ?? email
+        }
+      }
+      const mapped =
+        listUsers().find((u) => u.email === email) ??
+        (sub ? getUserById(`oidc-${sub}`) : null) ??
+        listUsers()[0]
+      if (!mapped) return reply.status(401).send({ error: "No mapped user for OIDC identity" })
+      const token = createSession(mapped.id)
+      reply.setCookie(SESSION_COOKIE, token, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60,
+      })
+      recordOperationLog({
+        userId: mapped.id,
+        actionType: "admin",
+        payload: { kind: "sso_login", provider: "oidc", email, name },
+      })
+      return { user: mapped, provider: "oidc" }
+    }
+
     const user = getSessionUser(body.code)
     if (!user) return reply.status(401).send({ error: "Invalid or expired code" })
-    // code を本セッションとしてそのまま使う（デモ）
     reply.setCookie(SESSION_COOKIE, body.code, {
       path: "/",
       httpOnly: true,
@@ -361,12 +439,20 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return { user, provider: "oidc-mock" }
   })
 
-  app.get("/api/auth/oidc/config", async () => ({
-    provider: "oidc-mock",
-    authorizeUrl: "/api/auth/oidc/authorize",
-    callbackUrl: "/api/auth/oidc/callback",
-    note: "社内IdP接続前の開発用モック。本番はSAML/OIDCに差し替え。",
-  }))
+  app.get("/api/auth/oidc/config", async () => {
+    const issuer = process.env.OIDC_ISSUER?.trim()
+    const configured = Boolean(issuer && process.env.OIDC_CLIENT_ID?.trim())
+    return {
+      provider: configured ? "oidc" : "oidc-mock",
+      configured,
+      issuer: issuer || null,
+      authorizeUrl: "/api/auth/oidc/authorize",
+      callbackUrl: "/api/auth/oidc/callback",
+      note: configured
+        ? "OIDC_ISSUER / OIDC_CLIENT_ID により外部IdPへリダイレクトします。"
+        : "社内IdP接続前の開発用モック。OIDC_ISSUER 等を設定すると本番OIDCに切り替わります。",
+    }
+  })
 }
 
 export async function registerProjectRoutes(app: FastifyInstance) {
@@ -786,8 +872,15 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const adapter = getLlmAdapter()
     const llm = await adapter.complete(
       [
-        { role: "system", content: "フロー図の自然言語修正指示を解釈せよ。" },
-        { role: "user", content: instruction },
+        {
+          role: "system",
+          content:
+            'フロー自然言語修正。可能なら JSON で {"ops":[{"op":"addLane|rename|addNode","...":"..."}],"description":"..."} を返せ。不明なら description のみ。',
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ instruction, flow: body.flow }).slice(0, 3500),
+        },
       ],
       { context: { userId: user.id, projectId: existing.id, action: "flow_nl_edit" } },
     )
@@ -799,7 +892,15 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       payload: { kind: "nl-edit", provider: llm.provider, tokens: llm.tokens },
     })
 
-    const result = proposeNlEdit(instruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
+    // LLM の description をヒントに正規表現ベースの差分を適用（手動ノード保護は flow-logic 側）
+    let enrichedInstruction = instruction
+    try {
+      const parsed = JSON.parse(extractJson(llm.text)) as { description?: string; ops?: unknown }
+      if (parsed.description) enrichedInstruction = `${instruction}\n${parsed.description}`
+    } catch {
+      if (llm.text && !llm.text.startsWith("[モック")) enrichedInstruction = `${instruction}\n${llm.text.slice(0, 200)}`
+    }
+    const result = proposeNlEdit(enrichedInstruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
     return { ...result, meta: { provider: llm.provider, tokens: llm.tokens } }
   })
 
@@ -842,22 +943,31 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
 
       try {
+        const { section, provider, tokens } = await regenerateSectionFromLlm(
+          existing,
+          request.params.sectionId,
+          user.id,
+        )
         recordLlmUsage({
           userId: user.id,
           projectId: existing.id,
           action: "section_regenerate",
-          tokens: 180,
+          tokens,
         })
         recordOperationLog({
           userId: user.id,
           actionType: "generate",
           projectId: existing.id,
-          payload: { kind: "section_regenerate", sectionId: request.params.sectionId },
+          payload: { kind: "section_regenerate", sectionId: request.params.sectionId, provider },
         })
-        const section = regenerateSectionMock(existing, request.params.sectionId)
-        return { section }
+        return { section, meta: { provider, tokens } }
       } catch {
-        return reply.status(404).send({ error: "Section not found" })
+        try {
+          const section = regenerateSectionMock(existing, request.params.sectionId)
+          return { section }
+        } catch {
+          return reply.status(404).send({ error: "Section not found" })
+        }
       }
     },
   )
@@ -872,7 +982,7 @@ export async function registerQaRoutes(app: FastifyInstance) {
     if (!question) return reply.status(400).send({ error: "question is required" })
 
     const projects = listAccessibleProjects(user.id)
-    const result = answerQuestion(question, projects)
+    const result = await answerQuestion(question, projects, { userId: user.id })
     const messageId = `qa-${Date.now()}`
     insertQaMessage(user.id, messageId, question)
     recordOperationLog({
@@ -881,8 +991,9 @@ export async function registerQaRoutes(app: FastifyInstance) {
       payload: { messageId, noSource: result.noSource },
     })
     if (result.noSource) {
+      const notifyUserId = result.notifyOwnerId ?? user.id
       createNotification({
-        userId: user.id,
+        userId: notifyUserId,
         type: "qa_unanswered",
         title: "QAで回答根拠が見つかりませんでした",
         body: `質問: ${question.slice(0, 80)}`,
@@ -932,7 +1043,7 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
       actionType: "publish",
       projectId: saved.id,
     })
-    return saved
+    return { ...saved, askCsat: true }
   })
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/export/html", async (request, reply) => {
@@ -983,17 +1094,40 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
     }
 
     const pdf = await buildManualPdf(existing, body)
+    const artifact = storeExportArtifact({
+      userId: user.id,
+      projectId: existing.id,
+      filename: `${existing.name}.pdf`,
+      mimeType: "application/pdf",
+      bytes: pdf,
+    })
     recordOperationLog({
       userId: user.id,
       actionType: "export",
       projectId: existing.id,
-      payload: { format: "pdf", template: body.template },
+      payload: { format: "pdf", template: body.template, downloadToken: artifact.token },
     })
     return {
       pdfBase64: pdf.toString("base64"),
-      filename: `${existing.name}.pdf`,
-      mimeType: "application/pdf",
+      filename: artifact.filename,
+      mimeType: artifact.mimeType,
+      downloadUrl: artifact.downloadUrl,
+      expiresAt: artifact.expiresAt,
     }
+  })
+
+  app.get<{ Params: { token: string } }>("/api/exports/download/:token", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const item = getExportArtifact(request.params.token)
+    if (!item || item.userId !== user.id) {
+      return reply.status(404).send({ error: "Download not found or expired" })
+    }
+    const fs = await import("node:fs")
+    const buf = fs.readFileSync(item.filePath)
+    reply.header("Content-Type", item.mimeType)
+    reply.header("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(item.filename)}`)
+    return reply.send(buf)
   })
 }
 
@@ -1197,6 +1331,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       llmBudgetYen: getLlmBudgetYen(),
       llmProvider: getLlmProviderName(),
     }
+  })
+
+  app.get("/api/admin/audit-logs", async (request, reply) => {
+    const admin = await requireAdmin(request, reply)
+    if (!admin) return
+    const query = request.query as { limit?: string; actionType?: string; userId?: string }
+    const logs = listOperationLogs({
+      limit: query.limit ? Number(query.limit) : 100,
+      userId: query.userId,
+      actionType: query.actionType as import("./operation-log.js").OperationActionType | undefined,
+    })
+    return { logs }
   })
 }
 

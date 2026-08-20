@@ -8,7 +8,7 @@ import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { publishProject } from "@/lib/api/publish"
 import { downloadPdfBase64, exportProjectPdf } from "@/lib/api/export"
-import { fetchTemplates, type DesignTemplate } from "@/lib/api/admin"
+import { fetchTemplates, submitCsat, type DesignTemplate } from "@/lib/api/admin"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -65,6 +65,8 @@ export function ExportTab({ project, updateProject }: Props) {
   const [exported, setExported] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [csatPrompt, setCsatPrompt] = useState(false)
+  const [csatScore, setCsatScore] = useState<number | null>(null)
 
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -111,13 +113,14 @@ export function ExportTab({ project, updateProject }: Props) {
           template,
         })
       } else {
-        const { pdfBase64, filename } = await exportProjectPdf(project.id, {
+        const result = await exportProjectPdf(project.id, {
           template,
           includeFlow,
           imageMode: imageMode as "expand" | "appendix" | "none",
           sectionIds: range === "all" ? undefined : [range],
         })
-        downloadPdfBase64(pdfBase64, filename)
+        if (!result.pdfBase64) throw new Error("PDFデータがありません")
+        downloadPdfBase64(result.pdfBase64, result.filename)
       }
       setExported(true)
     } catch (err) {
@@ -132,11 +135,23 @@ export function ExportTab({ project, updateProject }: Props) {
     setPublishError(null)
     try {
       const published = await publishProject(project.id)
-      updateProject(project.id, () => published)
+      const { askCsat, ...rest } = published
+      updateProject(project.id, () => rest)
+      if (askCsat) setCsatPrompt(true)
     } catch (err) {
       setPublishError(err instanceof Error ? err.message : "公開に失敗しました")
     } finally {
       setPublishing(false)
+    }
+  }
+
+  const sendCsat = async (score: number) => {
+    setCsatScore(score)
+    try {
+      await submitCsat({ score, source: "publish", projectId: project.id })
+      setCsatPrompt(false)
+    } catch {
+      /* 非致命 */
     }
   }
 
@@ -192,6 +207,23 @@ export function ExportTab({ project, updateProject }: Props) {
                 </Button>
                 {publishError && <p className="text-sm text-destructive">{publishError}</p>}
               </>
+            )}
+            {csatPrompt && (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <p className="font-medium">公開お疲れさまでした。満足度を教えてください（CSAT）</p>
+                <div className="mt-2 flex gap-2">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Button
+                      key={s}
+                      size="sm"
+                      variant={csatScore === s ? "default" : "outline"}
+                      onClick={() => void sendCsat(s)}
+                    >
+                      {s}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

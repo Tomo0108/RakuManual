@@ -19,8 +19,16 @@ export async function exportProjectHtml(
 
 export async function exportProjectPdf(
   projectId: string,
-  options: ExportHtmlOptions,
-): Promise<{ pdfBase64: string; filename: string; mimeType: string }> {
+  options: ExportHtmlOptions & { async?: boolean },
+): Promise<{
+  pdfBase64?: string
+  filename: string
+  mimeType?: string
+  downloadUrl?: string
+  expiresAt?: number
+  jobId?: string
+  status?: string
+}> {
   return apiFetch(`/projects/${projectId}/export/pdf`, {
     method: "POST",
     body: JSON.stringify(options),

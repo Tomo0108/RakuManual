@@ -119,3 +119,26 @@ export async function submitCsat(input: {
     body: JSON.stringify(input),
   })
 }
+
+export interface AuditLogItem {
+  id: string
+  userId: string
+  projectId: string | null
+  actionType: string
+  payload: Record<string, unknown>
+  createdAt: number
+}
+
+export async function fetchAuditLogs(opts?: {
+  limit?: number
+  actionType?: string
+  userId?: string
+}): Promise<AuditLogItem[]> {
+  const q = new URLSearchParams()
+  if (opts?.limit) q.set("limit", String(opts.limit))
+  if (opts?.actionType) q.set("actionType", opts.actionType)
+  if (opts?.userId) q.set("userId", opts.userId)
+  const qs = q.toString()
+  const data = await apiFetch<{ logs: AuditLogItem[] }>(`/admin/audit-logs${qs ? `?${qs}` : ""}`)
+  return data.logs
+}
