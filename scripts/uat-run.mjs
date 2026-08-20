@@ -319,6 +319,34 @@ async function main() {
     typeof metrics.body.llmBudgetYen === "number" && typeof metrics.body.generationBlocked === "boolean",
   )
 
+  // F-2 手動ノード保護
+  if (flow) {
+    const withManual = {
+      ...flow,
+      nodes: flow.nodes.map((n, i) =>
+        i === 1 ? { ...n, data: { ...n.data, manual: true, label: "手動保護ノード" } } : n,
+      ),
+    }
+    const regen = await api(yamada, `/api/projects/${id}/ai/flow/regenerate`, {
+      method: "POST",
+      body: JSON.stringify({ flow: withManual }),
+    })
+    const kept = regen.body?.flow?.nodes?.some(
+      (n) => n.data?.manual === true && n.data?.label === "手動保護ノード",
+    )
+    record("F-2", "手動修正ノード再生成保護", regen.status === 200 && kept, `status=${regen.status}`)
+  } else {
+    record("F-2", "手動修正ノード再生成保護", false, "no flow")
+  }
+
+  // F-1 離脱率メトリクス
+  record(
+    "F-1",
+    "ヒアリング離脱率KPI",
+    typeof metrics.body.hearingDropoutRate === "number" &&
+      typeof metrics.body.hearingStartCount === "number",
+  )
+
   // F-3 flow edit usability proxy: NL edit API responds
   if (flow) {
     const nl = await api(yamada, `/api/projects/${id}/ai/flow/nl-edit`, {
@@ -351,6 +379,7 @@ ${results.map((r) => `| ${r.id} | ${r.name} | ${r.ok ? "合格" : "不合格"} |
 ## 補足
 
 - 本結果は API ベースの受け入れ条件検証です。
+- **外部API設定（OPENAI_API_KEY / 社内IdP）は後続設定のため本UAT対象外**（Adapter・OIDC配線は実装済み）。
 - 部内パイロット（5名以上の主観評価）は \`docs/UATチェックリスト.md\` に人手記入してください。
 - F-3「修正が難しい」0件はパイロット時の主観指標です。自動実行では NL 修正 API 応答で代替確認しています。
 `

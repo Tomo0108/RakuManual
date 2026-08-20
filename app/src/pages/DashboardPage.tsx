@@ -56,6 +56,12 @@ export function DashboardPage({ projects }: Props) {
       value: metrics?.csatAverage != null ? String(metrics.csatAverage) : "—",
       good: (metrics?.csatAverage ?? 0) >= 4,
     },
+    {
+      icon: TrendingUp,
+      label: "ヒアリング離脱率",
+      value: `${metrics?.hearingDropoutRate ?? 0}%`,
+      good: (metrics?.hearingDropoutRate ?? 0) <= 40,
+    },
   ]
 
   return (
@@ -67,7 +73,7 @@ export function DashboardPage({ projects }: Props) {
           actions={<DashboardHelpButton />}
         />
 
-        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
           {kpis.map((k) => (
             <Card key={k.label} className="gap-0 py-4 transition-shadow hover:shadow-md">
               <CardContent>

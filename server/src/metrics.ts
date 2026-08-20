@@ -19,6 +19,9 @@ export interface DashboardMetrics {
   editCount: number
   publishCount: number
   llmProvider: "mock" | "openai"
+  hearingStartCount: number
+  hearingCompleteCount: number
+  hearingDropoutRate: number
 }
 
 export function getDashboardMetrics(userId: string): DashboardMetrics {
@@ -41,6 +44,27 @@ export function getDashboardMetrics(userId: string): DashboardMetrics {
   const thirtyDays = Date.now() - 30 * 24 * 60 * 60 * 1000
   const usage = getMonthlyLlmUsageYen(userId)
 
+  const hearingStarts = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM operation_logs
+       WHERE user_id = ? AND action_type = 'hearing'
+         AND json_extract(payload, '$.kind') = 'hearing_start'
+         AND created_at >= ?`,
+    )
+    .get(userId, thirtyDays) as { c: number }
+  const hearingCompletes = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM operation_logs
+       WHERE user_id = ? AND action_type = 'hearing'
+         AND json_extract(payload, '$.kind') = 'hearing_complete'
+         AND created_at >= ?`,
+    )
+    .get(userId, thirtyDays) as { c: number }
+  const startCount = hearingStarts?.c ?? 0
+  const completeCount = hearingCompletes?.c ?? 0
+  const hearingDropoutRate =
+    startCount === 0 ? 0 : Math.round(((startCount - completeCount) / startCount) * 100)
+
   return {
     publishedCount,
     projectCount,
@@ -58,5 +82,8 @@ export function getDashboardMetrics(userId: string): DashboardMetrics {
     editCount: countOperations(userId, "edit", thirtyDays),
     publishCount: countOperations(userId, "publish", thirtyDays),
     llmProvider: process.env.OPENAI_API_KEY?.trim() ? "openai" : "mock",
+    hearingStartCount: startCount,
+    hearingCompleteCount: completeCount,
+    hearingDropoutRate: Math.max(0, hearingDropoutRate),
   }
 }

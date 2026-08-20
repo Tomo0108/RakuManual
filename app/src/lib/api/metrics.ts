@@ -17,6 +17,9 @@ export interface DashboardMetrics {
   editCount: number
   publishCount: number
   llmProvider: "mock" | "openai"
+  hearingStartCount: number
+  hearingCompleteCount: number
+  hearingDropoutRate: number
 }
 
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {

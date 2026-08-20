@@ -519,6 +519,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     )
     insertProject(user.id, project)
     recordOperationLog({ userId: user.id, actionType: "edit", projectId: project.id, payload: { kind: "create" } })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "hearing",
+      projectId: project.id,
+      payload: { kind: "hearing_start" },
+    })
     reply.status(201)
     return project
   })
@@ -693,6 +699,15 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     const allowed = assertGenerationAllowed(user.id)
     if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+    if (existing.status === "hearing" || (existing.hearingAnswers?.length ?? 0) > 0) {
+      recordOperationLog({
+        userId: user.id,
+        actionType: "hearing",
+        projectId: existing.id,
+        payload: { kind: "hearing_complete" },
+      })
+    }
 
     const job = enqueueFlowGenerate(user.id, existing.id)
     reply.status(202)
