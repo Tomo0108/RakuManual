@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
-import { RefreshCw, WifiOff } from "lucide-react"
-import type { View } from "@/lib/types"
+import { FileQuestion, RefreshCw, WifiOff } from "lucide-react"
 import type { AccentId } from "@/lib/mock-data"
+import { useRoutedView } from "@/lib/routing"
 import { loadAccent, saveAccent } from "@/lib/accent-storage"
 import { useAppSession } from "@/lib/api/use-app-session"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -11,6 +11,7 @@ import { SidebarContent } from "@/components/layout/SidebarContent"
 import { MobileHeader } from "@/components/layout/MobileHeader"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/EmptyState"
 import { ProjectList } from "@/pages/ProjectList"
 import { ProjectPage } from "@/pages/ProjectPage"
 import { QAChatPage } from "@/pages/QAChatPage"
@@ -20,7 +21,7 @@ import { LoginPage } from "@/pages/LoginPage"
 import { AdminSettingsPage } from "@/pages/AdminSettingsPage"
 
 export default function App() {
-  const [view, setView] = useState<View>({ name: "projects" })
+  const [view, setView] = useRoutedView()
   const [accent, setAccentState] = useState<AccentId>(() => loadAccent())
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const session = useAppSession()
@@ -172,6 +173,16 @@ export default function App() {
                 updateProjectLocal={updateProjectLocal}
                 onBack={() => setView({ name: "projects" })}
               />
+            )}
+            {(view.name === "project" || view.name === "viewer") && !currentProject && (
+              <div className="p-6">
+                <EmptyState
+                  icon={FileQuestion}
+                  title="プロジェクトが見つかりません"
+                  description="URL が古い、または閲覧権限がない可能性があります。"
+                  action={{ label: "プロジェクト一覧へ", onClick: () => setView({ name: "projects" }) }}
+                />
+              </div>
             )}
           </main>
         </div>
