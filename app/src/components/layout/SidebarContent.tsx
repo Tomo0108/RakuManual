@@ -3,6 +3,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   MessageCircleQuestion,
+  LogOut,
   Palette,
   Settings2,
 } from "lucide-react"
@@ -28,6 +29,8 @@ export interface SidebarContentProps {
   projects: Project[]
   accent: AccentId
   setAccent: (a: AccentId) => void
+  userName?: string
+  onLogout?: () => void
   onNavigate?: () => void
   className?: string
 }
@@ -38,6 +41,8 @@ export function SidebarContent({
   projects,
   accent,
   setAccent,
+  userName = "山田 太郎",
+  onLogout,
   onNavigate,
   className,
 }: SidebarContentProps) {
@@ -142,11 +147,11 @@ export function SidebarContent({
             >
               <Avatar className="size-7">
                 <AvatarFallback className="bg-primary-subtle text-[11px] font-semibold text-primary">
-                  山
+                  {userName.slice(0, 1)}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1 text-left">
-                <div className="truncate text-[13px] font-medium text-sidebar-foreground">山田 太郎</div>
+                <div className="truncate text-[13px] font-medium text-sidebar-foreground">{userName}</div>
                 <div className="truncate text-[10px] text-muted-foreground">SSOログイン済み(社内)</div>
               </div>
               <Settings2 className="size-3.5 shrink-0 opacity-60" />
@@ -165,6 +170,15 @@ export function SidebarContent({
                 {accent === opt.id && <span className="ml-auto text-xs text-primary">✓</span>}
               </DropdownMenuItem>
             ))}
+            {onLogout && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onLogout} className="gap-2.5">
+                  <LogOut className="size-3.5" />
+                  ログアウト
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

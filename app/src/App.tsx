@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useState } from "react"
-import type { Project, View } from "@/lib/types"
-import { INITIAL_PROJECTS, type AccentId } from "@/lib/mock-data"
+import type { View } from "@/lib/types"
+import type { AccentId } from "@/lib/mock-data"
 import { loadAccent, saveAccent } from "@/lib/accent-storage"
+import { useAppSession } from "@/lib/api/use-app-session"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PwaUpdatePrompt } from "@/components/PwaUpdatePrompt"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { SidebarContent } from "@/components/layout/SidebarContent"
 import { MobileHeader } from "@/components/layout/MobileHeader"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
 import { ProjectList } from "@/pages/ProjectList"
 import { ProjectPage } from "@/pages/ProjectPage"
 import { QAChatPage } from "@/pages/QAChatPage"
 import { DashboardPage } from "@/pages/DashboardPage"
+import { LoginPage } from "@/pages/LoginPage"
 
 export default function App() {
   const [view, setView] = useState<View>({ name: "projects" })
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS)
   const [accent, setAccentState] = useState<AccentId>(() => loadAccent())
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const session = useAppSession()
 
   const setAccent = useCallback((next: AccentId) => {
     setAccentState(next)
@@ -27,24 +30,34 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-accent", accent)
     const meta = document.querySelector('meta[name="theme-color"]')
-    meta?.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--background").trim() || "#faf8f6")
+    meta?.setAttribute(
+      "content",
+      getComputedStyle(document.documentElement).getPropertyValue("--background").trim() || "#faf8f6",
+    )
   }, [accent])
 
-  const updateProject = useCallback(
-    (id: string, updater: (p: Project) => Project) => {
-      setProjects((prev) => prev.map((p) => (p.id === id ? updater(p) : p)))
-    },
-    [],
-  )
-
-  const addProject = useCallback((project: Project) => {
-    setProjects((prev) => [project, ...prev])
-  }, [])
+  const { projects, updateProject, addProject } = session
 
   const currentProject =
-    view.name === "project"
-      ? projects.find((p) => p.id === view.projectId)
-      : undefined
+    view.name === "project" ? projects.find((p) => p.id === view.projectId) : undefined
+
+  if (session.booting) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+        読み込み中…
+      </div>
+    )
+  }
+
+  if (session.needsLogin) {
+    return (
+      <LoginPage
+        busy={session.loginBusy}
+        error={session.loginError}
+        onLogin={(userId) => void session.login(userId)}
+      />
+    )
+  }
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -55,6 +68,8 @@ export default function App() {
           projects={projects}
           accent={accent}
           setAccent={setAccent}
+          userName={session.user?.name ?? "山田 太郎"}
+          onLogout={session.apiAvailable ? () => void session.logout() : undefined}
         />
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -63,6 +78,19 @@ export default function App() {
             projects={projects}
             onMenuOpen={() => setMobileMenuOpen(true)}
           />
+          {session.saveError && (
+            <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+              <span className="min-w-0 flex-1">保存に失敗しました: {session.saveError}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0"
+                onClick={() => session.retrySave()}
+              >
+                再試行
+              </Button>
+            </div>
+          )}
           <main className="canvas-surface min-h-0 flex-1 overflow-hidden">
             {view.name === "projects" && (
               <ProjectList
@@ -71,7 +99,9 @@ export default function App() {
                 onCreate={addProject}
               />
             )}
-            {view.name === "qa" && <QAChatPage onOpenProject={(id) => setView({ name: "project", projectId: id, tab: "manual" })} />}
+            {view.name === "qa" && (
+              <QAChatPage onOpenProject={(id) => setView({ name: "project", projectId: id, tab: "manual" })} />
+            )}
             {view.name === "dashboard" && <DashboardPage projects={projects} />}
             {view.name === "project" && currentProject && (
               <ProjectPage
@@ -95,6 +125,8 @@ export default function App() {
             projects={projects}
             accent={accent}
             setAccent={setAccent}
+            userName={session.user?.name ?? "山田 太郎"}
+            onLogout={session.apiAvailable ? () => void session.logout() : undefined}
             onNavigate={() => setMobileMenuOpen(false)}
             className="h-full"
           />

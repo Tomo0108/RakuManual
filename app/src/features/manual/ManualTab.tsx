@@ -959,7 +959,7 @@ function SectionEditor({
                   onCancel={() => setEditingBlockId(null)}
                   onResolveConfirm={() => updateBlock(block.id, (b) => ({ ...b, needsConfirm: false }))}
                   onAttachImage={async (file) => {
-                    const image = await readImageFile(file)
+                    const image = await readImageFile(file, project.id)
                     updateBlock(block.id, (b) => ({ ...b, image }))
                   }}
                   onRemoveImage={() => updateBlock(block.id, (b) => ({ ...b, image: undefined }))}

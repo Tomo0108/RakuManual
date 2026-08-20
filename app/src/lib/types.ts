@@ -133,8 +133,10 @@ export const SECTION_LABEL: Record<SectionStatus, string> = {
 
 export interface ManualImage {
   id: string
-  /** data URL など。未設定時は color プレースホルダを表示 */
+  /** data URL または API の /api/uploads/... */
   url?: string
+  /** サーバー保存時のストレージキー */
+  storageKey?: string
   caption: string
   mimeType?: string
   name?: string
@@ -248,6 +250,8 @@ export interface Project {
   id: string
   name: string
   owner: string
+  /** API 永続化時のオーナーユーザー ID */
+  ownerId?: string
   updatedAt: string
   status: ProjectStatus
   description: string

@@ -8,6 +8,8 @@ interface SidebarProps {
   projects: Project[]
   accent: AccentId
   setAccent: (a: AccentId) => void
+  userName?: string
+  onLogout?: () => void
 }
 
 export function Sidebar(props: SidebarProps) {
