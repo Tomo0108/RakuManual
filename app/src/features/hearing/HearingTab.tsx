@@ -16,7 +16,7 @@ import type {
   ProjectTab,
 } from "@/lib/types"
 import { HEARING_QUESTIONS } from "@/lib/mock-data"
-import { fetchNextHearingQuestion } from "@/lib/api/ai"
+import { fetchNextHearingQuestion, streamAiCompletion } from "@/lib/api/ai"
 import { upsertHearingAnswer } from "@/lib/api/projects"
 import { now } from "@/lib/project-utils"
 import { WARNING_TEXT, SUCCESS_TEXT, SEMANTIC } from "@/lib/semantic-styles"
@@ -53,9 +53,11 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState("")
   const [thinking, setThinking] = useState(false)
+  const [streamText, setStreamText] = useState("")
   const [hint, setHint] = useState<string | null>(null)
   const [followUp, setFollowUp] = useState<HearingQuestion | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const streamAbortRef = useRef<AbortController | null>(null)
 
   const activeQuestion = followUp ?? currentQuestion
   const done = baseDone && !followUp
@@ -67,7 +69,7 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-  }, [answers.length, thinking, done, hint])
+  }, [answers.length, thinking, done, hint, streamText])
 
   useEffect(() => {
     let cancelled = false
@@ -92,7 +94,11 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
   const saveAnswer = (value: string, status: AnswerStatus) => {
     if (!activeQuestion) return
     const answer: HearingAnswer = { questionId: activeQuestion.id, value, status }
+    streamAbortRef.current?.abort()
+    const ac = new AbortController()
+    streamAbortRef.current = ac
     setThinking(true)
+    setStreamText("")
     updateProject(project.id, (p) => ({
       ...p,
       updatedAt: now().slice(0, 10),
@@ -104,7 +110,23 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
     setDraft("")
     setMultiSelection([])
     setFollowUp(null)
-    window.setTimeout(() => setThinking(false), 450)
+    void streamAiCompletion(
+      project.id,
+      `ユーザーが「${activeQuestion.text}」に対し「${value || status}」と回答しました。短い確認コメントを1文で返してください。`,
+      (_delta, full) => setStreamText(full),
+      {
+        action: "hearing_ack_stream",
+        signal: ac.signal,
+        system: "業務マニュアル作成のヒアリングAI。共感と確認のみ。質問はしない。1文。",
+      },
+    )
+      .catch(() => null)
+      .finally(() => {
+        if (!ac.signal.aborted) {
+          setThinking(false)
+          window.setTimeout(() => setStreamText(""), 800)
+        }
+      })
   }
 
   const saveEdit = (questionId: string) => {
@@ -171,11 +193,20 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
 
             {thinking && (
               <AiBubble>
-                <span className="inline-flex gap-1" aria-label="入力中">
-                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
-                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:120ms]" />
-                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:240ms]" />
-                </span>
+                {streamText ? (
+                  <span>
+                    {streamText}
+                    <span className="ml-0.5 inline-block w-1.5 animate-pulse bg-muted-foreground/60 align-middle">
+                      &nbsp;
+                    </span>
+                  </span>
+                ) : (
+                  <span className="inline-flex gap-1" aria-label="入力中">
+                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
+                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:120ms]" />
+                    <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:240ms]" />
+                  </span>
+                )}
               </AiBubble>
             )}
 

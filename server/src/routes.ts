@@ -652,6 +652,82 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     return result
   })
 
+  /** LLM トークンストリーミング（SSE）。ヒアリング思考表示・要件 4-D 用 */
+  app.post<{ Params: { id: string } }>("/api/projects/:id/ai/complete/stream", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const allowed = assertGenerationAllowed(user.id)
+    if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+    const body = (request.body ?? {}) as { prompt?: string; system?: string; action?: string }
+    const prompt = body.prompt?.trim()
+    if (!prompt) return reply.status(400).send({ error: "prompt is required" })
+
+    const action = body.action?.trim() || "llm_stream"
+    const system =
+      body.system?.trim() ||
+      "業務マニュアル作成AIとして、簡潔に日本語で返答せよ。1〜3文。"
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    })
+    const send = (event: string, data: unknown) => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+    }
+
+    const started = Date.now()
+    send("start", { provider: getLlmProviderName(), at: started })
+
+    try {
+      const adapter = getLlmAdapter()
+      const stream = adapter.streamComplete(
+        [
+          { role: "system", content: system },
+          { role: "user", content: prompt.slice(0, 2000) },
+        ],
+        { context: { userId: user.id, projectId: existing.id, action }, maxTokens: 256 },
+      )
+
+      let result = { text: "", tokens: 0, provider: getLlmProviderName() as "mock" | "openai" }
+      while (true) {
+        const step = await stream.next()
+        if (step.done) {
+          result = step.value
+          break
+        }
+        send("token", { delta: step.value.delta })
+      }
+
+      recordLlmUsage({
+        userId: user.id,
+        projectId: existing.id,
+        action,
+        tokens: result.tokens,
+      })
+      recordOperationLog({
+        userId: user.id,
+        actionType: "generate",
+        projectId: existing.id,
+        payload: { kind: "llm-stream", provider: result.provider, ms: Date.now() - started },
+      })
+      send("done", {
+        text: result.text,
+        tokens: result.tokens,
+        provider: result.provider,
+        ms: Date.now() - started,
+      })
+    } catch (e) {
+      send("error", { error: e instanceof Error ? e.message : "stream failed" })
+    }
+    reply.raw.end()
+  })
+
   app.post<{ Params: { id: string; stepId: string } }>(
     "/api/projects/:id/deepdive/:stepId/questions",
     async (request, reply) => {

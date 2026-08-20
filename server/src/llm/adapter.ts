@@ -1,6 +1,7 @@
 /**
  * LLM Adapter（プロバイダ抽象化）
  * OPENAI_API_KEY があれば実 API、なければモック（デモ用）にフォールバック。
+ * complete / streamComplete の両方を提供（要件: ストリーミング表示）。
  */
 
 import { insertLlmIoLog } from "../db.js"
@@ -16,6 +17,10 @@ export interface LlmCompletionResult {
   provider: "mock" | "openai"
 }
 
+export interface LlmStreamChunk {
+  delta: string
+}
+
 export interface LlmCallContext {
   userId: string
   projectId?: string
@@ -29,6 +34,17 @@ export interface LlmCompleteOptions {
 
 export interface LlmAdapter {
   complete(messages: LlmMessage[], opts?: LlmCompleteOptions): Promise<LlmCompletionResult>
+  streamComplete(
+    messages: LlmMessage[],
+    opts?: LlmCompleteOptions,
+  ): AsyncGenerator<LlmStreamChunk, LlmCompletionResult>
+}
+
+async function* chunkText(text: string, size = 8): AsyncGenerator<LlmStreamChunk> {
+  for (let i = 0; i < text.length; i += size) {
+    yield { delta: text.slice(i, i + size) }
+    await new Promise((r) => setTimeout(r, 12))
+  }
 }
 
 function summarizeMessages(messages: LlmMessage[]): string {
@@ -61,6 +77,16 @@ class MockLlmAdapter implements LlmAdapter {
     maybeLog(messages, result, opts)
     return result
   }
+
+  async *streamComplete(
+    messages: LlmMessage[],
+    opts?: LlmCompleteOptions,
+  ): AsyncGenerator<LlmStreamChunk, LlmCompletionResult> {
+    const result = await this.complete(messages, { ...opts, context: undefined })
+    yield* chunkText(result.text)
+    maybeLog(messages, result, opts)
+    return result
+  }
 }
 
 class OpenAiAdapter implements LlmAdapter {
@@ -90,6 +116,68 @@ class OpenAiAdapter implements LlmAdapter {
     const text = data.choices?.[0]?.message?.content ?? ""
     const tokens = data.usage?.total_tokens ?? Math.max(100, Math.round(text.length / 2))
     const result = { text, tokens, provider: "openai" as const }
+    maybeLog(messages, result, opts)
+    return result
+  }
+
+  async *streamComplete(
+    messages: LlmMessage[],
+    opts?: LlmCompleteOptions,
+  ): AsyncGenerator<LlmStreamChunk, LlmCompletionResult> {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+        messages,
+        max_tokens: opts?.maxTokens ?? 1024,
+        stream: true,
+      }),
+    })
+    if (!res.ok || !res.body) {
+      const errText = await res.text()
+      throw new Error(`OpenAI API error: ${res.status} ${errText}`)
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let text = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith("data:")) continue
+        const payload = trimmed.slice(5).trim()
+        if (payload === "[DONE]") continue
+        try {
+          const json = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>
+          }
+          const delta = json.choices?.[0]?.delta?.content ?? ""
+          if (delta) {
+            text += delta
+            yield { delta }
+          }
+        } catch {
+          /* ignore partial JSON */
+        }
+      }
+    }
+
+    const result: LlmCompletionResult = {
+      text,
+      tokens: Math.max(100, Math.round(text.length / 2)),
+      provider: "openai",
+    }
     maybeLog(messages, result, opts)
     return result
   }

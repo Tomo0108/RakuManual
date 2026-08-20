@@ -147,3 +147,69 @@ export async function fetchDeepdiveQuestions(
 ): Promise<{ questions: string[] }> {
   return apiFetch(`/projects/${projectId}/deepdive/${stepId}/questions`, { method: "POST" })
 }
+
+export type StreamTokenHandler = (delta: string, fullText: string) => void
+
+/** LLM トークンストリーミング（SSE）。失敗時は null */
+export async function streamAiCompletion(
+  projectId: string,
+  prompt: string,
+  onToken: StreamTokenHandler,
+  opts?: { system?: string; action?: string; signal?: AbortSignal },
+): Promise<{ text: string; tokens: number; provider: string; ms: number } | null> {
+  const res = await fetch(`/api/projects/${projectId}/ai/complete/stream`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt,
+      system: opts?.system,
+      action: opts?.action ?? "llm_stream",
+    }),
+    signal: opts?.signal,
+  })
+  if (!res.ok || !res.body) return null
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let text = ""
+  let donePayload: { text: string; tokens: number; provider: string; ms: number } | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split("\n\n")
+    buffer = parts.pop() ?? ""
+    for (const part of parts) {
+      const lines = part.split("\n")
+      let event = "message"
+      let data = ""
+      for (const line of lines) {
+        if (line.startsWith("event:")) event = line.slice(6).trim()
+        if (line.startsWith("data:")) data += line.slice(5).trim()
+      }
+      if (!data) continue
+      try {
+        const json = JSON.parse(data) as Record<string, unknown>
+        if (event === "token" && typeof json.delta === "string") {
+          text += json.delta
+          onToken(json.delta, text)
+        } else if (event === "done") {
+          donePayload = {
+            text: String(json.text ?? text),
+            tokens: Number(json.tokens ?? 0),
+            provider: String(json.provider ?? "mock"),
+            ms: Number(json.ms ?? 0),
+          }
+        } else if (event === "error") {
+          return null
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return donePayload
+}

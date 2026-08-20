@@ -150,6 +150,22 @@ async function main() {
     record("U-05b", "フロー保存", false, "no flow")
   }
 
+  // U-05c job SSE
+  if (flowJob.status === 202 && flowJob.body.jobId) {
+    const sse = await fetch(`${BASE}/api/jobs/${flowJob.body.jobId}/stream`, {
+      headers: { Cookie: yamada },
+    })
+    const sseText = await sse.text()
+    record(
+      "U-05c",
+      "ジョブSSE",
+      sse.status === 200 && /event:\s*(progress|snapshot)/.test(sseText),
+      `status=${sse.status}`,
+    )
+  } else {
+    record("U-05c", "ジョブSSE", false, "no job")
+  }
+
   // Build deepdive + sections for publish path
   let project = (await api(yamada, `/api/projects/${id}`)).body
   if (flow?.nodes?.length) {
@@ -164,11 +180,61 @@ async function main() {
     }))
     project = {
       ...project,
-      status: "manual",
+      status: "deepdive",
       flow,
       deepdive,
     }
     await api(yamada, `/api/projects/${id}`, { method: "PUT", body: JSON.stringify(project) })
+
+    // U-06 SCR-006 / F-4 深掘り質問生成
+    const stepId = deepdive[0]?.stepId
+    const dq = await api(yamada, `/api/projects/${id}/deepdive/${stepId}/questions`, {
+      method: "POST",
+      body: "{}",
+    })
+    record(
+      "U-06a",
+      "深掘り質問生成(SCR-006)",
+      dq.status === 200 && Array.isArray(dq.body.questions) && dq.body.questions.length > 0,
+      `status=${dq.status} n=${dq.body.questions?.length ?? 0}`,
+    )
+    const patchDd = await api(yamada, `/api/projects/${id}/deepdive/${stepId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...deepdive[0],
+        status: "in-progress",
+        answers: [{ question: dq.body.questions?.[0] ?? "q", answer: "テスト回答" }],
+      }),
+    })
+    record("U-06b", "深掘り回答保存", patchDd.status === 200)
+
+    project = {
+      ...project,
+      status: "manual",
+      deepdive: deepdive.map((d) => ({ ...d, status: "done" })),
+    }
+    await api(yamada, `/api/projects/${id}`, { method: "PUT", body: JSON.stringify(project) })
+  } else {
+    record("U-06a", "深掘り質問生成(SCR-006)", false, "no flow")
+    record("U-06b", "深掘り回答保存", false, "no flow")
+  }
+
+  // U-14 トークンストリーミング
+  {
+    const streamRes = await fetch(`${BASE}/api/projects/${id}/ai/complete/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: yamada },
+      body: JSON.stringify({ prompt: "短い確認を1文で", action: "uat_stream" }),
+    })
+    const streamBody = await streamRes.text()
+    record(
+      "U-14",
+      "LLMトークンSSE",
+      streamRes.status === 200 &&
+        streamBody.includes("event: token") &&
+        streamBody.includes("event: done"),
+      `status=${streamRes.status}`,
+    )
   }
 
   const manJob = await api(yamada, `/api/projects/${id}/ai/manual/generate`, {
