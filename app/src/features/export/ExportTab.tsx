@@ -7,7 +7,7 @@ import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from
 import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { publishProject } from "@/lib/api/publish"
-import { downloadHtmlFile, exportProjectHtml } from "@/lib/api/export"
+import { downloadPdfBase64, exportProjectPdf } from "@/lib/api/export"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -74,13 +74,13 @@ export function ExportTab({ project, updateProject }: Props) {
           includeImages: imageMode !== "none",
         })
       } else {
-        const { html, filename } = await exportProjectHtml(project.id, {
+        const { pdfBase64, filename } = await exportProjectPdf(project.id, {
           template,
           includeFlow,
           imageMode: imageMode as "expand" | "appendix" | "none",
           sectionIds: range === "all" ? undefined : [range],
         })
-        downloadHtmlFile(html, filename)
+        downloadPdfBase64(pdfBase64, filename)
       }
       setExported(true)
     } catch (err) {
@@ -295,7 +295,7 @@ export function ExportTab({ project, updateProject }: Props) {
           {exported && format === "pdf" && (
             <span className={cn("flex items-center justify-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
-              {project.name}.html をダウンロードしました（ブラウザの印刷で PDF 化できます）
+              {project.name}.pdf をダウンロードしました
             </span>
           )}
           {exportError && (

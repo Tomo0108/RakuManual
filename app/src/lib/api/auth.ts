@@ -1,9 +1,12 @@
 import { apiFetch } from "./client"
 
+export type UserRole = "viewer" | "creator" | "admin"
+
 export interface AuthUser {
   id: string
   name: string
   email: string
+  role: UserRole
 }
 
 export async function fetchMe(): Promise<AuthUser> {

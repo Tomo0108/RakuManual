@@ -98,7 +98,15 @@ export default function App() {
             {view.name === "projects" && (
               <ProjectList
                 projects={projects}
-                onOpen={(id, tab) => setView({ name: "project", projectId: id, tab: tab ?? "overview" })}
+                readOnly={session.user?.role === "viewer"}
+                onOpen={(id, tab) => {
+                  const p = projects.find((x) => x.id === id)
+                  if (session.user?.role === "viewer" && p?.status === "published") {
+                    setView({ name: "viewer", projectId: id })
+                    return
+                  }
+                  setView({ name: "project", projectId: id, tab: tab ?? "overview" })
+                }}
                 onCreate={addProject}
               />
             )}
@@ -117,7 +125,13 @@ export default function App() {
                 onBack={() => setView({ name: "qa" })}
               />
             )}
-            {view.name === "project" && currentProject && (
+            {view.name === "project" && currentProject && session.user?.role === "viewer" && (
+              <ManualViewerPage
+                project={currentProject}
+                onBack={() => setView({ name: "projects" })}
+              />
+            )}
+            {view.name === "project" && currentProject && session.user?.role !== "viewer" && (
               <ProjectPage
                 key={currentProject.id}
                 project={currentProject}

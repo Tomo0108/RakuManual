@@ -3,8 +3,8 @@ import logo from "@/assets/logo.png"
 import { Button } from "@/components/ui/button"
 
 const DEMO_USERS = [
-  { id: "user-yamada", name: "山田 太郎" },
-  { id: "user-sato", name: "佐藤 太郎" },
+  { id: "user-yamada", name: "山田 太郎", role: "作成者" },
+  { id: "user-sato", name: "佐藤 太郎", role: "閲覧者" },
 ] as const
 
 interface Props {
@@ -29,18 +29,20 @@ export function LoginPage({ busy, error, onLogin }: Props) {
             {error}
           </p>
         )}
-        <div className="mt-6 flex flex-col gap-2">
+        <div className="mt-6 flex flex-col gap-3">
           {DEMO_USERS.map((u) => (
-            <Button
-              key={u.id}
-              className="w-full gap-2"
-              variant={u.id === "user-yamada" ? "default" : "outline"}
-              disabled={busy}
-              onClick={() => onLogin(u.id)}
-            >
-              <BookOpenText className="size-4" />
-              {busy ? "ログイン中…" : `${u.name} としてログイン`}
-            </Button>
+            <div key={u.id} className="flex flex-col gap-1">
+              <Button
+                className="w-full gap-2"
+                variant={u.id === "user-yamada" ? "default" : "outline"}
+                disabled={busy}
+                onClick={() => onLogin(u.id)}
+              >
+                <BookOpenText className="size-4" />
+                {busy ? "ログイン中…" : `${u.name} としてログイン`}
+              </Button>
+              <span className="text-center text-[10px] text-muted-foreground">{u.role}</span>
+            </div>
           ))}
         </div>
         <p className="mt-3 text-center text-[11px] text-muted-foreground">

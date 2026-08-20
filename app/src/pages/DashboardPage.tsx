@@ -1,14 +1,17 @@
+import { useEffect, useState } from "react"
 import {
   CircleDollarSign,
   CircleGauge,
   Clock,
   LayoutDashboard,
+  MessageCircleQuestion,
   Smile,
   TrendingUp,
 } from "lucide-react"
 import type { Project } from "@/lib/types"
 import { STATUS_LABEL } from "@/lib/types"
 import { STATUS_BADGE } from "@/lib/project-utils"
+import { fetchDashboardMetrics, type DashboardMetrics } from "@/lib/api/metrics"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -27,16 +30,34 @@ interface Props {
   projects: Project[]
 }
 
-const KPIS = [
-  { icon: Clock, label: "作成工数の削減率", value: "58%", good: true },
-  { icon: CircleGauge, label: "作成完了率", value: "83%", good: true },
-  { icon: TrendingUp, label: "フロー初回生成精度", value: "72%", good: true },
-  { icon: Smile, label: "利用者満足度", value: "4.2", good: true },
-]
-
 export function DashboardPage({ projects }: Props) {
-  const published = projects.filter((p) => p.status === "published").length
-  const tokenUsage = 62
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+
+  useEffect(() => {
+    void fetchDashboardMetrics()
+      .then(setMetrics)
+      .catch(() => setMetrics(null))
+  }, [projects.length])
+
+  const published = metrics?.publishedCount ?? projects.filter((p) => p.status === "published").length
+  const tokenUsage = metrics
+    ? Math.round((metrics.llmCostYen / metrics.llmBudgetYen) * 100)
+    : 62
+
+  const kpis = [
+    { icon: Clock, label: "作成完了率", value: `${metrics?.completionRate ?? 83}%`, good: true },
+    { icon: CircleGauge, label: "公開済み", value: String(published), good: published > 0 },
+    { icon: MessageCircleQuestion, label: "QA質問数", value: String(metrics?.qaQuestionCount ?? 0), good: true },
+    {
+      icon: Smile,
+      label: "QA高評価率",
+      value:
+        metrics && metrics.qaQuestionCount > 0
+          ? `${Math.round((metrics.qaUpCount / metrics.qaQuestionCount) * 100)}%`
+          : "—",
+      good: true,
+    },
+  ]
 
   return (
     <div className="scroll-touch h-full overflow-y-auto">
@@ -48,7 +69,7 @@ export function DashboardPage({ projects }: Props) {
         />
 
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {KPIS.map((k) => (
+          {kpis.map((k) => (
             <Card key={k.label} className="gap-0 py-4 transition-shadow hover:shadow-md">
               <CardContent>
                 <div className="flex items-center justify-between gap-2">
@@ -76,8 +97,12 @@ export function DashboardPage({ projects }: Props) {
             </CardHeader>
             <CardContent>
               <div className="flex items-end justify-between gap-2">
-                <span className="text-2xl font-bold">¥31,200</span>
-                <span className="text-xs text-muted-foreground">{tokenUsage}% / ¥50,000</span>
+                <span className="text-2xl font-bold">
+                  ¥{(metrics?.llmCostYen ?? 31200).toLocaleString()}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {tokenUsage}% / ¥{(metrics?.llmBudgetYen ?? 50000).toLocaleString()}
+                </span>
               </div>
               <Progress value={tokenUsage} className="mt-3 h-2" />
             </CardContent>
@@ -92,16 +117,16 @@ export function DashboardPage({ projects }: Props) {
             </CardHeader>
             <CardContent className="grid gap-2.5 text-sm">
               <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">閲覧</span>
-                <span className="font-semibold tabular-nums">342</span>
-              </div>
-              <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">QA質問</span>
-                <span className="font-semibold tabular-nums">87</span>
+                <span className="font-semibold tabular-nums">{metrics?.qaQuestionCount ?? 0}</span>
               </div>
               <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">6ヶ月以内更新</span>
-                <span className="font-semibold tabular-nums">44%</span>
+                <span className="text-muted-foreground">QA 👍</span>
+                <span className="font-semibold tabular-nums">{metrics?.qaUpCount ?? 0}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">プロジェクト数</span>
+                <span className="font-semibold tabular-nums">{metrics?.projectCount ?? projects.length}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">公開済み</span>

@@ -1,9 +1,12 @@
 /** API サーバー用の最小型（app/src/lib/types.ts と整合） */
 
+export type UserRole = "viewer" | "creator" | "admin"
+
 export interface AuthUser {
   id: string
   name: string
   email: string
+  role: UserRole
 }
 
 export interface HearingAnswer {

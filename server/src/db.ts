@@ -56,6 +56,13 @@ function migrate(database: DatabaseSync) {
       feedback TEXT NOT NULL CHECK (feedback IN ('up', 'down')),
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS qa_messages (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      question TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `)
 
   const schema = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'projects'").get() as
@@ -78,29 +85,38 @@ function migrate(database: DatabaseSync) {
     `)
   }
 
+  const userCols = database.prepare("PRAGMA table_info(users)").all() as { name: string }[]
+  if (!userCols.some((c) => c.name === "role")) {
+    database.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'creator'")
+  }
+  database.prepare("UPDATE users SET role = 'creator' WHERE id = 'user-yamada'").run()
+  database.prepare("UPDATE users SET role = 'viewer' WHERE id = 'user-sato'").run()
+
   const insertUser = database.prepare(
-    "INSERT OR IGNORE INTO users (id, name, email) VALUES (?, ?, ?)",
+    "INSERT OR IGNORE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)",
   )
-  insertUser.run("user-yamada", "山田 太郎", "yamada.taro@example.com")
-  insertUser.run("user-sato", "佐藤 太郎", "sato.taro@example.com")
+  insertUser.run("user-yamada", "山田 太郎", "yamada.taro@example.com", "creator")
+  insertUser.run("user-sato", "佐藤 太郎", "sato.taro@example.com", "viewer")
 }
 
 export function getUserById(id: string): AuthUser | null {
   const row = getDb()
-    .prepare("SELECT id, name, email FROM users WHERE id = ?")
+    .prepare("SELECT id, name, email, role FROM users WHERE id = ?")
     .get(id) as AuthUser | undefined
-  return row ?? null
+  if (!row) return null
+  return { ...row, role: row.role ?? "creator" }
 }
 
 export function getSessionUser(token: string): AuthUser | null {
   const row = getDb()
     .prepare(
-      `SELECT u.id, u.name, u.email FROM sessions s
+      `SELECT u.id, u.name, u.email, u.role FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at > ?`,
     )
     .get(token, Date.now()) as AuthUser | undefined
-  return row ?? null
+  if (!row) return null
+  return { ...row, role: row.role ?? "creator" }
 }
 
 export function createSession(userId: string): string {
@@ -179,4 +195,12 @@ export function insertQaFeedback(
       "INSERT INTO qa_feedback (id, user_id, message_id, question, feedback, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .run(crypto.randomUUID(), userId, messageId, question, feedback, Date.now())
+}
+
+export function insertQaMessage(userId: string, messageId: string, question: string) {
+  getDb()
+    .prepare(
+      "INSERT INTO qa_messages (id, user_id, question, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(messageId, userId, question, Date.now())
 }

@@ -33,9 +33,10 @@ interface Props {
   projects: Project[]
   onOpen: (id: string, tab?: ProjectTab) => void
   onCreate: (p: Project) => void
+  readOnly?: boolean
 }
 
-export function ProjectList({ projects, onOpen, onCreate }: Props) {
+export function ProjectList({ projects, onOpen, onCreate, readOnly }: Props) {
   const [query, setQuery] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newName, setNewName] = useState("")
@@ -75,6 +76,7 @@ export function ProjectList({ projects, onOpen, onCreate }: Props) {
           title="プロジェクト一覧"
           description="マニュアル1本 = 1プロジェクト。AIとの対話でマニュアルを作成できます。"
           actions={
+            !readOnly ? (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full gap-1.5 sm:w-auto">
@@ -120,6 +122,7 @@ export function ProjectList({ projects, onOpen, onCreate }: Props) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            ) : undefined
           }
         />
 

@@ -7,10 +7,13 @@ import {
   getUserById,
   insertProject,
   insertQaFeedback,
+  insertQaMessage,
   listProjectsForUser,
   updateProject as dbUpdateProject,
 } from "./db.js"
 import { buildManualHtml } from "./export/manual-html.js"
+import { buildManualPdf } from "./export/manual-pdf.js"
+import { getDashboardMetrics } from "./metrics.js"
 import { applyPublish, validatePublish } from "./publish.js"
 import { answerQuestion } from "./qa.js"
 import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
@@ -437,7 +440,9 @@ export async function registerQaRoutes(app: FastifyInstance) {
 
     const projects = listProjectsForUser(user.id)
     const result = answerQuestion(question, projects)
-    return { ...result, messageId: `qa-${Date.now()}` }
+    const messageId = `qa-${Date.now()}`
+    insertQaMessage(user.id, messageId, question)
+    return { ...result, messageId }
   })
 
   app.post("/api/qa/feedback", async (request, reply) => {
@@ -489,6 +494,35 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
 
     const html = buildManualHtml(existing, body)
     return { html, filename: `${existing.name}.html` }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/export/pdf", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const body = (request.body ?? {}) as {
+      template?: string
+      includeFlow?: boolean
+      imageMode?: "expand" | "appendix" | "none"
+      sectionIds?: string[]
+    }
+
+    const pdf = await buildManualPdf(existing, body)
+    return {
+      pdfBase64: pdf.toString("base64"),
+      filename: `${existing.name}.pdf`,
+      mimeType: "application/pdf",
+    }
+  })
+}
+
+export async function registerMetricsRoutes(app: FastifyInstance) {
+  app.get("/api/metrics/dashboard", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    return getDashboardMetrics(user.id)
   })
 }
 
