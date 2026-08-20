@@ -7,6 +7,8 @@ const DEMO_USERS = [
   { id: "user-yamada", name: "山田 太郎", role: "作成者" },
   { id: "user-sato", name: "佐藤 太郎", role: "閲覧者" },
   { id: "user-admin", name: "管理 花子", role: "管理者" },
+  { id: "user-pilot1", name: "鈴木 一郎", role: "作成者(パイロット)" },
+  { id: "user-pilot2", name: "高橋 美咲", role: "作成者(パイロット)" },
 ] as const
 
 interface Props {

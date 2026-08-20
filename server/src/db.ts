@@ -192,6 +192,9 @@ function migrate(database: DatabaseSync) {
   insertUser.run("user-yamada", "山田 太郎", "yamada.taro@example.com", "creator")
   insertUser.run("user-sato", "佐藤 太郎", "sato.taro@example.com", "viewer")
   insertUser.run("user-admin", "管理 花子", "admin@example.com", "admin")
+  insertUser.run("user-pilot1", "鈴木 一郎", "suzuki.ichiro@example.com", "creator")
+  insertUser.run("user-pilot2", "高橋 美咲", "takahashi.misaki@example.com", "creator")
+  database.prepare("UPDATE users SET role = 'creator' WHERE id IN ('user-pilot1', 'user-pilot2')").run()
 
   const budget = database
     .prepare(`SELECT value FROM app_settings WHERE key = 'llm_budget_yen'`)

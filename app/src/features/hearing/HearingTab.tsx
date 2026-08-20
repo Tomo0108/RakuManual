@@ -17,6 +17,7 @@ import type {
 } from "@/lib/types"
 import { HEARING_QUESTIONS } from "@/lib/mock-data"
 import { fetchNextHearingQuestion } from "@/lib/api/ai"
+import { upsertHearingAnswer } from "@/lib/api/projects"
 import { now } from "@/lib/project-utils"
 import { WARNING_TEXT, SUCCESS_TEXT, SEMANTIC } from "@/lib/semantic-styles"
 import type { UpdateProject } from "@/pages/ProjectPage"
@@ -97,6 +98,9 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
       updatedAt: now().slice(0, 10),
       hearingAnswers: [...p.hearingAnswers.filter((a) => a.questionId !== answer.questionId), answer],
     }))
+    void upsertHearingAnswer(project.id, answer).catch(() => {
+      /* updateProject の永続化にフォールバック */
+    })
     setDraft("")
     setMultiSelection([])
     setFollowUp(null)
@@ -104,12 +108,16 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
   }
 
   const saveEdit = (questionId: string) => {
+    const answer: HearingAnswer = { questionId, value: editDraft, status: "answered" }
     updateProject(project.id, (p) => ({
       ...p,
       hearingAnswers: p.hearingAnswers.map((a) =>
-        a.questionId === questionId ? { ...a, value: editDraft, status: "answered" } : a,
+        a.questionId === questionId ? answer : a,
       ),
     }))
+    void upsertHearingAnswer(project.id, answer).catch(() => {
+      /* updateProject の永続化にフォールバック */
+    })
     setEditingId(null)
   }
 

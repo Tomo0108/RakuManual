@@ -16,6 +16,7 @@
     "security:check": "node scripts/security-check.mjs",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
     "uat:run": "node scripts/uat-run.mjs",
+    "pilot:uat": "node scripts/pilot-uat.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs"

@@ -68,10 +68,25 @@ export async function addProjectMember(
   return data.members
 }
 
+export async function upsertHearingAnswer(
+  projectId: string,
+  answer: { questionId: string; value: string; status: string },
+): Promise<Project> {
+  return apiFetch<Project>(`/projects/${projectId}/hearing/answers/${answer.questionId}`, {
+    method: "PUT",
+    body: JSON.stringify(answer),
+  })
+}
+
 export async function fetchDirectoryUsers(): Promise<AuthUser[]> {
-  return [
-    { id: "user-yamada", name: "山田 太郎", email: "yamada.taro@example.com", role: "creator" },
-    { id: "user-sato", name: "佐藤 太郎", email: "sato.taro@example.com", role: "viewer" },
-    { id: "user-admin", name: "管理 花子", email: "admin@example.com", role: "admin" },
-  ]
+  try {
+    const data = await apiFetch<{ users: AuthUser[] }>("/users")
+    return data.users
+  } catch {
+    return [
+      { id: "user-yamada", name: "山田 太郎", email: "yamada.taro@example.com", role: "creator" },
+      { id: "user-sato", name: "佐藤 太郎", email: "sato.taro@example.com", role: "viewer" },
+      { id: "user-admin", name: "管理 花子", email: "admin@example.com", role: "admin" },
+    ]
+  }
 }

@@ -295,6 +295,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return { user }
   })
 
+  app.get("/api/users", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    return { users: listUsers() }
+  })
+
   app.post("/api/auth/login", async (request, reply) => {
     const body = (request.body ?? {}) as { userId?: string }
     const userId = body.userId ?? "user-yamada"
