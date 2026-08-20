@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import type { AnswerStatus, HearingAnswer, Project, ProjectTab } from "@/lib/types"
 import { HEARING_QUESTIONS } from "@/lib/mock-data"
+import { fetchNextHearingQuestion } from "@/lib/api/ai"
 import { now } from "@/lib/project-utils"
 import { WARNING_TEXT, SUCCESS_TEXT, SEMANTIC } from "@/lib/semantic-styles"
 import type { UpdateProject } from "@/pages/ProjectPage"
@@ -38,15 +39,19 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
   const answeredIds = new Set(answers.map((a) => a.questionId))
   const currentIndex = HEARING_QUESTIONS.findIndex((q) => !answeredIds.has(q.id))
   const currentQuestion = currentIndex >= 0 ? HEARING_QUESTIONS[currentIndex] : null
-  const done = currentQuestion === null
+  const baseDone = currentQuestion === null
 
   const [draft, setDraft] = useState("")
   const [multiSelection, setMultiSelection] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState("")
   const [thinking, setThinking] = useState(false)
+  const [hint, setHint] = useState<string | null>(null)
+  const [followUp, setFollowUp] = useState<{ id: string; text: string; type: string } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const activeQuestion = followUp ?? currentQuestion
+  const done = baseDone && !followUp
   const progress = Math.round((answers.length / HEARING_QUESTIONS.length) * 100)
   const pendingList = useMemo(
     () => answers.filter((a) => a.status !== "answered"),
@@ -55,20 +60,40 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-  }, [answers.length, thinking, done])
+  }, [answers.length, thinking, done, hint])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchNextHearingQuestion(project.id)
+      .then((res) => {
+        if (cancelled) return
+        setHint(res.contradictionHint)
+        if (res.question && res.question.id === "follow-up") {
+          setFollowUp(res.question)
+        } else if (res.done) {
+          setFollowUp(null)
+        }
+      })
+      .catch(() => {
+        /* API未起動時は固定質問で継続 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [project.id, answers.length])
 
   const saveAnswer = (value: string, status: AnswerStatus) => {
-    if (!currentQuestion) return
-    const answer: HearingAnswer = { questionId: currentQuestion.id, value, status }
-    // AIの応答らしい「間」を演出(1問ごと自動保存)
+    if (!activeQuestion) return
+    const answer: HearingAnswer = { questionId: activeQuestion.id, value, status }
     setThinking(true)
     updateProject(project.id, (p) => ({
       ...p,
       updatedAt: now().slice(0, 10),
-      hearingAnswers: [...p.hearingAnswers, answer],
+      hearingAnswers: [...p.hearingAnswers.filter((a) => a.questionId !== answer.questionId), answer],
     }))
     setDraft("")
     setMultiSelection([])
+    setFollowUp(null)
     window.setTimeout(() => setThinking(false), 450)
   }
 
@@ -140,8 +165,14 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
               </AiBubble>
             )}
 
-            {!thinking && currentQuestion && (
-              <AiBubble hint={currentQuestion.hint}>{currentQuestion.text}</AiBubble>
+            {hint && (
+              <p className={cn("rounded-md border px-3 py-2 text-xs", WARNING_TEXT)}>{hint}</p>
+            )}
+
+            {!thinking && activeQuestion && (
+              <AiBubble hint={"hint" in activeQuestion ? activeQuestion.hint : undefined}>
+                {activeQuestion.text}
+              </AiBubble>
             )}
 
             {!thinking && done && (
@@ -167,10 +198,10 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
         </div>
 
         {/* 入力エリア */}
-        {!done && currentQuestion && (
+        {!done && activeQuestion && (
           <div className="border-t bg-background px-6 py-4">
             <div className="mx-auto max-w-2xl">
-              {currentQuestion.type === "text" && (
+              {(activeQuestion.type === "text" || !("options" in activeQuestion)) && (
                 <div className="flex items-end gap-2">
                   <Textarea
                     value={draft}
@@ -195,9 +226,9 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                 </div>
               )}
 
-              {currentQuestion.type === "choice" && (
+              {activeQuestion.type === "choice" && "options" in activeQuestion && (
                 <div className="flex flex-wrap gap-2">
-                  {currentQuestion.options?.map((opt) => (
+                  {activeQuestion.options?.map((opt) => (
                     <Button
                       key={opt}
                       variant="outline"
@@ -210,10 +241,10 @@ export function HearingTab({ project, updateProject, setTab }: Props) {
                 </div>
               )}
 
-              {currentQuestion.type === "multi" && (
+              {activeQuestion.type === "multi" && "options" in activeQuestion && (
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap gap-2">
-                    {currentQuestion.options?.map((opt) => {
+                    {activeQuestion.options?.map((opt) => {
                       const selected = multiSelection.includes(opt)
                       return (
                         <Button

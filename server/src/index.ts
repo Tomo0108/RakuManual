@@ -6,9 +6,11 @@ import fastifyStatic from "@fastify/static"
 import fs from "node:fs"
 import path from "node:path"
 import { getDb, getProjectForUser, UPLOADS_DIR } from "./db.js"
+import { registerAiJobHandlers } from "./ai/jobs-handlers.js"
 import {
   registerAdminRoutes,
   registerAuthRoutes,
+  registerJobRoutes,
   registerMetricsRoutes,
   registerNotificationRoutes,
   registerProjectRoutes,
@@ -16,6 +18,7 @@ import {
   registerQaRoutes,
   requireAuth,
 } from "./routes.js"
+import { recordOperationLog } from "./operation-log.js"
 
 const PORT = Number(process.env.PORT ?? 3001)
 const HOST = process.env.HOST ?? "127.0.0.1"
@@ -23,6 +26,7 @@ const HOST = process.env.HOST ?? "127.0.0.1"
 async function main() {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true })
   getDb()
+  registerAiJobHandlers()
 
   const app = Fastify({ logger: true })
 
@@ -38,6 +42,14 @@ async function main() {
     decorateReply: false,
   })
 
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff")
+    reply.header("X-Frame-Options", "DENY")
+    reply.header("Referrer-Policy", "strict-origin-when-cross-origin")
+    reply.header("X-XSS-Protection", "0")
+    return payload
+  })
+
   app.get("/api/health", async () => ({ status: "ok" }))
 
   await registerAuthRoutes(app)
@@ -47,6 +59,7 @@ async function main() {
   await registerMetricsRoutes(app)
   await registerNotificationRoutes(app)
   await registerAdminRoutes(app)
+  await registerJobRoutes(app)
 
   app.post<{ Params: { projectId: string } }>(
     "/api/projects/:projectId/images",
@@ -72,6 +85,13 @@ async function main() {
       await import("node:fs/promises").then((fs) => fs.mkdir(dir, { recursive: true }))
       const buffer = await file.toBuffer()
       await import("node:fs/promises").then((fs) => fs.writeFile(dest, buffer))
+
+      recordOperationLog({
+        userId: user.id,
+        actionType: "edit",
+        projectId: request.params.projectId,
+        payload: { kind: "image_upload", mimeType: file.mimetype },
+      })
 
       return {
         storageKey,

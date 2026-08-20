@@ -25,8 +25,15 @@ import { applyPublish, validatePublish } from "./publish.js"
 import { answerQuestion } from "./qa.js"
 import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
+import { generateDeepdiveQuestions, nextHearingQuestion } from "./ai/hearing.js"
+import {
+  enqueueFlowGenerate,
+  enqueueManualGenerate,
+  enqueuePdfExport,
+} from "./ai/jobs-handlers.js"
 import { assertGenerationAllowed, getLlmBudgetYen, recordLlmUsage, setLlmBudgetYen } from "./llm-cost.js"
 import { getLlmAdapter, getLlmProviderName } from "./llm/adapter.js"
+import { getJob } from "./jobs.js"
 import {
   getNotificationSettings,
   listNotifications,
@@ -408,7 +415,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     },
   )
 
-  // ===== Phase2: LLM連携入口（Adapter経由・コスト制限付き）=====
+  // ===== Phase2: LLM連携入口（ジョブ化・Adapter経由・コスト制限付き）=====
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/generate", async (request, reply) => {
     const user = await requireAuth(request, reply)
     if (!user) return
@@ -418,27 +425,9 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const allowed = assertGenerationAllowed(user.id)
     if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
 
-    const adapter = getLlmAdapter()
-    const llm = await adapter.complete([
-      {
-        role: "system",
-        content: "業務マニュアル用のスイムレーンフローを生成するための要約を出力せよ。",
-      },
-      {
-        role: "user",
-        content: `プロジェクト「${existing.name}」のフローを生成。ヒアリング: ${JSON.stringify(existing.hearingAnswers).slice(0, 1500)}`,
-      },
-    ])
-    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_generate", tokens: llm.tokens })
-    recordOperationLog({
-      userId: user.id,
-      actionType: "generate",
-      projectId: existing.id,
-      payload: { kind: "flow", provider: llm.provider, tokens: llm.tokens },
-    })
-
-    const flow = generateFlowMock(existing.name)
-    return { flow, meta: { provider: llm.provider, tokens: llm.tokens } }
+    const job = enqueueFlowGenerate(user.id, existing.id)
+    reply.status(202)
+    return { jobId: job.id, status: job.status }
   })
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/manual/generate", async (request, reply) => {
@@ -450,28 +439,74 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const allowed = assertGenerationAllowed(user.id)
     if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
 
-    const adapter = getLlmAdapter()
-    const llm = await adapter.complete([
-      {
-        role: "system",
-        content: "業務マニュアルのセクション構成を生成するための要約を出力せよ。",
-      },
-      {
-        role: "user",
-        content: `プロジェクト「${existing.name}」のマニュアルを生成。深掘り件数: ${existing.deepdive?.length ?? 0}`,
-      },
-    ])
-    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "manual_generate", tokens: llm.tokens })
+    const job = enqueueManualGenerate(user.id, existing.id)
+    reply.status(202)
+    return { jobId: job.id, status: job.status }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/hearing/next-question", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+
+    const allowed = assertGenerationAllowed(user.id)
+    if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+    const result = await nextHearingQuestion(existing)
+    recordLlmUsage({
+      userId: user.id,
+      projectId: existing.id,
+      action: "hearing_next",
+      tokens: result.tokens,
+    })
     recordOperationLog({
       userId: user.id,
-      actionType: "generate",
+      actionType: "hearing",
       projectId: existing.id,
-      payload: { kind: "manual", provider: llm.provider, tokens: llm.tokens },
+      payload: { kind: "next-question", done: result.done },
     })
-
-    const sections = generateManualSectionsMock(existing)
-    return { sections, meta: { provider: llm.provider, tokens: llm.tokens } }
+    return result
   })
+
+  app.post<{ Params: { id: string; stepId: string } }>(
+    "/api/projects/:id/deepdive/:stepId/questions",
+    async (request, reply) => {
+      const user = await requireAuth(request, reply)
+      if (!user) return
+      const existing = loadOwned(request.params.id, user, reply)
+      if (!existing) return
+
+      const allowed = assertGenerationAllowed(user.id)
+      if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+      const item = existing.deepdive.find((d) => d.stepId === request.params.stepId)
+      if (!item) return reply.status(404).send({ error: "Deepdive item not found" })
+
+      const result = await generateDeepdiveQuestions({
+        projectName: existing.name,
+        stepLabel: String((item as { stepLabel?: string }).stepLabel ?? item.stepId),
+        importance: String((item as { importance?: string }).importance ?? "normal"),
+        existingAnswers: ((item as { answers?: unknown[] }).answers ?? []) as Array<{
+          question?: string
+          value?: string
+        }>,
+      })
+      recordLlmUsage({
+        userId: user.id,
+        projectId: existing.id,
+        action: "deepdive_questions",
+        tokens: result.tokens,
+      })
+      recordOperationLog({
+        userId: user.id,
+        actionType: "hearing",
+        projectId: existing.id,
+        payload: { kind: "deepdive-questions", stepId: request.params.stepId },
+      })
+      return result
+    },
+  )
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/nl-edit", async (request, reply) => {
     const user = await requireAuth(request, reply)
@@ -670,6 +705,17 @@ export async function registerPublishExportRoutes(app: FastifyInstance) {
       includeFlow?: boolean
       imageMode?: "expand" | "appendix" | "none"
       sectionIds?: string[]
+      async?: boolean
+    }
+
+    if (body.async) {
+      const job = enqueuePdfExport(user.id, existing.id, {
+        template: body.template,
+        includeFlow: body.includeFlow,
+        sectionIds: body.sectionIds,
+      })
+      reply.status(202)
+      return { jobId: job.id, status: job.status }
     }
 
     const pdf = await buildManualPdf(existing, body)
@@ -887,6 +933,81 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       llmBudgetYen: getLlmBudgetYen(),
       llmProvider: getLlmProviderName(),
     }
+  })
+}
+
+export async function registerJobRoutes(app: FastifyInstance) {
+  app.get<{ Params: { id: string } }>("/api/jobs/:id", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const job = getJob(request.params.id)
+    if (!job || job.userId !== user.id) {
+      return reply.status(404).send({ error: "Job not found" })
+    }
+    return {
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      progress: job.progress,
+      result: job.result,
+      error: job.error,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    }
+  })
+
+  app.get<{ Params: { id: string } }>("/api/jobs/:id/stream", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const job = getJob(request.params.id)
+    if (!job || job.userId !== user.id) {
+      return reply.status(404).send({ error: "Job not found" })
+    }
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    })
+
+    const send = (event: string, data: unknown) => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+    }
+
+    send("snapshot", {
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      result: job.result,
+      error: job.error,
+    })
+
+    const started = Date.now()
+    const timer = setInterval(() => {
+      const current = getJob(request.params.id)
+      if (!current) {
+        send("error", { error: "Job disappeared" })
+        clearInterval(timer)
+        reply.raw.end()
+        return
+      }
+      send("progress", {
+        id: current.id,
+        status: current.status,
+        progress: current.progress,
+        result: current.status === "completed" ? current.result : undefined,
+        error: current.error,
+      })
+      if (current.status === "completed" || current.status === "failed" || Date.now() - started > 120_000) {
+        clearInterval(timer)
+        reply.raw.end()
+      }
+    }, 250)
+
+    request.raw.on("close", () => {
+      clearInterval(timer)
+    })
   })
 }
 

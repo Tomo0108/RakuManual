@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, ArrowLeft, BookCheck, Check, ChevronRight, Send, Workflow } from "lucide-react"
 import type { DeepDiveItem, DeepDiveStatus, Project, ProjectTab } from "@/lib/types"
 import { DEEPDIVE_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
+import { fetchDeepdiveQuestions } from "@/lib/api/ai"
 import { REVIEW_STATUS, WARNING_BOX, SUCCESS_BOX } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -72,8 +73,29 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
   const [draft, setDraft] = useState("")
 
   const selected = items.find((i) => i.stepId === selectedId) ?? null
-  const questions = selected ? QUESTIONS_BY_IMPORTANCE[selected.importance] : []
+  const [dynamicQuestions, setDynamicQuestions] = useState<string[] | null>(null)
+  const fallbackQuestions = selected ? QUESTIONS_BY_IMPORTANCE[selected.importance] : []
+  const questions = dynamicQuestions ?? fallbackQuestions
   const currentQuestion = selected ? questions[selected.answers.length] : undefined
+
+  useEffect(() => {
+    if (!selected) {
+      setDynamicQuestions(null)
+      return
+    }
+    let cancelled = false
+    setDynamicQuestions(null)
+    void fetchDeepdiveQuestions(project.id, selected.stepId)
+      .then((res) => {
+        if (!cancelled && res.questions?.length) setDynamicQuestions(res.questions)
+      })
+      .catch(() => {
+        /* 固定質問へフォールバック */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [project.id, selected?.stepId, selected?.importance])
 
   const doneCount = items.filter((i) => i.status === "done").length
   const canGenerate = useMemo(() => items.some((i) => i.status === "done"), [items])
