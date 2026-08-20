@@ -1,6 +1,7 @@
-import { BookOpenText } from "lucide-react"
+import { BookOpenText, ShieldCheck } from "lucide-react"
 import logo from "@/assets/logo.png"
 import { Button } from "@/components/ui/button"
+import { oidcAuthorizeUrl } from "@/lib/api/auth"
 
 const DEMO_USERS = [
   { id: "user-yamada", name: "山田 太郎", role: "作成者" },
@@ -42,12 +43,25 @@ export function LoginPage({ busy, error, onLogin }: Props) {
                 <BookOpenText className="size-4" />
                 {busy ? "ログイン中…" : `${u.name} としてログイン`}
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-[11px] text-muted-foreground"
+                disabled={busy}
+                onClick={() => {
+                  window.location.href = oidcAuthorizeUrl(u.id)
+                }}
+              >
+                <ShieldCheck className="size-3.5" />
+                SSO経由（OIDCモック）
+              </Button>
               <span className="text-center text-[10px] text-muted-foreground">{u.role}</span>
             </div>
           ))}
         </div>
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          開発環境のSSOモックです。ユーザー間でプロジェクトは見えません。
+          開発環境のSSOモックです。本番は社内IdP（SAML/OIDC）に接続します。
         </p>
       </div>
     </div>

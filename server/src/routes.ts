@@ -317,6 +317,50 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     reply.clearCookie(SESSION_COOKIE, { path: "/" })
     return { ok: true }
   })
+
+  /** OIDC風SSOモック: IdP認可エンドポイント相当 */
+  app.get("/api/auth/oidc/authorize", async (request, reply) => {
+    const query = request.query as { userId?: string; redirect_uri?: string; state?: string }
+    const userId = query.userId ?? "user-yamada"
+    const user = getUserById(userId)
+    if (!user) return reply.status(400).send({ error: "User not found" })
+    const code = createSession(user.id) // 一時コードとしてセッションを兼用
+    const redirect =
+      query.redirect_uri ??
+      "http://127.0.0.1:5173/?sso=callback"
+    const url = new URL(redirect)
+    url.searchParams.set("code", code)
+    if (query.state) url.searchParams.set("state", query.state)
+    return reply.redirect(url.toString())
+  })
+
+  /** OIDC風SSOモック: コールバックでセッションCookieを確立 */
+  app.post("/api/auth/oidc/callback", async (request, reply) => {
+    const body = (request.body ?? {}) as { code?: string }
+    if (!body.code) return reply.status(400).send({ error: "code is required" })
+    const user = getSessionUser(body.code)
+    if (!user) return reply.status(401).send({ error: "Invalid or expired code" })
+    // code を本セッションとしてそのまま使う（デモ）
+    reply.setCookie(SESSION_COOKIE, body.code, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60,
+    })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      payload: { kind: "sso_login", provider: "oidc-mock" },
+    })
+    return { user, provider: "oidc-mock" }
+  })
+
+  app.get("/api/auth/oidc/config", async () => ({
+    provider: "oidc-mock",
+    authorizeUrl: "/api/auth/oidc/authorize",
+    callbackUrl: "/api/auth/oidc/callback",
+    note: "社内IdP接続前の開発用モック。本番はSAML/OIDCに差し替え。",
+  }))
 }
 
 export async function registerProjectRoutes(app: FastifyInstance) {

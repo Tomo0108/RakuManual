@@ -10,3 +10,4 @@ dev-dist/
 !.env.example
 .vercel
 server/data/
+backups/

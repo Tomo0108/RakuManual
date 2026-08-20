@@ -14,7 +14,11 @@
     "dev:docs": "npm run dev -w visualization",
     "build:docs": "npm run build -w visualization",
     "security:check": "node scripts/security-check.mjs",
-    "e2e:smoke": "node scripts/e2e-smoke.mjs"
+    "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "uat:run": "node scripts/uat-run.mjs",
+    "perf:smoke": "node scripts/perf-smoke.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs"
   },
   "engines": {
     "node": "22.x"

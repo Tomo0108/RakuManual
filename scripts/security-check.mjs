@@ -77,10 +77,25 @@ async function main() {
   })
 
   await check("cross-user project isolation", async () => {
-    const list = await req(yamada, "/api/projects")
-    assert(list.status === 200, "yamada list failed")
-    const pid = list.body[0]?.id
-    assert(pid, "no project for yamada")
+    const pid = `P-SEC-ISO-${Date.now()}`
+    const created = await req(yamada, "/api/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        id: pid,
+        name: "隔離検証",
+        owner: "山田 太郎",
+        ownerId: "user-yamada",
+        updatedAt: new Date().toISOString().slice(0, 10),
+        status: "hearing",
+        description: "security isolation",
+        hearingAnswers: [],
+        flow: { lanes: [], nodes: [], edges: [] },
+        deepdive: [],
+        sections: [],
+        history: [],
+      }),
+    })
+    assert(created.status === 201, `create failed ${created.status}`)
     const other = await req(sato, `/api/projects/${pid}`)
     assert(other.status === 404, `expected 404 got ${other.status}`)
   })
@@ -108,13 +123,40 @@ async function main() {
   })
 
   await check("unpublished project hidden from other users", async () => {
-    const list = await req(yamada, "/api/projects")
-    const pid = list.body[0]?.id
-    assert(pid, "no project for yamada")
-    const detail = await req(yamada, `/api/projects/${pid}`)
-    if (detail.body.status === "published") return
+    const pid = `P-SEC-PRIV-${Date.now()}`
+    const created = await req(yamada, "/api/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        id: pid,
+        name: "未公開隔離",
+        owner: "山田 太郎",
+        ownerId: "user-yamada",
+        updatedAt: new Date().toISOString().slice(0, 10),
+        status: "hearing",
+        description: "private",
+        hearingAnswers: [],
+        flow: { lanes: [], nodes: [], edges: [] },
+        deepdive: [],
+        sections: [],
+        history: [],
+      }),
+    })
+    assert(created.status === 201, `create failed ${created.status}`)
+    assert(created.body.status !== "published", "fixture must be unpublished")
     const other = await req(sato, `/api/projects/${pid}`)
     assert(other.status === 404, `expected 404 got ${other.status}`)
+    const listSato = await req(sato, "/api/projects")
+    assert(
+      !listSato.body.some((p) => p.id === pid),
+      "unpublished project leaked into viewer list",
+    )
+  })
+
+  await check("oidc mock config", async () => {
+    const res = await fetch(`${BASE}/api/auth/oidc/config`)
+    assert(res.ok, `status ${res.status}`)
+    const body = await res.json()
+    assert(body.provider === "oidc-mock", "provider mismatch")
   })
 
   await check("qa only uses accessible published corpus", async () => {

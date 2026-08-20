@@ -3,7 +3,7 @@ import type { Project } from "@/lib/types"
 import { INITIAL_PROJECTS } from "@/lib/mock-data"
 import { today } from "@/lib/project-utils"
 import { ApiError } from "@/lib/api/client"
-import { fetchMe, login as apiLogin, logout as apiLogout, type AuthUser } from "@/lib/api/auth"
+import { fetchMe, login as apiLogin, loginWithOidcCode, logout as apiLogout, type AuthUser } from "@/lib/api/auth"
 import { createProject, fetchProjects, updateProjectApi } from "@/lib/api/projects"
 
 const PERSIST_MS = 500
@@ -57,12 +57,23 @@ export function useAppSession() {
       }
 
       try {
-        const me = await fetchMe()
-        if (cancelled) return
-        setUser(me)
-        const list = await loadOrSeedProjects()
-        if (cancelled) return
-        setProjects(list)
+        const params = new URLSearchParams(window.location.search)
+        if (params.get("sso") === "callback" && params.get("code")) {
+          const me = await loginWithOidcCode(params.get("code")!)
+          if (cancelled) return
+          setUser(me)
+          window.history.replaceState({}, "", window.location.pathname)
+          const list = await loadOrSeedProjects()
+          if (cancelled) return
+          setProjects(list)
+        } else {
+          const me = await fetchMe()
+          if (cancelled) return
+          setUser(me)
+          const list = await loadOrSeedProjects()
+          if (cancelled) return
+          setProjects(list)
+        }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           setUser(null)

@@ -22,6 +22,25 @@ export async function login(userId = "user-yamada"): Promise<AuthUser> {
   return data.user
 }
 
+/** OIDCモック: authorize で得た code をセッション化する */
+export async function loginWithOidcCode(code: string): Promise<AuthUser> {
+  const data = await apiFetch<{ user: AuthUser }>("/auth/oidc/callback", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  })
+  return data.user
+}
+
+export function oidcAuthorizeUrl(userId: string, redirectUri?: string): string {
+  const url = new URL("/api/auth/oidc/authorize", window.location.origin)
+  url.searchParams.set("userId", userId)
+  url.searchParams.set(
+    "redirect_uri",
+    redirectUri ?? `${window.location.origin}/?sso=callback`,
+  )
+  return url.toString()
+}
+
 export async function logout(): Promise<void> {
   await apiFetch("/auth/logout", { method: "POST" })
 }
