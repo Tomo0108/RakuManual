@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import {
   ArrowRight,
   BookCheck,
@@ -6,21 +7,35 @@ import {
   History,
   ListChecks,
   MessagesSquare,
+  UserPlus,
+  Users,
   Workflow,
 } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
+import type { UpdateProject } from "@/pages/ProjectPage"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
+import {
+  addProjectMember,
+  fetchDirectoryUsers,
+  fetchProjectMembers,
+  transferProjectOwner,
+  updateProjectMeta,
+} from "@/lib/api/projects"
+import type { AuthUser } from "@/lib/api/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
 interface Props {
   project: Project
   setTab: (t: ProjectTab) => void
+  updateProject: UpdateProject
 }
 
-export function OverviewTab({ project, setTab }: Props) {
+export function OverviewTab({ project, setTab, updateProject }: Props) {
   const answered = project.hearingAnswers.filter((a) => a.status === "answered").length
   const deepdiveDone = project.deepdive.filter((d) => d.status === "done").length
   const approved = project.sections.filter((s) => s.status === "approved").length
@@ -92,19 +107,70 @@ export function OverviewTab({ project, setTab }: Props) {
   ]
 
   const currentStep = steps.find((s) => s.current)
+  const [deadline, setDeadline] = useState(project.reviewDeadline ?? "")
+  const [members, setMembers] = useState<Array<{ userId: string; permission: string }>>([])
+  const [directory, setDirectory] = useState<AuthUser[]>([])
+  const [memberUserId, setMemberUserId] = useState("user-sato")
+  const [transferUserId, setTransferUserId] = useState("user-admin")
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null)
+  const [settingsErr, setSettingsErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    setDeadline(project.reviewDeadline ?? "")
+  }, [project.reviewDeadline])
+
+  useEffect(() => {
+    void fetchProjectMembers(project.id)
+      .then(setMembers)
+      .catch(() => setMembers([]))
+    void fetchDirectoryUsers().then(setDirectory)
+  }, [project.id])
+
+  const saveDeadline = async () => {
+    setSettingsErr(null)
+    try {
+      const next = await updateProjectMeta(project.id, {
+        reviewDeadline: deadline.trim() ? deadline.trim() : null,
+      })
+      updateProject(project.id, () => next)
+      setSettingsMsg("見直し期限を保存しました")
+    } catch (e) {
+      setSettingsErr(e instanceof Error ? e.message : "保存に失敗しました")
+    }
+  }
+
+  const inviteMember = async () => {
+    setSettingsErr(null)
+    try {
+      const next = await addProjectMember(project.id, memberUserId, "view")
+      setMembers(next)
+      setSettingsMsg("メンバーを追加しました")
+    } catch (e) {
+      setSettingsErr(e instanceof Error ? e.message : "追加に失敗しました")
+    }
+  }
+
+  const doTransfer = async () => {
+    setSettingsErr(null)
+    try {
+      const next = await transferProjectOwner(project.id, transferUserId)
+      updateProject(project.id, () => next)
+      setSettingsMsg(`オーナーを ${next.owner} に変更しました`)
+    } catch (e) {
+      setSettingsErr(e instanceof Error ? e.message : "オーナー変更に失敗しました")
+    }
+  }
 
   return (
     <div className="scroll-touch h-full overflow-y-auto">
       <div className="mx-auto max-w-5xl px-4 py-5 md:px-8 md:py-8">
         <section className="rounded-xl border border-border/80 bg-card p-5 shadow-sm md:p-6">
           <p className="text-[15px] leading-relaxed text-foreground/90">{project.description}</p>
-          {project.reviewDeadline && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4 text-sm">
-              <CalendarClock className="size-4 text-muted-foreground" />
-              <span className="text-muted-foreground">見直し期限</span>
-              <Badge variant="secondary">{project.reviewDeadline}</Badge>
-            </div>
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4 text-sm">
+            <Users className="size-4 text-muted-foreground" />
+            <span className="text-muted-foreground">オーナー</span>
+            <Badge variant="secondary">{project.owner}</Badge>
+          </div>
         </section>
 
         {currentStep && project.status !== "published" && (
@@ -163,9 +229,7 @@ export function OverviewTab({ project, setTab }: Props) {
                     >
                       {s.title}
                     </span>
-                    {s.current && (
-                      <span className="text-[11px] text-primary">進行中</span>
-                    )}
+                    {s.current && <span className="text-[11px] text-primary">進行中</span>}
                   </div>
                   <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.stat}</div>
                 </div>
@@ -191,6 +255,84 @@ export function OverviewTab({ project, setTab }: Props) {
             ))}
           </div>
         </section>
+
+        <Card className="mt-6 gap-0 py-0 sm:mt-8">
+          <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CalendarClock className="size-4 text-muted-foreground" />
+              見直し期限・権限
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 px-4 py-4 sm:px-6 sm:py-5">
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <Label htmlFor="deadline">見直し期限</Label>
+                <Input
+                  id="deadline"
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                />
+              </div>
+              <Button onClick={() => void saveDeadline()}>期限を保存</Button>
+            </div>
+
+            <div className="grid gap-2 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <Label htmlFor="member">メンバー招待</Label>
+                <select
+                  id="member"
+                  className="mt-1 w-full rounded-md border bg-background px-2 py-2 text-sm"
+                  value={memberUserId}
+                  onChange={(e) => setMemberUserId(e.target.value)}
+                >
+                  {directory
+                    .filter((u) => u.id !== project.ownerId)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role})
+                      </option>
+                    ))}
+                </select>
+                {members.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    現在のメンバー: {members.map((m) => `${m.userId}:${m.permission}`).join(", ")}
+                  </p>
+                )}
+              </div>
+              <Button variant="outline" className="gap-1.5" onClick={() => void inviteMember()}>
+                <UserPlus className="size-4" />
+                招待
+              </Button>
+            </div>
+
+            <div className="grid gap-2 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <Label htmlFor="transfer">オーナー変更</Label>
+                <select
+                  id="transfer"
+                  className="mt-1 w-full rounded-md border bg-background px-2 py-2 text-sm"
+                  value={transferUserId}
+                  onChange={(e) => setTransferUserId(e.target.value)}
+                >
+                  {directory
+                    .filter((u) => u.id !== project.ownerId)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <Button variant="destructive" onClick={() => void doTransfer()}>
+                オーナー変更
+              </Button>
+            </div>
+
+            {settingsMsg && <p className="text-sm text-[var(--semantic-success-fg)]">{settingsMsg}</p>}
+            {settingsErr && <p className="text-sm text-destructive">{settingsErr}</p>}
+          </CardContent>
+        </Card>
 
         <Card className="mt-6 gap-0 py-0 sm:mt-8">
           <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-6">

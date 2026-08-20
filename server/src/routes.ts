@@ -17,6 +17,7 @@ import {
   listProjectMembers,
   listProjectsForUser,
   listUsers,
+  transferProjectOwnership,
   updateProject as dbUpdateProject,
   updateUserRole,
   upsertDesignTemplate,
@@ -237,8 +238,47 @@ function loadOwned(
   return project
 }
 
+function loadEditable(
+  projectId: string,
+  user: AuthUser,
+  reply: FastifyReply,
+): { project: Project; ownerId: string } | null {
+  const owned = getProjectForUser(projectId, user.id)
+  if (owned) {
+    return { project: owned, ownerId: user.id }
+  }
+  const found = getAccessibleProject(projectId, user.id)
+  if (!found) {
+    reply.status(404).send({ error: "Project not found" })
+    return null
+  }
+  if (found.access === "member") {
+    const members = listProjectMembers(projectId)
+    const me = members.find((m) => m.userId === user.id)
+    if (me && (me.permission === "edit" || me.permission === "admin")) {
+      const ownerId = found.project.ownerId
+      if (!ownerId) {
+        reply.status(403).send({ error: "Owner missing" })
+        return null
+      }
+      return { project: found.project, ownerId }
+    }
+  }
+  reply.status(403).send({ error: "Edit permission required" })
+  return null
+}
+
 function saveOwned(user: AuthUser, project: Project, reply: FastifyReply): Project | null {
   const ok = dbUpdateProject(user.id, project)
+  if (!ok) {
+    reply.status(404).send({ error: "Project not found" })
+    return null
+  }
+  return project
+}
+
+function saveForOwner(ownerId: string, project: Project, reply: FastifyReply): Project | null {
+  const ok = dbUpdateProject(ownerId, project)
   if (!ok) {
     reply.status(404).send({ error: "Project not found" })
     return null
@@ -354,15 +394,76 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     if (request.params.id !== body?.id) {
       return reply.status(400).send({ error: "Project id mismatch" })
     }
-    const existing = loadOwned(request.params.id, user, reply)
-    if (!existing) return
+    const editable = loadEditable(request.params.id, user, reply)
+    if (!editable) return
     const project: Project = {
       ...body,
-      owner: user.name,
-      ownerId: user.id,
+      owner: editable.project.owner,
+      ownerId: editable.project.ownerId ?? editable.ownerId,
       updatedAt: todayStamp(),
     }
-    return saveOwned(user, project, reply)
+    return saveForOwner(editable.ownerId, project, reply)
+  })
+
+  app.patch<{ Params: { id: string } }>("/api/projects/:id/meta", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+    const body = (request.body ?? {}) as {
+      description?: string
+      reviewDeadline?: string | null
+    }
+    const next = appendHistory(
+      {
+        ...existing,
+        description: body.description ?? existing.description,
+        reviewDeadline:
+          body.reviewDeadline === null
+            ? undefined
+            : (body.reviewDeadline ?? existing.reviewDeadline),
+      },
+      user,
+      "プロジェクト設定を更新",
+    )
+    recordOperationLog({
+      userId: user.id,
+      actionType: "edit",
+      projectId: existing.id,
+      payload: { kind: "meta", reviewDeadline: next.reviewDeadline },
+    })
+    return saveOwned(user, next, reply)
+  })
+
+  app.post<{ Params: { id: string } }>("/api/projects/:id/transfer", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const existing = loadOwned(request.params.id, user, reply)
+    if (!existing) return
+    const body = (request.body ?? {}) as { newOwnerId?: string }
+    if (!body.newOwnerId) return reply.status(400).send({ error: "newOwnerId is required" })
+    if (body.newOwnerId === user.id) {
+      return reply.status(400).send({ error: "Already the owner" })
+    }
+    const withHistory = appendHistory(
+      { ...existing },
+      user,
+      `オーナーを変更`,
+    )
+    const transferred = transferProjectOwnership(
+      existing.id,
+      user.id,
+      body.newOwnerId,
+      withHistory,
+    )
+    if (!transferred) return reply.status(400).send({ error: "Transfer failed" })
+    recordOperationLog({
+      userId: user.id,
+      actionType: "admin",
+      projectId: existing.id,
+      payload: { kind: "transfer", newOwnerId: body.newOwnerId },
+    })
+    return transferred
   })
 
   app.put<{ Params: { id: string; questionId: string } }>(

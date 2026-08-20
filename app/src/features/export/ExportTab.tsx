@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AlertTriangle, Check, Download, FileText, Globe, Presentation } from "lucide-react"
 import type { Project } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
@@ -8,6 +8,7 @@ import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { publishProject } from "@/lib/api/publish"
 import { downloadPdfBase64, exportProjectPdf } from "@/lib/api/export"
+import { fetchTemplates, type DesignTemplate } from "@/lib/api/admin"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -21,10 +22,31 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
-const TEMPLATES = [
-  { id: "corporate", name: "コーポレート標準", desc: "社内ブランドガイドライン準拠", color: "oklch(0.55 0.18 255)" },
-  { id: "simple", name: "シンプル", desc: "配布用のモノクロ基調", color: "oklch(0.4 0.01 260)" },
-  { id: "training", name: "研修資料用", desc: "新人教育向けの大きめ文字", color: "oklch(0.55 0.13 160)" },
+const FALLBACK_TEMPLATES: DesignTemplate[] = [
+  {
+    id: "corporate",
+    name: "コーポレート標準",
+    theme: "corporate",
+    description: "社内ブランドガイドライン準拠",
+    color: "#2563eb",
+    updatedAt: 0,
+  },
+  {
+    id: "simple",
+    name: "シンプル",
+    theme: "simple",
+    description: "配布用のモノクロ基調",
+    color: "#333333",
+    updatedAt: 0,
+  },
+  {
+    id: "training",
+    name: "研修資料用",
+    theme: "training",
+    description: "新人教育向けの大きめ文字",
+    color: "#0d9488",
+    updatedAt: 0,
+  },
 ]
 
 interface Props {
@@ -34,6 +56,7 @@ interface Props {
 
 export function ExportTab({ project, updateProject }: Props) {
   const [format, setFormat] = useState<"pdf" | "pptx">("pdf")
+  const [templates, setTemplates] = useState<DesignTemplate[]>(FALLBACK_TEMPLATES)
   const [template, setTemplate] = useState("corporate")
   const [range, setRange] = useState("all")
   const [imageMode, setImageMode] = useState("expand")
@@ -44,6 +67,19 @@ export function ExportTab({ project, updateProject }: Props) {
   const [publishError, setPublishError] = useState<string | null>(null)
 
   const [exportError, setExportError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchTemplates()
+      .then((tpls) => {
+        if (tpls.length > 0) {
+          setTemplates(tpls)
+          setTemplate((prev) => (tpls.some((t) => t.id === prev) ? prev : tpls[0].id))
+        }
+      })
+      .catch(() => {
+        /* フォールバック維持 */
+      })
+  }, [])
 
   const approved = project.sections.filter((s) => s.status === "approved").length
   const allApproved = project.sections.length > 0 && approved === project.sections.length
@@ -72,6 +108,7 @@ export function ExportTab({ project, updateProject }: Props) {
       if (format === "pptx") {
         await exportManualPptx(project, targetSections, {
           includeImages: imageMode !== "none",
+          template,
         })
       } else {
         const { pdfBase64, filename } = await exportProjectPdf(project.id, {
@@ -194,7 +231,7 @@ export function ExportTab({ project, updateProject }: Props) {
             <CardDescription>社内ブランドガイドライン準拠のテンプレートから選択</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-3 gap-3">
-            {TEMPLATES.map((t) => (
+            {templates.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTemplate(t.id)}
@@ -205,7 +242,7 @@ export function ExportTab({ project, updateProject }: Props) {
               >
                 <div className="h-14 rounded-md border" style={{ background: `linear-gradient(135deg, ${t.color} 0%, ${t.color} 30%, white 30%)` }} />
                 <div className="mt-2 text-xs font-semibold">{t.name}</div>
-                <div className="text-[10px] text-muted-foreground">{t.desc}</div>
+                <div className="text-[10px] text-muted-foreground">{t.description}</div>
               </button>
             ))}
           </CardContent>

@@ -43,7 +43,9 @@ export function ProjectPage({ project, tab, setTab, updateProject, onBack }: Pro
       </header>
 
       <div className="min-h-0 flex-1">
-        {tab === "overview" && <OverviewTab project={project} setTab={setTab} />}
+        {tab === "overview" && (
+          <OverviewTab project={project} setTab={setTab} updateProject={updateProject} />
+        )}
         {tab === "hearing" && <HearingTab project={project} updateProject={updateProject} setTab={setTab} />}
         {tab === "flow" && <FlowEditorTab project={project} updateProject={updateProject} setTab={setTab} />}
         {tab === "deepdive" && <DeepDiveTab project={project} updateProject={updateProject} setTab={setTab} />}

@@ -25,9 +25,15 @@ function blockLines(blocks: ManualBlock[], includeImages: boolean): string[] {
 export async function exportManualPptx(
   project: Project,
   sections: ManualSection[],
-  options?: { includeImages?: boolean },
+  options?: { includeImages?: boolean; template?: string },
 ): Promise<void> {
   const includeImages = options?.includeImages ?? true
+  const accent =
+    options?.template === "training"
+      ? "0D9488"
+      : options?.template === "simple"
+        ? "374151"
+        : "1D4ED8"
   const pptx = new PptxGenJS()
   pptx.author = "RakuManual"
   pptx.title = project.name
@@ -41,16 +47,19 @@ export async function exportManualPptx(
     h: 1.2,
     fontSize: 28,
     bold: true,
-    color: "1F2937",
+    color: accent,
   })
-  titleSlide.addText(`全 ${sections.length} セクション`, {
-    x: 0.6,
-    y: 2.9,
-    w: 8.8,
-    h: 0.5,
-    fontSize: 14,
-    color: "6B7280",
-  })
+  titleSlide.addText(
+    `全 ${sections.length} セクション / テンプレート: ${options?.template ?? "corporate"}`,
+    {
+      x: 0.6,
+      y: 2.9,
+      w: 8.8,
+      h: 0.5,
+      fontSize: 14,
+      color: "6B7280",
+    },
+  )
 
   for (const section of sections) {
     const slide = pptx.addSlide()
@@ -75,7 +84,7 @@ export async function exportManualPptx(
         h: 0.35,
         fontSize: 11,
         bold: true,
-        color: "B91C1C",
+        color: accent,
         fontFace: "Arial",
       })
     }

@@ -453,6 +453,42 @@ export function upsertProjectMember(projectId: string, userId: string, permissio
     .run(projectId, userId, permission, Date.now())
 }
 
+/** オーナー変更: projects 行の owner_id を移し、旧オーナーを edit メンバーにする */
+export function transferProjectOwnership(
+  projectId: string,
+  fromUserId: string,
+  toUserId: string,
+  nextProject: Project,
+): Project | null {
+  const db = getDb()
+  const existing = getProjectForUser(projectId, fromUserId)
+  if (!existing) return null
+  const toUser = getUserById(toUserId)
+  if (!toUser) return null
+
+  const transferred: Project = {
+    ...nextProject,
+    id: projectId,
+    owner: toUser.name,
+    ownerId: toUser.id,
+  }
+
+  db.exec("BEGIN")
+  try {
+    db.prepare(`DELETE FROM projects WHERE id = ? AND owner_id = ?`).run(projectId, fromUserId)
+    db.prepare(
+      `INSERT INTO projects (id, owner_id, data, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(id, owner_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+    ).run(projectId, toUserId, JSON.stringify(transferred), transferred.updatedAt)
+    upsertProjectMember(projectId, fromUserId, "edit")
+    db.exec("COMMIT")
+  } catch (e) {
+    db.exec("ROLLBACK")
+    throw e
+  }
+  return transferred
+}
+
 export function insertLlmIoLog(input: {
   userId: string
   projectId?: string
