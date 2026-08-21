@@ -14,7 +14,7 @@ function blockLines(blocks: ManualBlock[], includeImages: boolean): string[] {
     } else {
       lines.push(block.text)
     }
-    if (includeImages && block.image?.caption) {
+    if (includeImages && block.image?.caption && !block.image.url) {
       lines.push(`  [画像] ${block.image.caption}`)
     }
   }
@@ -35,7 +35,7 @@ export async function exportManualPptx(
         ? "374151"
         : "1D4ED8"
   const pptx = new PptxGenJS()
-  pptx.author = "RakuManual"
+  pptx.author = "ラクマニュアル"
   pptx.title = project.name
   pptx.layout = "LAYOUT_16x9"
 
@@ -48,6 +48,7 @@ export async function exportManualPptx(
     fontSize: 28,
     bold: true,
     color: accent,
+    fontFace: "Meiryo",
   })
   titleSlide.addText(
     `全 ${sections.length} セクション / テンプレート: ${options?.template ?? "corporate"}`,
@@ -58,6 +59,7 @@ export async function exportManualPptx(
       h: 0.5,
       fontSize: 14,
       color: "6B7280",
+      fontFace: "Meiryo",
     },
   )
 
@@ -65,6 +67,10 @@ export async function exportManualPptx(
     const slide = pptx.addSlide()
     const num = resolveSectionNumber(section)
     const title = displaySectionTitle(section)
+    const imageBlocks = includeImages
+      ? section.blocks.filter((b) => b.image?.url)
+      : []
+    const hasImage = imageBlocks.length > 0
     const lines = blockLines(section.blocks, includeImages)
 
     slide.addShape(pptx.ShapeType.rect, {
@@ -85,45 +91,60 @@ export async function exportManualPptx(
         fontSize: 11,
         bold: true,
         color: accent,
-        fontFace: "Arial",
+        fontFace: "Meiryo",
       })
     }
 
     slide.addText(title, {
       x: num ? 1.5 : 0.45,
       y: 0.08,
-      w: 8.2,
+      w: hasImage ? 5.2 : 8.2,
       h: 0.45,
       fontSize: 18,
       bold: true,
       color: "111827",
-      fontFace: "Arial",
+      fontFace: "Meiryo",
     })
 
+    // 画像あり: 左に本文、右に図（重なり回避）。複数画像は縦に積む
     slide.addText(lines.join("\n"), {
       x: 0.55,
       y: 0.85,
-      w: 8.9,
+      w: hasImage ? 5.0 : 8.9,
       h: 4.2,
       fontSize: 13,
       color: "374151",
       valign: "top",
-      fontFace: "Arial",
+      fontFace: "Meiryo",
       lineSpacingMultiple: 1.15,
     })
 
-    if (includeImages) {
-      const imageBlock = section.blocks.find((b) => b.image?.url)
-      if (imageBlock?.image?.url) {
+    if (hasImage) {
+      const slotH = Math.min(2.0, 4.0 / imageBlocks.length)
+      imageBlocks.slice(0, 2).forEach((block, i) => {
+        const img = block.image!
+        const y = 0.85 + i * (slotH + 0.25)
         slide.addImage({
-          data: imageBlock.image.url,
-          x: 5.8,
-          y: 2.8,
-          w: 3.5,
-          h: 2.2,
-          sizing: { type: "contain", w: 3.5, h: 2.2 },
+          data: img.url!,
+          x: 5.7,
+          y,
+          w: 3.6,
+          h: slotH,
+          sizing: { type: "contain", w: 3.6, h: slotH },
         })
-      }
+        if (img.caption?.trim()) {
+          slide.addText(img.caption.trim(), {
+            x: 5.7,
+            y: y + slotH + 0.02,
+            w: 3.6,
+            h: 0.28,
+            fontSize: 10,
+            color: "6B7280",
+            fontFace: "Meiryo",
+            align: "center",
+          })
+        }
+      })
     }
   }
 

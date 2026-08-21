@@ -289,7 +289,7 @@ export function ExportTab({ project, updateProject }: Props) {
             <CardTitle className="text-sm">デザインテンプレート</CardTitle>
             <CardDescription>社内ブランドガイドライン準拠のテンプレートから選択</CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3">
+          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {templates.map((t) => (
               <button
                 key={t.id}
@@ -302,6 +302,9 @@ export function ExportTab({ project, updateProject }: Props) {
                 <div className="h-14 rounded-md border" style={{ background: `linear-gradient(135deg, ${t.color} 0%, ${t.color} 30%, white 30%)` }} />
                 <div className="mt-2 text-xs font-semibold">{t.name}</div>
                 <div className="text-[10px] text-muted-foreground">{t.description}</div>
+                <div className="mt-2 truncate text-[10px] font-medium" style={{ color: t.color }}>
+                  1.1 新規申請の例
+                </div>
               </button>
             ))}
           </CardContent>
@@ -359,13 +362,15 @@ export function ExportTab({ project, updateProject }: Props) {
                 </Select>
               </div>
             )}
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label className="text-[13px]">業務フロー図を含める</Label>
-                <p className="text-[11px] text-muted-foreground">冒頭ページに全体フロー図を挿入します</p>
+            {format === "pdf" && (
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label className="text-[13px]">業務フロー図を含める</Label>
+                  <p className="text-[11px] text-muted-foreground">冒頭ページに全体フロー図を挿入します</p>
+                </div>
+                <Switch checked={includeFlow} onCheckedChange={setIncludeFlow} />
               </div>
-              <Switch checked={includeFlow} onCheckedChange={setIncludeFlow} />
-            </div>
+            )}
           </CardContent>
         </Card>
 

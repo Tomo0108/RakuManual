@@ -37,7 +37,8 @@ export async function readImageFile(file: File, projectId?: string): Promise<Man
   const error = validateImageFile(file)
   if (error) throw new Error(error)
 
-  const caption = file.name.replace(/\.[^.]+$/, "")
+  // キャプションはファイル名を流用しない（公開・PDF にファイル名が載るのを防ぐ）
+  const caption = ""
   if (projectId) {
     try {
       const uploaded = await apiUpload(`/projects/${projectId}/images`, file)

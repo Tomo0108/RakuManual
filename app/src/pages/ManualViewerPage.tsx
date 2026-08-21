@@ -4,6 +4,7 @@ import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { ManualDocument } from "@/features/manual/ManualDocument"
 import { useEffect, useMemo, useState } from "react"
 
 interface Props {
@@ -19,6 +20,11 @@ function viewerSections(project: Project): ManualSection[] {
   return project.sections.filter((s) => s.status === "approved")
 }
 
+function sectionSearchHaystack(s: ManualSection): string {
+  const captions = s.blocks.map((b) => b.image?.caption ?? "").join(" ")
+  return `${displaySectionTitle(s)} ${s.blocks.map((b) => b.text).join(" ")} ${captions}`.toLowerCase()
+}
+
 export function ManualViewerPage({ project, sectionId, onBack }: Props) {
   const [query, setQuery] = useState("")
   const sections = useMemo(
@@ -31,16 +37,13 @@ export function ManualViewerPage({ project, sectionId, onBack }: Props) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return sections
-    return sections.filter((s) => {
-      const hay = `${displaySectionTitle(s)} ${s.blocks.map((b) => b.text).join(" ")}`.toLowerCase()
-      return hay.includes(q)
-    })
+    return sections.filter((s) => sectionSearchHaystack(s).includes(q))
   }, [sections, query])
 
   useEffect(() => {
     if (!sectionId) return
     document.getElementById(`viewer-section-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }, [sectionId])
+  }, [sectionId, filtered])
 
   return (
     <div className="flex h-full flex-col">
@@ -62,66 +65,32 @@ export function ManualViewerPage({ project, sectionId, onBack }: Props) {
         )}
       </header>
 
-      <div className="scroll-touch min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
-        <div className="mx-auto mb-4 max-w-3xl">
+      <div className="canvas-surface scroll-touch min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
+        <div className="mx-auto mb-5 max-w-3xl">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="マニュアル内を検索…"
+              placeholder="マニュアル内を検索（本文・図の説明）…"
               className="pl-9"
             />
           </div>
         </div>
-        <article className="mx-auto max-w-3xl">
-          {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {sections.length === 0 ? "閲覧可能なセクションがありません。" : "検索に一致するセクションがありません。"}
-            </p>
+
+        <div className="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-border/40 bg-card px-5 py-8 shadow-sm md:px-12 md:py-12">
+          {query.trim() && filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground">検索に一致するセクションがありません。</p>
           ) : (
-            filtered.map((section) => {
-              const num = resolveSectionNumber(section)
-              return (
-                <section
-                  key={section.id}
-                  id={`viewer-section-${section.id}`}
-                  className="mb-10 scroll-mt-16 border-b border-border/60 pb-8 last:border-b-0"
-                >
-                  <h2 className="text-base font-bold tracking-tight">
-                    {num && <span className="mr-2 font-mono text-primary">{num}</span>}
-                    {displaySectionTitle(section)}
-                  </h2>
-                  <div className="mt-4 flex flex-col gap-3 text-sm leading-relaxed text-foreground/90">
-                    {section.blocks.map((block) => (
-                      <div key={block.id}>
-                        {block.type === "step" ? (
-                          <p className="border-l-2 border-primary/40 pl-3">{block.text}</p>
-                        ) : block.type === "note" ? (
-                          <aside className="rounded-lg bg-muted/50 px-3 py-2 text-muted-foreground">{block.text}</aside>
-                        ) : (
-                          <p>{block.text}</p>
-                        )}
-                        {block.image?.url && (
-                          <figure className="mt-2">
-                            <img
-                              src={block.image.url}
-                              alt={block.image.caption}
-                              className="max-h-64 rounded-md border object-contain"
-                            />
-                            {block.image.caption && (
-                              <figcaption className="mt-1 text-xs text-muted-foreground">{block.image.caption}</figcaption>
-                            )}
-                          </figure>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )
-            })
+            <ManualDocument
+              sections={filtered}
+              coverTitle={project.name}
+              showCover={!query.trim()}
+              emptyTitle="閲覧可能なセクションがありません"
+              emptyDescription="承認済みのセクション、または公開版データがありません。"
+            />
           )}
-        </article>
+        </div>
       </div>
     </div>
   )

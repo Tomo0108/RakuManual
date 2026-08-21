@@ -79,7 +79,7 @@ export function SidebarContent({
       <div className="flex items-center gap-2.5 px-4 py-4">
         <img src={logo} alt="RakuManual ロゴ" className="size-9" />
         <div>
-          <div className="text-sm font-bold tracking-tight">RakuManual</div>
+          <div className="text-sm font-bold tracking-tight">ラクマニュアル</div>
           <div className="text-[10px] text-muted-foreground">業務マニュアル自動作成AI</div>
         </div>
       </div>
@@ -110,21 +110,27 @@ export function SidebarContent({
           最近のプロジェクト
         </div>
         <div className="flex flex-col gap-0.5">
-          {recentProjects.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => go({ name: "project", projectId: p.id, tab: "overview" })}
-              className={cn(
-                "flex min-h-10 items-center gap-2 truncate rounded-md px-3 py-2 text-left text-[13px] transition-colors",
-                view.name === "project" && view.projectId === p.id
-                  ? "bg-sidebar-accent font-medium text-sidebar-foreground"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-              )}
-            >
-              <BookOpenText className="size-3.5 shrink-0" />
-              <span className="truncate">{p.name}</span>
-            </button>
-          ))}
+          {recentProjects.length === 0 ? (
+            <p className="px-3 py-2 text-[12px] leading-relaxed text-muted-foreground">
+              まだありません。一覧から作成できます。
+            </p>
+          ) : (
+            recentProjects.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => go({ name: "project", projectId: p.id, tab: "overview" })}
+                className={cn(
+                  "flex min-h-10 items-center gap-2 truncate rounded-md px-3 py-2 text-left text-[13px] transition-colors",
+                  view.name === "project" && view.projectId === p.id
+                    ? "bg-sidebar-accent font-medium text-sidebar-foreground"
+                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                )}
+              >
+                <BookOpenText className="size-3.5 shrink-0" />
+                <span className="truncate">{p.name}</span>
+              </button>
+            ))
+          )}
         </div>
       </div>
 

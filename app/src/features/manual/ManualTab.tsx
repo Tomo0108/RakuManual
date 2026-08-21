@@ -4,7 +4,6 @@ import {
   BadgeCheck,
   Check,
   ChevronDown,
-  Image as ImageIcon,
   ImagePlus,
   ListTree,
   Pencil,
@@ -584,13 +583,14 @@ function SectionTocBar({
             onClick={() => onNavigateMedium(item.key, item.sectionId)}
             title={item.title}
             className={cn(
-              "shrink-0 rounded-full border px-2.5 py-1 font-mono text-[10px] font-semibold tabular-nums transition-colors",
+              "flex max-w-[10rem] shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors",
               item.sectionId && activeSectionId === item.sectionId
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-muted/50 text-muted-foreground",
             )}
           >
-            {item.number}
+            <span className="font-mono tabular-nums">{item.number}</span>
+            {item.title && <span className="truncate font-medium">{item.title}</span>}
           </button>
         ))}
       </div>
@@ -610,10 +610,13 @@ function TocItem({
   const num = resolveSectionNumber(section)
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
 
+  const title = displaySectionTitle(section)
+
   return (
     <button
       type="button"
       onClick={onNavigate}
+      title={title}
       className={cn(
         "flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
         active
@@ -622,8 +625,11 @@ function TocItem({
       )}
     >
       <span className="shrink-0 font-mono text-[10px] font-bold tabular-nums text-primary">{num || "—"}</span>
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-snug text-foreground">
+        {title}
+      </span>
       {(section.syncStatus ?? "ok") !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
-      <Badge variant="outline" className={cn("ml-auto h-5 shrink-0 text-[9px]", SECTION_STYLE[section.status])}>
+      <Badge variant="outline" className={cn("h-5 shrink-0 text-[9px]", SECTION_STYLE[section.status])}>
         {SECTION_LABEL[section.status]}
       </Badge>
       {confirms > 0 && (
@@ -1019,7 +1025,6 @@ function BlockView({
   onUpdateImageCaption: (caption: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [imageOpen, setImageOpen] = useState(Boolean(block.image?.url))
   const [imageError, setImageError] = useState<string | null>(null)
   const [captionDraft, setCaptionDraft] = useState(block.image?.caption ?? "")
   const [uploading, setUploading] = useState(false)
@@ -1044,8 +1049,7 @@ function BlockView({
     setImageError(null)
     try {
       await onAttachImage(file)
-      setImageOpen(true)
-      setCaptionDraft(file.name.replace(/\.[^.]+$/, ""))
+      setCaptionDraft("")
     } catch (err) {
       setImageError(err instanceof Error ? err.message : "画像の添付に失敗しました")
     } finally {
@@ -1054,7 +1058,7 @@ function BlockView({
   }
 
   const saveCaption = () => {
-    onUpdateImageCaption(captionDraft.trim() || "画像")
+    onUpdateImageCaption(captionDraft.trim())
   }
 
   return (
@@ -1135,8 +1139,6 @@ function BlockView({
 
               <BlockImageSection
                 block={block}
-                imageOpen={imageOpen}
-                setImageOpen={setImageOpen}
                 captionDraft={captionDraft}
                 setCaptionDraft={setCaptionDraft}
                 imageError={imageError}
@@ -1170,8 +1172,6 @@ function BlockView({
 
 function BlockImageSection({
   block,
-  imageOpen,
-  setImageOpen,
   captionDraft,
   setCaptionDraft,
   imageError,
@@ -1183,8 +1183,6 @@ function BlockImageSection({
   onSaveCaption,
 }: {
   block: ManualBlock
-  imageOpen: boolean
-  setImageOpen: (open: boolean) => void
   captionDraft: string
   setCaptionDraft: (v: string) => void
   imageError: string | null
@@ -1210,18 +1208,7 @@ function BlockImageSection({
       {image ? (
         <>
           <div className={cn("mt-2 flex flex-wrap items-center gap-1.5 px-2.5 py-2", APP_CHROME)}>
-            <span className={cn(APP_CHROME_LABEL, "mr-1")}>画像</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 border bg-background px-2 text-[11px]"
-              onClick={() => setImageOpen(!imageOpen)}
-            >
-              <ImageIcon className="size-3" />
-              {image.url ? "画像を見る" : "プレースホルダ"}
-              <ChevronDown className={cn("size-3 transition-transform", imageOpen && "rotate-180")} />
-            </Button>
+            <span className={cn(APP_CHROME_LABEL, "mr-1")}>画像操作</span>
             <Button
               type="button"
               size="sm"
@@ -1244,43 +1231,49 @@ function BlockImageSection({
               削除
             </Button>
           </div>
-          {imageOpen && (
-            <figure className="mt-2 overflow-hidden rounded-lg border">
-              {image.url ? (
-                <img
-                  src={image.url}
-                  alt={image.caption}
-                  className="max-h-80 w-full bg-muted/30 object-contain"
-                />
-              ) : (
-                <div
-                  className="flex h-40 items-center justify-center px-3 text-center text-xs leading-relaxed text-muted-foreground"
-                  style={{ background: image.color ?? "var(--muted)" }}
-                >
-                  <span className="max-w-full rounded bg-white/80 px-3 py-2 break-words dark:bg-black/40">
-                    画像未添付（「画像を添付」から追加）
-                  </span>
-                </div>
+          <figure className="manual-figure mt-2 overflow-hidden rounded-lg border">
+            {image.url ? (
+              <img
+                src={image.url}
+                alt={image.caption || "手順の参考画像"}
+                className="manual-figure-img"
+              />
+            ) : (
+              <div
+                className="flex h-40 items-center justify-center px-3 text-center text-xs leading-relaxed text-muted-foreground"
+                style={{ background: image.color ?? "var(--muted)" }}
+              >
+                <span className="max-w-full rounded bg-white/80 px-3 py-2 break-words dark:bg-black/40">
+                  画像未添付（「画像を添付」から追加）
+                </span>
+              </div>
+            )}
+            <figcaption className="border-t bg-muted/30 px-3 py-2">
+              <label className="mb-1 block text-[10px] font-semibold tracking-wide text-muted-foreground">
+                図の説明
+              </label>
+              <Textarea
+                value={captionDraft}
+                onChange={(e) => setCaptionDraft(e.target.value)}
+                onBlur={onSaveCaption}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    onSaveCaption()
+                    ;(e.target as HTMLTextAreaElement).blur()
+                  }
+                }}
+                placeholder="画面のどこを操作するかを書いてください（ファイル名は使わない）"
+                rows={2}
+                className="min-h-[2.5rem] resize-y border-0 bg-transparent px-0 py-0 text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
+              />
+              {!captionDraft.trim() && (
+                <p className="mt-1 text-[10px] text-[var(--semantic-warning-fg)]">
+                  未入力のまま公開すると図の意図が伝わりにくくなります
+                </p>
               )}
-              <figcaption className="border-t bg-muted/30 px-3 py-2">
-                <Textarea
-                  value={captionDraft}
-                  onChange={(e) => setCaptionDraft(e.target.value)}
-                  onBlur={onSaveCaption}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      onSaveCaption()
-                      ;(e.target as HTMLTextAreaElement).blur()
-                    }
-                  }}
-                  placeholder="キャプション（画像の説明）"
-                  rows={2}
-                  className="min-h-[2.5rem] resize-y border-0 bg-transparent px-0 py-0 text-[12px] leading-relaxed shadow-none focus-visible:ring-0"
-                />
-              </figcaption>
-            </figure>
-          )}
+            </figcaption>
+          </figure>
         </>
       ) : (
         <Button

@@ -221,6 +221,24 @@
   @apply border-b border-border bg-card/85 backdrop-blur-sm;
 }
 
+/* マニュアル本文（閲覧・編集紙面で共有） */
+@utility manual-prose {
+  color: var(--foreground);
+  font-feature-settings: "palt" 1;
+}
+
+@utility manual-figure {
+  @apply overflow-hidden rounded-lg border border-border/70 bg-muted/20;
+}
+
+@utility manual-figure-img {
+  @apply max-h-[28rem] w-full bg-muted/30 object-contain;
+}
+
+@utility manual-figcaption {
+  @apply border-t border-border/50 bg-muted/25 px-3 py-2.5 text-center text-[13px] leading-relaxed text-muted-foreground;
+}
+
 /* ステータスバッジ（プロジェクト進捗） */
 @utility status-hearing {
   background: var(--status-hearing-bg);
