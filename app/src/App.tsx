@@ -56,17 +56,36 @@ export default function App() {
   }
 
   if (session.apiOffline) {
+    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background px-6">
         <div className="max-w-md text-center">
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
             <WifiOff className="size-7" />
           </div>
-          <h1 className="mt-4 text-lg font-bold">サーバーに接続できません</h1>
+          <h1 className="mt-4 text-lg font-bold">APIサーバーに接続できません</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            マニュアルの読み込み・保存ができないため、編集は行えません。
-            ネットワーク状況を確認し、しばらく待ってから再試行してください。
+            Vercel はフロントのみ配信します。マニュアルの読み込み・保存には別途 API（Fastify）が必要です。
           </p>
+          <ul className="mt-3 space-y-1.5 text-left text-xs leading-relaxed text-muted-foreground">
+            <li>・ローカル: リポジトリで <code className="rounded bg-muted px-1">npm run dev</code></li>
+            <li>
+              ・本番: API を別ホストにデプロイし、Vercel の環境変数{" "}
+              <code className="rounded bg-muted px-1">VITE_API_BASE_URL</code> に API の{" "}
+              <code className="rounded bg-muted px-1">/api</code> URL を設定
+            </li>
+            {apiBase ? (
+              <li>
+                ・現在の向き先: <code className="break-all rounded bg-muted px-1">{apiBase}</code>
+              </li>
+            ) : (
+              <li>
+                ・現在の向き先: 同一オリジンの <code className="rounded bg-muted px-1">/api</code>
+                （未設定）
+              </li>
+            )}
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">手順の詳細は docs/デプロイ.md を参照してください。</p>
           <Button className="mt-5 gap-1.5" onClick={() => session.retryConnection()}>
             <RefreshCw className="size-4" />
             再試行

@@ -3,6 +3,7 @@ import type { Project } from "@/lib/types"
 import { INITIAL_PROJECTS } from "@/lib/mock-data"
 import { today } from "@/lib/project-utils"
 import { ApiError } from "@/lib/api/client"
+import { apiUrl } from "@/lib/api/base"
 import { fetchMe, login as apiLogin, loginWithOidcCode, logout as apiLogout, type AuthUser } from "@/lib/api/auth"
 import {
   createProject,
@@ -18,8 +19,13 @@ const CONFLICT_MESSAGE = "他で更新されました。再読み込みしてく
 
 async function apiReachable(): Promise<boolean> {
   try {
-    const res = await fetch("/api/health", { credentials: "include" })
-    return res.ok
+    const res = await fetch(apiUrl("/health"), { credentials: "include" })
+    if (!res.ok) return false
+    const ct = res.headers.get("content-type") ?? ""
+    // Vercel の SPA rewrite で HTML が返ると「繋がっている」と誤判定しない
+    if (!ct.includes("application/json")) return false
+    const body = (await res.json()) as { status?: string }
+    return body.status === "ok"
   } catch {
     return false
   }

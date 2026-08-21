@@ -1,4 +1,5 @@
 import { apiFetch, ApiError } from "./client"
+import { apiUrl } from "./base"
 import type { FlowState, HearingQuestion, ManualSection } from "@/lib/types"
 
 export interface JobStatusResponse<T = unknown> {
@@ -51,7 +52,7 @@ async function waitForJob<T>(
       }
     }
 
-    const es = new EventSource(`/api/jobs/${jobId}/stream`, { withCredentials: true })
+    const es = new EventSource(apiUrl(`/jobs/${jobId}/stream`), { withCredentials: true })
     es.addEventListener("progress", (ev) => {
       try {
         const data = JSON.parse((ev as MessageEvent).data) as JobStatusResponse<T>
@@ -157,7 +158,7 @@ export async function streamAiCompletion(
   onToken: StreamTokenHandler,
   opts?: { system?: string; action?: string; signal?: AbortSignal },
 ): Promise<{ text: string; tokens: number; provider: string; ms: number } | null> {
-  const res = await fetch(`/api/projects/${projectId}/ai/complete/stream`, {
+  const res = await fetch(apiUrl(`/projects/${projectId}/ai/complete/stream`), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

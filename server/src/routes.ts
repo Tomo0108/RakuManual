@@ -56,6 +56,18 @@ import type { AuthUser, HearingAnswer, Project, UserRole } from "./types.js"
 
 const SESSION_COOKIE = "rakumanual_session"
 
+/** クロスオリジン（Vercel ↔ 別ホスト API）時は SameSite=None; Secure が必要 */
+function sessionCookieOptions() {
+  const crossSite = process.env.COOKIE_SAMESITE === "none" || process.env.COOKIE_SECURE === "true"
+  return {
+    path: "/",
+    httpOnly: true,
+    sameSite: (crossSite ? "none" : "lax") as "none" | "lax",
+    secure: crossSite || process.env.NODE_ENV === "production",
+    maxAge: 7 * 24 * 60 * 60,
+  }
+}
+
 function getToken(request: FastifyRequest): string | undefined {
   return request.cookies[SESSION_COOKIE]
 }
@@ -312,12 +324,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     if (!user) return reply.status(400).send({ error: "User not found" })
 
     const token = createSession(user.id)
-    reply.setCookie(SESSION_COOKIE, token, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
-    })
+    reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions())
     return { user }
   })
 
@@ -411,12 +418,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         listUsers()[0]
       if (!mapped) return reply.status(401).send({ error: "No mapped user for OIDC identity" })
       const token = createSession(mapped.id)
-      reply.setCookie(SESSION_COOKIE, token, {
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60,
-      })
+      reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions())
       recordOperationLog({
         userId: mapped.id,
         actionType: "admin",
@@ -427,12 +429,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     const user = getSessionUser(body.code)
     if (!user) return reply.status(401).send({ error: "Invalid or expired code" })
-    reply.setCookie(SESSION_COOKIE, body.code, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
-    })
+    reply.setCookie(SESSION_COOKIE, body.code, sessionCookieOptions())
     recordOperationLog({
       userId: user.id,
       actionType: "admin",

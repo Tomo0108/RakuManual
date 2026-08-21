@@ -1,4 +1,4 @@
-const API_BASE = "/api"
+import { apiUrl } from "./base"
 
 export class ApiError extends Error {
   readonly status: number
@@ -13,7 +13,7 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
     headers: {
@@ -43,7 +43,7 @@ export async function apiUpload(
 ): Promise<{ storageKey: string; url: string; mimeType: string; name: string }> {
   const form = new FormData()
   form.append("file", file)
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method: "POST",
     body: form,
     credentials: "include",

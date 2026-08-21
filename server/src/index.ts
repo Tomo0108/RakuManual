@@ -33,7 +33,28 @@ async function main() {
   const app = Fastify({ logger: true })
 
   await app.register(cors, {
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: (origin, cb) => {
+      const defaults = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+      ]
+      const extra = (process.env.ALLOWED_ORIGINS ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const allowed = [...defaults, ...extra]
+      // same-origin / curl 等は origin なし
+      if (!origin || allowed.includes(origin) || allowed.includes("*")) {
+        cb(null, true)
+        return
+      }
+      // *.vercel.app を許可（プレビュー含む）
+      if (/^https:\/\/[\w.-]+\.vercel\.app$/.test(origin)) {
+        cb(null, true)
+        return
+      }
+      cb(null, false)
+    },
     credentials: true,
   })
   await app.register(cookie)

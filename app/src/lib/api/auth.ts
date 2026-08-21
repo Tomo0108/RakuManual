@@ -1,4 +1,5 @@
 import { apiFetch } from "./client"
+import { apiUrl } from "./base"
 
 export type UserRole = "viewer" | "creator" | "admin"
 
@@ -32,7 +33,7 @@ export async function loginWithOidcCode(code: string): Promise<AuthUser> {
 }
 
 export function oidcAuthorizeUrl(userId: string, redirectUri?: string): string {
-  const url = new URL("/api/auth/oidc/authorize", window.location.origin)
+  const url = new URL(apiUrl("/auth/oidc/authorize"), window.location.href)
   url.searchParams.set("userId", userId)
   url.searchParams.set(
     "redirect_uri",
