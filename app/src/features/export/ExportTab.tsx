@@ -118,6 +118,7 @@ export function ExportTab({ project, updateProject }: Props) {
       if (format === "pptx") {
         await exportManualPptx(project, targetSections, {
           includeImages: imageMode !== "none",
+          includeFlow,
           template,
         })
       } else {
@@ -391,15 +392,17 @@ export function ExportTab({ project, updateProject }: Props) {
                 </Select>
               </div>
             )}
-            {format === "pdf" && (
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <Label className="text-[13px]">業務フロー図を含める</Label>
-                  <p className="text-[11px] text-muted-foreground">冒頭ページに全体フロー図を挿入します</p>
-                </div>
-                <Switch checked={includeFlow} onCheckedChange={setIncludeFlow} />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label className="text-[13px]">業務フロー図を含める</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {format === "pptx"
+                    ? "表紙の次にスイムレーン形式のフロー図スライドを挿入します"
+                    : "冒頭ページに全体フロー図を挿入します"}
+                </p>
               </div>
-            )}
+              <Switch checked={includeFlow} onCheckedChange={setIncludeFlow} />
+            </div>
           </CardContent>
         </Card>
 
