@@ -86,7 +86,6 @@ export function ProjectList({
       <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
         <PageHeader
           title="プロジェクト一覧"
-          description="マニュアル1本 = 1プロジェクト。AIとの対話でマニュアルを作成できます。"
           actions={
             !readOnly ? (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
