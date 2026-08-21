@@ -76,7 +76,8 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
         body += `<p>${text}</p>`
       }
       if (block.image?.url && imageMode !== "none") {
-        const img = `<figure><img src="${escapeHtml(block.image.url)}" alt="${escapeHtml(block.image.caption ?? "")}" /><figcaption>${escapeHtml(block.image.caption ?? "")}</figcaption></figure>`
+        const alt = escapeHtml(block.image.caption?.trim() || "手順の参考画像")
+        const img = `<figure><img src="${escapeHtml(block.image.url)}" alt="${alt}" /></figure>`
         if (imageMode === "appendix") appendixImages.push(img)
         else body += img
       }
