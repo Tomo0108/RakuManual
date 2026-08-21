@@ -7,9 +7,10 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "vite",
     "icons": "node scripts/generate-icons.mjs",
-    "build": "npm run icons && tsc -b && vite build",
+    "sync-fonts": "node ../scripts/sync-fonts.mjs",
+    "build": "npm run sync-fonts && npm run icons && tsc -b && vite build",
+    "dev": "npm run sync-fonts && vite",
     "lint": "oxlint",
     "preview": "vite preview"
   },

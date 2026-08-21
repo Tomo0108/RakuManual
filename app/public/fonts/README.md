@@ -2,19 +2,18 @@
 
 ## PDF
 
-PDF 出力は埋め込みフォントを使います（閲覧端末にメイリオが無くても文字化けしません）。
+PDF 出力は埋め込みフォントを使います。
 
-1. **推奨（メイリオ）**  
-   ライセンスを確認のうえ、次をこのディレクトリに置いてください。
-   - `Meiryo.ttf`（または `meiryo.ttf`）※ `.ttc` は不可
-   - `Meiryo-Bold.ttf`（または `meiryob.ttf`）任意。無い場合は Regular を太字にも使います。
+1. **メイリオ（優先）**  
+   - `Meiryo.ttf`（このディレクトリ、またはリポジトリの `assets/fonts/Meiryo.ttf` をここへコピー）
+   - Bold 用に `Meiryo-Bold.ttf` / `meiryob.ttf` があれば使用。無ければ Regular を太字にも使います
+   - `.ttc` は jsPDF 非対応のため不可
 
-2. **既定フォールバック**  
-   `NotoSansJP-Regular.ttf` / `NotoSansJP-Bold.ttf`（SIL OFL）を埋め込みます。  
-   出典: https://fontsource.org/fonts/noto-sans-jp
+2. **フォールバック**  
+   `NotoSansJP-Regular.ttf` / `NotoSansJP-Bold.ttf`（SIL OFL）
 
-存在しないフォント URL を取りに行くと SPA の `index.html` が返ることがあるため、TTF マジックバイトと Content-Type で検証しています。
+存在しない URL は SPA の HTML が返ることがあるため、TTF マジックバイトで検証しています。
 
 ## PPTX
 
-PowerPoint はシステムフォント「メイリオ」を参照します（不完全な TTF 埋め込みは行いません）。
+PowerPoint はシステムフォント「メイリオ」を参照します（バイナリ埋め込みはしません）。
