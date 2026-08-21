@@ -90,28 +90,48 @@ export function AdminSettingsPage({ isAdmin }: Props) {
               通知設定
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
+          <CardContent className="grid gap-1 text-sm">
             {(
               [
-                ["reviewDeadline", "見直し期限の接近"],
-                ["qaUnanswered", "QA未回答・根拠なし"],
-                ["llmBudget", "LLMコスト閾値"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex items-center justify-between gap-3">
-                <span>{label}</span>
-                <input
-                  type="checkbox"
+                {
+                  key: "reviewDeadline" as const,
+                  label: "見直し期限の接近",
+                  hint: "マニュアルの見直し期限が近づいたときに知らせます",
+                },
+                {
+                  key: "qaUnanswered" as const,
+                  label: "QA未回答・根拠なし",
+                  hint: "未回答のQAや根拠が不足している項目を知らせます",
+                },
+                {
+                  key: "llmBudget" as const,
+                  label: "LLMコスト閾値",
+                  hint: "月間LLM利用額が閾値に達したときに知らせます",
+                },
+              ]
+            ).map(({ key, label, hint }) => (
+              <div
+                key={key}
+                className="flex items-center justify-between gap-4 rounded-lg px-1 py-3 transition-colors hover:bg-muted/40"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <Label htmlFor={`notify-${key}`} className="cursor-pointer text-[13px] font-medium">
+                    {label}
+                  </Label>
+                  <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+                </div>
+                <Switch
+                  id={`notify-${key}`}
                   checked={notify[key]}
-                  onChange={(e) => {
-                    const next = { ...notify, [key]: e.target.checked }
+                  onCheckedChange={(checked) => {
+                    const next = { ...notify, [key]: checked }
                     setNotify(next)
                     void updateNotificationSettings(next)
                       .then(() => setMessage("通知設定を保存しました"))
                       .catch((err) => setError(err instanceof Error ? err.message : "保存失敗"))
                   }}
                 />
-              </label>
+              </div>
             ))}
           </CardContent>
         </Card>
