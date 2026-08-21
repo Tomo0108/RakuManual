@@ -14,7 +14,6 @@ import {
 import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { publishProject } from "@/lib/api/publish"
-import { downloadPdfBase64, exportProjectPdf } from "@/lib/api/export"
 import { fetchTemplates, submitCsat, type DesignTemplate } from "@/lib/api/admin"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -132,24 +131,12 @@ export function ExportTab({ project, updateProject }: Props) {
           template,
         })
       } else {
-        // まず API（サーバーPDF）。不通・失敗時はクライアント生成にフォールバック
-        // （UIプレビューでは API が無いため、ここで PDF が必ず出せるようにする）
-        try {
-          const result = await exportProjectPdf(project.id, {
-            template,
-            includeFlow,
-            imageMode: imageMode as "expand" | "appendix" | "none",
-            sectionIds: range === "all" ? undefined : [range],
-          })
-          if (!result.pdfBase64) throw new Error("PDFデータがありません")
-          downloadPdfBase64(result.pdfBase64, result.filename)
-        } catch {
-          await exportManualPdfClient(project, targetSections, {
-            includeImages: imageMode !== "none",
-            includeFlow,
-            template,
-          })
-        }
+        // PowerPoint と同じスライドデザインの PDF（クライアント生成）
+        await exportManualPdfClient(project, targetSections, {
+          includeImages: imageMode !== "none",
+          includeFlow,
+          template,
+        })
       }
       setExported(true)
     } catch (err) {
@@ -297,7 +284,7 @@ export function ExportTab({ project, updateProject }: Props) {
         <div className="mt-6 grid grid-cols-2 gap-3">
           {(
             [
-              { id: "pdf", icon: FileText, title: "PDF", desc: "閲覧・印刷用。フロー図と画像を含められます" },
+              { id: "pdf", icon: FileText, title: "PDF", desc: "PowerPointと同じスライドデザインで出力（閲覧・印刷用）" },
               { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "1セクション = 1スライドで出力" },
             ] as const
           ).map((f) => (

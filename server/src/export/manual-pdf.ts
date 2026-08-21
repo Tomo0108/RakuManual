@@ -1,3 +1,8 @@
+/**
+ * サーバー側 PDF（ジョブ / API 用の文書レイアウト）。
+ * UI の「PDF 出力」はクライアントで PowerPoint と同じワイドスライドを描画する
+ * （`app/src/lib/export-pptx.ts` の `buildManualPdfBlob`）。
+ */
 import PDFDocument from "pdfkit"
 import fs from "node:fs"
 import path from "node:path"

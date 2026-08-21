@@ -4,7 +4,7 @@ import {
   displaySectionTitle,
   resolveLeafSectionNumber,
 } from "@/lib/manual-outline"
-import { downloadBlob, applyMeiryoFontToPptx, FONT_FACE } from "@/lib/pptx-embed-font"
+import { downloadBlob, applyMeiryoFontToPptx } from "@/lib/pptx-embed-font"
 import {
   formatMajorTitle,
   formatMediumHeading,
@@ -23,6 +23,10 @@ import {
   needsInitialLayout,
 } from "@/features/flow/flow-layout"
 import PptxGenJS from "pptxgenjs"
+import type { GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
+import { createPptxSlideGfx } from "@/lib/pptx-slide-gfx"
+import { createPdfSlideGfx } from "@/lib/pdf-slide-gfx"
+import { jsPDF } from "jspdf"
 
 /** 必須要件: 13.333 × 7.5 in */
 const SLIDE_W = 13.333
@@ -56,52 +60,43 @@ function buildBodyItems(blocks: ManualBlock[], mediumHeading: string): TextItem[
   return items
 }
 
-function bodyToPptxRuns(items: TextItem[]): PptxGenJS.TextProps[] {
+function bodyToGfxRuns(items: TextItem[]): GfxTextRun[] {
   return items.map((item) => {
     if (item.kind === "blank") {
-      return { text: " ", options: { fontSize: 8, breakLine: true } }
+      return { text: " ", fontSize: 8, breakLine: true }
     }
     if (item.kind === "heading") {
-      return {
-        text: item.text,
-        options: { bold: true, fontSize: 16, color: "000000", breakLine: true },
-      }
+      return { text: item.text, bold: true, fontSize: 16, color: "000000", breakLine: true }
     }
     if (item.kind === "note") {
       return {
         text: item.text,
-        options: {
-          bold: true,
-          fontSize: 16,
-          color: "000000",
-          highlight: "FFFF00",
-          breakLine: true,
-        },
+        bold: true,
+        fontSize: 16,
+        color: "000000",
+        highlight: "FFFF00",
+        breakLine: true,
       }
     }
-    return {
-      text: item.text,
-      options: { bold: false, fontSize: 16, color: "000000", breakLine: true },
-    }
+    return { text: item.text, bold: false, fontSize: 16, color: "000000", breakLine: true }
   })
 }
 
 function addChrome(
-  pptx: PptxGenJS,
-  slide: PptxGenJS.Slide,
+  gfx: SlideGfx,
   theme: ExportTheme,
   opts: { title: string; chip?: string; pageNum: number },
 ) {
-  slide.addShape(pptx.ShapeType.rect, {
+  gfx.addRect({
     x: 0,
     y: 0,
     w: SLIDE_W,
     h: 0.17,
-    fill: { color: theme.navy },
-    line: { color: theme.navy, width: 0 },
+    fill: theme.navy,
+    line: null,
   })
 
-  slide.addText(opts.title, {
+  gfx.addText(opts.title, {
     x: 0.238,
     y: 0.271,
     w: opts.chip ? 9.2 : 12.858,
@@ -109,21 +104,20 @@ function addChrome(
     fontSize: 20,
     bold: true,
     color: theme.text,
-    fontFace: FONT_FACE,
     valign: "middle",
   })
 
   if (opts.chip) {
-    slide.addShape(pptx.ShapeType.roundRect, {
+    gfx.addRoundRect({
       x: 9.606,
       y: 0.325,
       w: 3.49,
       h: 0.472,
-      fill: { color: theme.chipBg },
-      line: { color: theme.chipBg, width: 0 },
+      fill: theme.chipBg,
+      line: null,
       rectRadius: 0.08,
     })
-    slide.addText(opts.chip, {
+    gfx.addText(opts.chip, {
       x: 9.606,
       y: 0.325,
       w: 3.49,
@@ -131,13 +125,12 @@ function addChrome(
       fontSize: 14,
       bold: true,
       color: theme.chipFg,
-      fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
     })
   }
 
-  slide.addShape(pptx.ShapeType.line, {
+  gfx.addLine({
     x: 0.194,
     y: 0.938,
     w: 12.901,
@@ -145,24 +138,23 @@ function addChrome(
     line: { color: theme.accent, width: 2 },
   })
 
-  slide.addShape(pptx.ShapeType.roundRect, {
+  gfx.addRoundRect({
     x: 0.194,
     y: 1.125,
     w: 12.901,
     h: 5.628,
-    fill: { type: "none" },
+    fill: null,
     line: { color: theme.frame, width: 2.25 },
     rectRadius: 0.12,
   })
 
-  slide.addText(String(opts.pageNum), {
+  gfx.addText(String(opts.pageNum), {
     x: 12.144,
     y: 7.022,
     w: 0.836,
     h: 0.307,
     fontSize: 11,
     color: "444444",
-    fontFace: FONT_FACE,
     align: "right",
     valign: "middle",
   })
@@ -430,17 +422,16 @@ function flowNodeVisual(
   }
 }
 
-function flowNodeShape(pptx: PptxGenJS, kind: string | undefined) {
-  if (kind === "decision") return pptx.ShapeType.flowChartDecision
-  if (kind === "start" || kind === "end") return pptx.ShapeType.ellipse
-  return pptx.ShapeType.rect
+function flowNodeKind(kind: string | undefined): "diamond" | "ellipse" | "rect" {
+  if (kind === "decision") return "diamond"
+  if (kind === "start" || kind === "end") return "ellipse"
+  return "rect"
 }
 
 type Pt = { x: number; y: number }
 
 function addStraightLine(
-  pptx: PptxGenJS,
-  slide: PptxGenJS.Slide,
+  gfx: SlideGfx,
   a: Pt,
   b: Pt,
   opts: { color?: string; width?: number; dash?: boolean; endArrow?: boolean },
@@ -449,48 +440,47 @@ function addStraightLine(
   const dy = b.y - a.y
   if (Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) return
 
-  const lineOpts = {
+  const line = {
     color: opts.color ?? "000000",
     width: opts.width ?? 2.25,
-    dashType: opts.dash ? ("dash" as const) : undefined,
-    endArrowType: (opts.endArrow ? "triangle" : "none") as "triangle" | "none",
+    dash: opts.dash,
+    endArrow: opts.endArrow,
   }
 
   if (Math.abs(dy) < 0.015) {
     const goingRight = b.x >= a.x
-    slide.addShape(pptx.ShapeType.line, {
+    gfx.addLine({
       x: Math.min(a.x, b.x),
       y: a.y,
       w: Math.max(Math.abs(dx), 0.02),
       h: 0,
       flipH: !goingRight,
-      line: lineOpts,
+      line,
     })
     return
   }
 
   if (Math.abs(dx) < 0.015) {
     const goingDown = b.y >= a.y
-    slide.addShape(pptx.ShapeType.line, {
+    gfx.addLine({
       x: a.x,
       y: Math.min(a.y, b.y),
       w: 0,
       h: Math.max(Math.abs(dy), 0.02),
       flipV: !goingDown,
-      line: lineOpts,
+      line,
     })
     return
   }
 
   const mid = { x: (a.x + b.x) / 2, y: a.y }
-  addStraightLine(pptx, slide, a, mid, { ...opts, endArrow: false })
-  addStraightLine(pptx, slide, mid, { x: mid.x, y: b.y }, { ...opts, endArrow: false })
-  addStraightLine(pptx, slide, { x: mid.x, y: b.y }, b, opts)
+  addStraightLine(gfx, a, mid, { ...opts, endArrow: false })
+  addStraightLine(gfx, mid, { x: mid.x, y: b.y }, { ...opts, endArrow: false })
+  addStraightLine(gfx, { x: mid.x, y: b.y }, b, opts)
 }
 
 function addOrthoConnector(
-  pptx: PptxGenJS,
-  slide: PptxGenJS.Slide,
+  gfx: SlideGfx,
   from: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
   to: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
   backward: boolean,
@@ -501,7 +491,7 @@ function addOrthoConnector(
   const dash = backward
 
   if (!backward && Math.abs(from.cy - to.cy) < 0.04) {
-    addStraightLine(pptx, slide, { x: from.right, y: from.cy }, { x: to.left, y: to.cy }, {
+    addStraightLine(gfx, { x: from.right, y: from.cy }, { x: to.left, y: to.cy }, {
       color,
       width,
       endArrow: true,
@@ -511,12 +501,12 @@ function addOrthoConnector(
 
   if (!backward && to.left >= from.right - 0.02) {
     const midX = (from.right + to.left) / 2
-    addStraightLine(pptx, slide, { x: from.right, y: from.cy }, { x: midX, y: from.cy }, {
+    addStraightLine(gfx, { x: from.right, y: from.cy }, { x: midX, y: from.cy }, {
       color,
       width,
     })
-    addStraightLine(pptx, slide, { x: midX, y: from.cy }, { x: midX, y: to.cy }, { color, width })
-    addStraightLine(pptx, slide, { x: midX, y: to.cy }, { x: to.left, y: to.cy }, {
+    addStraightLine(gfx, { x: midX, y: from.cy }, { x: midX, y: to.cy }, { color, width })
+    addStraightLine(gfx, { x: midX, y: to.cy }, { x: to.left, y: to.cy }, {
       color,
       width,
       endArrow: true,
@@ -525,17 +515,17 @@ function addOrthoConnector(
   }
 
   const detourY = Math.max(from.bottom, to.bottom) + 0.18 + detourSlot * 0.1
-  addStraightLine(pptx, slide, { x: from.cx, y: from.bottom }, { x: from.cx, y: detourY }, {
+  addStraightLine(gfx, { x: from.cx, y: from.bottom }, { x: from.cx, y: detourY }, {
     color,
     width,
     dash,
   })
-  addStraightLine(pptx, slide, { x: from.cx, y: detourY }, { x: to.cx, y: detourY }, {
+  addStraightLine(gfx, { x: from.cx, y: detourY }, { x: to.cx, y: detourY }, {
     color,
     width,
     dash,
   })
-  addStraightLine(pptx, slide, { x: to.cx, y: detourY }, { x: to.cx, y: to.bottom }, {
+  addStraightLine(gfx, { x: to.cx, y: detourY }, { x: to.cx, y: to.bottom }, {
     color,
     width,
     dash,
@@ -545,8 +535,7 @@ function addOrthoConnector(
 }
 
 function drawFlowLegend(
-  pptx: PptxGenJS,
-  slide: PptxGenJS.Slide,
+  gfx: SlideGfx,
   theme: ExportTheme,
   present: Set<FlowNodeVisual["legendKey"]>,
   hasForward: boolean,
@@ -565,52 +554,52 @@ function drawFlowLegend(
   }
 
   push("terminal", "開始・終了", (x, y) => {
-    slide.addShape(pptx.ShapeType.ellipse, {
+    gfx.addEllipse({
       x,
       y: y + 0.02,
       w: 0.18,
       h: 0.12,
-      fill: { color: "FFFFFF" },
+      fill: "FFFFFF",
       line: { color: theme.accent, width: 1.25 },
     })
   })
   push("process", "処理", (x, y) => {
-    slide.addShape(pptx.ShapeType.rect, {
+    gfx.addRect({
       x,
       y: y + 0.02,
       w: 0.18,
       h: 0.12,
-      fill: { color: "FFFFFF" },
+      fill: "FFFFFF",
       line: { color: "000000", width: 0.75 },
     })
   })
   push("approval", "承認", (x, y) => {
-    slide.addShape(pptx.ShapeType.rect, {
+    gfx.addRect({
       x,
       y: y + 0.02,
       w: 0.18,
       h: 0.12,
-      fill: { color: "DAE3F3" },
+      fill: "DAE3F3",
       line: { color: "2F5597", width: 0.75 },
     })
   })
   push("notify", "通知・連絡", (x, y) => {
-    slide.addShape(pptx.ShapeType.rect, {
+    gfx.addRect({
       x,
       y: y + 0.02,
       w: 0.18,
       h: 0.12,
-      fill: { color: "EDEDED" },
+      fill: "EDEDED",
       line: { color: "595959", width: 0.75 },
     })
   })
   push("decision", "判断・分岐", (x, y) => {
-    slide.addShape(pptx.ShapeType.flowChartDecision, {
+    gfx.addDiamond({
       x,
       y: y + 0.02,
       w: 0.18,
       h: 0.12,
-      fill: { color: "FFF2CC" },
+      fill: "FFF2CC",
       line: { color: "BF8F00", width: 0.75 },
     })
   })
@@ -620,12 +609,12 @@ function drawFlowLegend(
       key: "fwd",
       label: "順方向",
       draw: (x, y) => {
-        slide.addShape(pptx.ShapeType.line, {
+        gfx.addLine({
           x,
           y: y + 0.08,
           w: 0.22,
           h: 0,
-          line: { color: "000000", width: 2.25, endArrowType: "triangle" },
+          line: { color: "000000", width: 2.25, endArrow: true },
         })
       },
     })
@@ -635,17 +624,12 @@ function drawFlowLegend(
       key: "back",
       label: "差戻し・再実行",
       draw: (x, y) => {
-        slide.addShape(pptx.ShapeType.line, {
+        gfx.addLine({
           x,
           y: y + 0.08,
           w: 0.22,
           h: 0,
-          line: {
-            color: "595959",
-            width: 1,
-            dashType: "dash",
-            endArrowType: "triangle",
-          },
+          line: { color: "595959", width: 1, dash: true, endArrow: true },
         })
       },
     })
@@ -655,15 +639,15 @@ function drawFlowLegend(
       key: "off",
       label: "ページ間の接続",
       draw: (x, y) => {
-        slide.addShape(pptx.ShapeType.ellipse, {
+        gfx.addEllipse({
           x: x + 0.02,
           y: y + 0.02,
           w: 0.14,
           h: 0.14,
-          fill: { color: "C00000" },
+          fill: "C00000",
           line: { color: "000000", width: 0.75 },
         })
-        slide.addText("A", {
+        gfx.addText("A", {
           x: x + 0.02,
           y: y + 0.02,
           w: 0.14,
@@ -671,7 +655,6 @@ function drawFlowLegend(
           fontSize: 8,
           bold: true,
           color: "FFFFFF",
-          fontFace: FONT_FACE,
           align: "center",
           valign: "middle",
         })
@@ -689,7 +672,7 @@ function drawFlowLegend(
   if (items.length === 0) return
 
   const legendY = 6.4
-  slide.addShape(pptx.ShapeType.line, {
+  gfx.addLine({
     x: 0.32,
     y: 6.36,
     w: 12.7,
@@ -697,7 +680,7 @@ function drawFlowLegend(
     line: { color: "D9D9D9", width: 0.75 },
   })
 
-  slide.addText("凡例", {
+  gfx.addText("凡例", {
     x: 0.32,
     y: legendY,
     w: 0.55,
@@ -705,7 +688,6 @@ function drawFlowLegend(
     fontSize: 9,
     bold: true,
     color: "404040",
-    fontFace: FONT_FACE,
     valign: "middle",
   })
 
@@ -716,14 +698,13 @@ function drawFlowLegend(
     const x = startX + i * slot
     item.draw(x, legendY + 0.02)
     const textX = item.key === "sec" ? x : x + 0.24
-    slide.addText(item.label, {
+    gfx.addText(item.label, {
       x: textX,
       y: legendY,
       w: slot - 0.28,
       h: 0.28,
       fontSize: 9,
       color: "404040",
-      fontFace: FONT_FACE,
       valign: "middle",
     })
   })
@@ -738,8 +719,7 @@ type FlowPartitionOpts = {
 }
 
 function drawFlowOnSlide(
-  pptx: PptxGenJS,
-  slide: PptxGenJS.Slide,
+  gfx: SlideGfx,
   flow: FlowState,
   theme: ExportTheme,
   nodeFilter?: Set<string>,
@@ -785,21 +765,20 @@ function drawFlowOnSlide(
   const toY = (px: number) => plotY + (px - contentMinY) * scale
   const toS = (px: number) => px * scale
 
-  // レーン: 左チップ（theme.navy）＋プロットは白地＋薄い境界線のみ
   lanes.forEach((lane, i) => {
     const m = metrics[i] ?? { top: FLOW_ORIGIN_Y + i * 112, height: 112 }
     const y = toY(m.top)
     const h = toS(m.height)
-    slide.addShape(pptx.ShapeType.rect, {
+    gfx.addRect({
       x: areaX,
       y,
       w: labelW,
       h,
-      fill: { color: theme.navy },
-      line: { color: theme.navy, width: 0 },
+      fill: theme.navy,
+      line: null,
     })
     const laneFs = [...lane].length >= 7 ? 9 : 11
-    slide.addText(lane, {
+    gfx.addText(lane, {
       x: areaX + 0.04,
       y,
       w: labelW - 0.08,
@@ -807,12 +786,11 @@ function drawFlowOnSlide(
       fontSize: laneFs,
       bold: true,
       color: "FFFFFF",
-      fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
     })
     if (i > 0) {
-      slide.addShape(pptx.ShapeType.line, {
+      gfx.addLine({
         x: plotX,
         y,
         w: plotW,
@@ -822,16 +800,15 @@ function drawFlowOnSlide(
     }
   })
 
-  // プロット外枠（右端まで）
   const plotBottom = toY(last ? last.top + last.height : contentMaxY - SYSTEM_ROW_HEIGHT)
-  slide.addShape(pptx.ShapeType.line, {
+  gfx.addLine({
     x: plotX,
     y: plotY,
     w: plotW,
     h: 0,
     line: { color: "D9D9D9", width: 0.75 },
   })
-  slide.addShape(pptx.ShapeType.line, {
+  gfx.addLine({
     x: plotX,
     y: plotBottom,
     w: plotW,
@@ -839,7 +816,6 @@ function drawFlowOnSlide(
     line: { color: "D9D9D9", width: 0.75 },
   })
 
-  // 利用システム軸（ラベルがある列のみ・連続同一ラベルは結合）
   const systems = flow.layoutMeta?.columnSystems ?? []
   const sysY = toY(last ? last.top + last.height : contentMaxY - SYSTEM_ROW_HEIGHT)
   const sysH = Math.max(toS(SYSTEM_ROW_HEIGHT), 0.28)
@@ -868,7 +844,7 @@ function drawFlowOnSlide(
   }
 
   if (systemSpans.length > 0) {
-    slide.addText("利用システム", {
+    gfx.addText("利用システム", {
       x: areaX,
       y: sysY,
       w: labelW,
@@ -876,7 +852,6 @@ function drawFlowOnSlide(
       fontSize: 8,
       bold: true,
       color: "595959",
-      fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
     })
@@ -886,55 +861,51 @@ function drawFlowOnSlide(
       const pad = toS(COL_WIDTH) * 0.08
       const x = x0 + pad
       const w = Math.max(x1 - x0 - pad * 2, 0.4)
-      slide.addShape(pptx.ShapeType.flowChartMagneticDisk, {
+      gfx.addCylinder({
         x,
         y: sysY + 0.02,
         w,
         h: sysH - 0.04,
-        fill: { color: "FFFFFF" },
+        fill: "FFFFFF",
         line: { color: "595959", width: 0.75 },
       })
-      slide.addText(span.label, {
+      gfx.addText(span.label, {
         x,
         y: sysY + 0.02,
         w,
         h: sysH - 0.04,
         fontSize: 9,
         color: "000000",
-        fontFace: FONT_FACE,
         align: "center",
         valign: "middle",
       })
     }
   }
 
-  // 分割オーバーラップ列の下地
   const shadeCol = (col: number, caption: string) => {
     const x = toX(FLOW_ORIGIN_X + col * COL_WIDTH)
     const w = toS(COL_WIDTH)
-    slide.addShape(pptx.ShapeType.rect, {
+    gfx.addRect({
       x,
       y: plotY,
       w,
       h: Math.max(plotBottom - plotY, 0.2),
-      fill: { color: "F7F7F7" },
-      line: { color: "F7F7F7", width: 0 },
+      fill: "F7F7F7",
+      line: null,
     })
-    slide.addText(caption, {
+    gfx.addText(caption, {
       x,
       y: plotY + 0.04,
       w,
       h: 0.22,
       fontSize: 8,
       color: "595959",
-      fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
     })
   }
   if (partition?.overlapPrevCol != null) shadeCol(partition.overlapPrevCol, "前ページと重複")
   if (partition?.overlapNextCol != null) shadeCol(partition.overlapNextCol, "次ページに続く")
-
 
   type Box = {
     left: number
@@ -980,32 +951,30 @@ function drawFlowOnSlide(
     let mid: Pt
     if (sameCol && b.cy >= a.cy) {
       addStraightLine(
-        pptx,
-        slide,
+        gfx,
         { x: a.cx, y: a.bottom },
         { x: b.cx, y: b.top },
         { color: "000000", width: 2.25, endArrow: true },
       )
       mid = { x: a.cx, y: (a.bottom + b.top) / 2 }
     } else {
-      mid = addOrthoConnector(pptx, slide, a, b, backward, backward ? detourSlot++ : 0)
+      mid = addOrthoConnector(gfx, a, b, backward, backward ? detourSlot++ : 0)
     }
 
     const label =
       typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
       const lw = Math.min(1.1, Math.max(0.45, approxZenLen(label) * 0.125 + 0.1))
-      slide.addText(label, {
+      gfx.addText(label, {
         x: mid.x - lw / 2,
         y: mid.y - 0.13,
         w: lw,
         h: 0.26,
         fontSize: 9,
         color: "000000",
-        fontFace: FONT_FACE,
         align: "center",
         valign: "middle",
-        fill: { color: "FFFFFF" },
+        fill: "FFFFFF",
       })
     }
   }
@@ -1022,7 +991,7 @@ function drawFlowOnSlide(
     const h = toS(d.h)
     const visual = flowNodeVisual(kind, n.data.connectorId, theme)
     present.add(visual.legendKey)
-    const shape = flowNodeShape(pptx, kind)
+    const shape = flowNodeKind(kind)
     const num =
       kind === "start" || kind === "end" ? "" : formatFlowSectionNo(n.data.sectionNumber)
     if (num) hasSectionNo = true
@@ -1030,14 +999,17 @@ function drawFlowOnSlide(
     const measure = num ? `${num} ${body}` : body
     const fontSize = flowNodeFontSize(w, h, measure)
 
-    slide.addShape(shape, {
+    const shapeOpts = {
       x,
       y,
       w,
       h,
-      fill: { color: visual.fill },
+      fill: visual.fill,
       line: { color: visual.line, width: visual.lineW },
-    })
+    }
+    if (shape === "diamond") gfx.addDiamond(shapeOpts)
+    else if (shape === "ellipse") gfx.addEllipse(shapeOpts)
+    else gfx.addRect(shapeOpts)
 
     const tx = kind === "decision" ? x - 0.04 : x + 0.04
     const tw = kind === "decision" ? w + 0.08 : w - 0.08
@@ -1046,7 +1018,6 @@ function drawFlowOnSlide(
       y: y + 0.02,
       w: tw,
       h: h - 0.04,
-      fontFace: FONT_FACE,
       align: "center" as const,
       valign: "middle" as const,
       color: visual.text,
@@ -1055,19 +1026,18 @@ function drawFlowOnSlide(
     }
 
     if (num) {
-      slide.addText(
+      gfx.addText(
         [
-          { text: `${num} `, options: { bold: true, fontSize, color: visual.text } },
-          { text: body, options: { bold: false, fontSize, color: visual.text } },
+          { text: `${num} `, bold: true, fontSize, color: visual.text },
+          { text: body, bold: false, fontSize, color: visual.text },
         ],
         textOpts,
       )
     } else {
-      slide.addText(body, { ...textOpts, bold: kind === "start" || kind === "end" })
+      gfx.addText(body, { ...textOpts, bold: kind === "start" || kind === "end" })
     }
   }
 
-  // ページ跨ぎ接続記号（参考資料の赤丸＋英字）
   const offPage = partition?.offPage ?? []
   for (const link of offPage) {
     const box = boxes.get(link.nodeId)
@@ -1075,15 +1045,15 @@ function drawFlowOnSlide(
     const size = 0.22
     const x = link.side === "out" ? box.right + 0.04 : box.left - size - 0.04
     const y = box.cy - size / 2
-    slide.addShape(pptx.ShapeType.ellipse, {
+    gfx.addEllipse({
       x,
       y,
       w: size,
       h: size,
-      fill: { color: "C00000" },
+      fill: "C00000",
       line: { color: "000000", width: 1 },
     })
-    slide.addText(link.letter, {
+    gfx.addText(link.letter, {
       x,
       y,
       w: size,
@@ -1091,15 +1061,13 @@ function drawFlowOnSlide(
       fontSize: 10,
       bold: true,
       color: "FFFFFF",
-      fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
     })
   }
 
   drawFlowLegend(
-    pptx,
-    slide,
+    gfx,
     theme,
     present,
     hasForward,
@@ -1271,35 +1239,28 @@ function planPresentation(
   return { planned, sectionSlide, majorSlide, flowSlide }
 }
 
-/** マニュアルを PowerPoint 出力（フロー図・ハイパーリンク目次付き） */
-export async function buildManualPptxArrayBuffer(
+/** スライドデッキを共通描画（PPTX / PDF 同一デザイン） */
+async function renderManualDeck(
   project: Project,
   sections: ManualSection[],
-  options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
-): Promise<ArrayBuffer> {
-  const includeImages = options?.includeImages ?? true
-  const includeFlow = options?.includeFlow ?? true
-  const theme = resolveExportTheme(options?.template)
-  const pptx = new PptxGenJS()
-  pptx.author = "Rakumanual"
-  pptx.title = project.name
-  pptx.defineLayout({ name: "LAYOUT_WIDE", width: SLIDE_W, height: SLIDE_H })
-  pptx.layout = "LAYOUT_WIDE"
-
+  options: { includeImages: boolean; includeFlow: boolean; template?: string },
+  createSlide: () => SlideGfx,
+): Promise<void> {
+  const theme = resolveExportTheme(options.template)
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const preparedFlow = project.flow?.nodes?.length ? prepareFlow(project.flow) : project.flow
   const projectForExport = { ...project, flow: preparedFlow }
-  const { planned, sectionSlide, majorSlide, flowSlide } = planPresentation(
+  const { planned, flowSlide } = planPresentation(
     projectForExport,
     sections,
     {
-      includeImages,
-      includeFlow,
+      includeImages: options.includeImages,
+      includeFlow: options.includeFlow,
     },
   )
 
   const imageNaturalSize = new Map<string, { w: number; h: number } | null>()
-  if (includeImages) {
+  if (options.includeImages) {
     const urls = [
       ...new Set(
         planned
@@ -1317,18 +1278,18 @@ export async function buildManualPptxArrayBuffer(
 
   planned.forEach((item, idx) => {
     const pageNum = idx + 1
-    const slide = pptx.addSlide()
+    const gfx = createSlide()
 
     if (item.kind === "cover") {
-      slide.addShape(pptx.ShapeType.rect, {
+      gfx.addRect({
         x: 0,
         y: 0,
         w: SLIDE_W,
         h: SLIDE_H,
-        fill: { color: theme.coverBg },
-        line: { width: 0 },
+        fill: theme.coverBg,
+        line: null,
       })
-      slide.addText(project.name, {
+      gfx.addText(project.name, {
         x: 0.8,
         y: 2.6,
         w: 11.7,
@@ -1336,17 +1297,15 @@ export async function buildManualPptxArrayBuffer(
         fontSize: 36,
         bold: true,
         color: "FFFFFF",
-        fontFace: FONT_FACE,
         align: "center",
       })
-      slide.addText("業務マニュアル", {
+      gfx.addText("業務マニュアル", {
         x: 0.8,
         y: 4.2,
         w: 11.7,
         h: 0.5,
         fontSize: 18,
         color: "FFFFFF",
-        fontFace: FONT_FACE,
         align: "center",
       })
       return
@@ -1355,9 +1314,9 @@ export async function buildManualPptxArrayBuffer(
     if (item.kind === "flow") {
       const title =
         item.total > 1 ? `業務フロー図（${item.part}/${item.total}）` : "業務フロー図"
-      addChrome(pptx, slide, theme, { title, pageNum })
+      addChrome(gfx, theme, { title, pageNum })
       if (preparedFlow) {
-        drawFlowOnSlide(pptx, slide, preparedFlow, theme, new Set(item.nodes.map((n) => n.id)), {
+        drawFlowOnSlide(gfx, preparedFlow, theme, new Set(item.nodes.map((n) => n.id)), {
           overlapPrevCol: item.overlapPrevCol,
           overlapNextCol: item.overlapNextCol,
           offPage: item.offPage,
@@ -1367,76 +1326,40 @@ export async function buildManualPptxArrayBuffer(
     }
 
     if (item.kind === "toc") {
-      addChrome(pptx, slide, theme, { title: "目次", pageNum })
-      const left: PptxGenJS.TextProps[] = []
-      const right: PptxGenJS.TextProps[] = []
+      addChrome(gfx, theme, { title: "目次", pageNum })
+      const left: GfxTextRun[] = []
+      const right: GfxTextRun[] = []
       const mid = Math.ceil(outline.length / 2)
 
       if (flowSlide != null) {
-        left.push({
-          text: "業務フロー図",
-          options: {
-            bold: true,
-            fontSize: 13,
-            breakLine: true,
-            color: "0563C1",
-            hyperlink: { slide: flowSlide, tooltip: "業務フロー図へ" },
-          },
-        })
-        left.push({ text: " ", options: { fontSize: 6, breakLine: true } })
+        left.push({ text: "業務フロー図", bold: true, fontSize: 13, color: "0563C1", breakLine: true })
+        left.push({ text: " ", fontSize: 6, breakLine: true })
       }
 
       outline.forEach((major, mi) => {
         const bucket = mi < mid ? left : right
-        const majorTarget = majorSlide.get(major.number) ?? pageNum
         bucket.push({
           text: formatMajorTitle(major.number, major.title),
-          options: {
-            bold: true,
-            fontSize: 13,
-            breakLine: true,
-            color: theme.navy,
-            hyperlink: { slide: majorTarget, tooltip: "この章へ" },
-          },
+          bold: true,
+          fontSize: 13,
+          color: theme.navy,
+          breakLine: true,
         })
         for (const medium of major.mediums) {
           const first = medium.sections[0]
           const label = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
-          const target = first ? sectionSlide.get(first.id) ?? majorTarget : majorTarget
-          bucket.push({
-            text: `  ${label}`,
-            options: {
-              fontSize: 11,
-              breakLine: true,
-              color: "0563C1",
-              hyperlink: { slide: target, tooltip: label },
-            },
-          })
+          bucket.push({ text: `  ${label}`, fontSize: 11, color: "0563C1", breakLine: true })
         }
-        bucket.push({ text: " ", options: { fontSize: 6, breakLine: true } })
+        bucket.push({ text: " ", fontSize: 6, breakLine: true })
       })
 
-      slide.addText(left, {
-        x: 0.45,
-        y: 1.3,
-        w: 6.0,
-        h: 5.2,
-        fontFace: FONT_FACE,
-        valign: "top",
-      })
-      slide.addText(right, {
-        x: 6.7,
-        y: 1.3,
-        w: 6.0,
-        h: 5.2,
-        fontFace: FONT_FACE,
-        valign: "top",
-      })
+      gfx.addText(left, { x: 0.45, y: 1.3, w: 6.0, h: 5.2, valign: "top" })
+      gfx.addText(right, { x: 6.7, y: 1.3, w: 6.0, h: 5.2, valign: "top" })
       return
     }
 
     if (item.kind === "major") {
-      slide.addText(formatMajorTitle(item.majorNumber, item.majorTitle), {
+      gfx.addText(formatMajorTitle(item.majorNumber, item.majorTitle), {
         x: 0.367,
         y: 3.1,
         w: 12.6,
@@ -1444,79 +1367,143 @@ export async function buildManualPptxArrayBuffer(
         fontSize: 32,
         bold: true,
         color: theme.frame,
-        fontFace: FONT_FACE,
         align: "center",
         valign: "middle",
       })
-      slide.addText(String(pageNum), {
+      gfx.addText(String(pageNum), {
         x: 12.144,
         y: 7.022,
         w: 0.836,
         h: 0.307,
         fontSize: 11,
         color: "444444",
-        fontFace: FONT_FACE,
         align: "right",
       })
       return
     }
 
-    // procedure
     const part = item.part
     const slideTitle = formatMajorTitle(part.majorNumber, part.majorTitle)
-    addChrome(pptx, slide, theme, {
+    addChrome(gfx, theme, {
       title: slideTitle.length > 40 ? slideTitle.slice(0, 40) + "…" : slideTitle,
       chip: part.chip,
       pageNum,
     })
 
-    const items = buildBodyItems(part.blocks, part.mediumHeading)
-    const runs = bodyToPptxRuns(items)
+    const bodyItems = buildBodyItems(part.blocks, part.mediumHeading)
+    const runs = bodyToGfxRuns(bodyItems)
     const hasImage = Boolean(part.imageUrl)
     const imageOnly = hasImage && part.blocks.length === 0
     const natural = part.imageUrl ? imageNaturalSize.get(part.imageUrl) : null
     const layout = hasImage
       ? layoutProcedureImage({
           hasBody: part.blocks.length > 0,
-          bodyItems: items,
+          bodyItems,
           imageOnly,
           naturalPxW: natural?.w,
           naturalPxH: natural?.h,
         })
       : null
 
-    slide.addText(
-      runs.length ? runs : [{ text: part.mediumHeading, options: { bold: true, fontSize: 16 } }],
+    gfx.addText(
+      runs.length ? runs : [{ text: part.mediumHeading, bold: true, fontSize: 16 }],
       {
         x: layout?.text.x ?? 0.4,
         y: layout?.text.y ?? 1.28,
         w: layout?.text.w ?? 12.5,
         h: layout?.text.h ?? 5.2,
-        fontFace: FONT_FACE,
         valign: "top",
       },
     )
 
     if (part.imageUrl && layout && layout.image.w > 0 && layout.image.h > 0) {
-      // w/h は原寸キャップ済みの最終寸法（縦横比維持）。contain での再拡大はしない
-      slide.addImage({
+      gfx.addImage({
         data: part.imageUrl,
         x: layout.image.x,
         y: layout.image.y,
         w: layout.image.w,
         h: layout.image.h,
-        shadow: {
-          type: "outer",
-          color: "000000",
-          blur: 5,
-          opacity: 0.18,
-          offset: 1.5,
-        },
       })
     }
   })
+}
+
+/** マニュアルを PowerPoint 出力（フロー図・目次付き） */
+export async function buildManualPptxArrayBuffer(
+  project: Project,
+  sections: ManualSection[],
+  options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
+): Promise<ArrayBuffer> {
+  const includeImages = options?.includeImages ?? true
+  const includeFlow = options?.includeFlow ?? true
+  const pptx = new PptxGenJS()
+  pptx.author = "Rakumanual"
+  pptx.title = project.name
+  pptx.defineLayout({ name: "LAYOUT_WIDE", width: SLIDE_W, height: SLIDE_H })
+  pptx.layout = "LAYOUT_WIDE"
+
+  await renderManualDeck(
+    project,
+    sections,
+    { includeImages, includeFlow, template: options?.template },
+    () => createPptxSlideGfx(pptx, pptx.addSlide()),
+  )
 
   return (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
+}
+
+const BUNDLED_CJK_FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Regular.ttf`
+const PDF_FONT_NAME = "Meiryo"
+let pdfFontBase64Cache: string | null = null
+
+async function loadPdfFontBase64(): Promise<string> {
+  if (pdfFontBase64Cache) return pdfFontBase64Cache
+  const res = await fetch(BUNDLED_CJK_FONT_URL)
+  if (!res.ok) throw new Error("日本語フォントの読み込みに失敗しました")
+  const buf = await res.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ""
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  pdfFontBase64Cache = btoa(binary)
+  return pdfFontBase64Cache
+}
+
+/** PowerPoint と同じワイドスライドデザインの PDF を生成 */
+export async function buildManualPdfBlob(
+  project: Project,
+  sections: ManualSection[],
+  options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
+): Promise<Blob> {
+  const includeImages = options?.includeImages ?? true
+  const includeFlow = options?.includeFlow ?? true
+  const fontB64 = await loadPdfFontBase64()
+
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "in",
+    format: [SLIDE_W, SLIDE_H],
+  })
+  doc.addFileToVFS(`${PDF_FONT_NAME}.ttf`, fontB64)
+  doc.addFont(`${PDF_FONT_NAME}.ttf`, PDF_FONT_NAME, "normal")
+  doc.addFont(`${PDF_FONT_NAME}.ttf`, PDF_FONT_NAME, "bold")
+  doc.setFont(PDF_FONT_NAME, "normal")
+
+  let first = true
+  await renderManualDeck(
+    project,
+    sections,
+    { includeImages, includeFlow, template: options?.template },
+    () => {
+      if (!first) doc.addPage([SLIDE_W, SLIDE_H], "landscape")
+      first = false
+      return createPdfSlideGfx(doc)
+    },
+  )
+
+  return doc.output("blob")
 }
 
 export async function exportManualPptx(
@@ -1528,4 +1515,14 @@ export async function exportManualPptx(
   const withFont = await applyMeiryoFontToPptx(raw)
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
   downloadBlob(withFont, `${safeName}.pptx`)
+}
+
+export async function exportManualPdfSlides(
+  project: Project,
+  sections: ManualSection[],
+  options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
+): Promise<void> {
+  const blob = await buildManualPdfBlob(project, sections, options)
+  const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
+  downloadBlob(blob, `${safeName}.pdf`)
 }
