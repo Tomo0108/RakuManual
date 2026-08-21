@@ -240,15 +240,81 @@ function formatFlowSectionNo(num?: string): string {
   return n.endsWith(".") ? n : `${n}.`
 }
 
-function nodeFill(kind: string | undefined): string {
-  if (kind === "start" || kind === "end") return "C00000"
-  return "FFFFFF"
+/** 全角換算のおよその文字数（半角は 0.5） */
+function approxZenLen(s: string): number {
+  let n = 0
+  for (const ch of s) n += ch.charCodeAt(0) <= 0xff ? 0.5 : 1
+  return n
 }
 
-function nodeShape(pptx: PptxGenJS, kind: string | undefined) {
-  if (kind === "decision") return pptx.ShapeType.diamond
+function flowNodeFontSize(wIn: number, hIn: number, text: string): number {
+  const chars9 = Math.floor((wIn - 0.1) / 0.125) * Math.floor((hIn - 0.08) / 0.156)
+  if (chars9 >= 4 && approxZenLen(text) <= Math.max(chars9, 4)) return 9
+  return 8
+}
+
+type FlowNodeVisual = {
+  fill: string
+  line: string
+  lineW: number
+  text: string
+  legendKey: "terminal" | "process" | "approval" | "notify" | "decision"
+}
+
+function flowNodeVisual(
+  kind: string | undefined,
+  connectorId: string | undefined,
+  theme: ExportTheme,
+): FlowNodeVisual {
+  if (kind === "start" || kind === "end") {
+    return {
+      fill: "FFFFFF",
+      line: theme.accent,
+      lineW: 2.25,
+      text: "000000",
+      legendKey: "terminal",
+    }
+  }
+  if (kind === "decision") {
+    return {
+      fill: "FFF2CC",
+      line: "BF8F00",
+      lineW: 1.5,
+      text: "000000",
+      legendKey: "decision",
+    }
+  }
+  if (connectorId === "approval") {
+    return {
+      fill: "DAE3F3",
+      line: "2F5597",
+      lineW: 1.5,
+      text: "000000",
+      legendKey: "approval",
+    }
+  }
+  if (connectorId === "notification") {
+    return {
+      fill: "EDEDED",
+      line: "595959",
+      lineW: 1.5,
+      text: "000000",
+      legendKey: "notify",
+    }
+  }
+  return {
+    fill: "FFFFFF",
+    line: "000000",
+    lineW: 1.5,
+    text: "000000",
+    legendKey: "process",
+  }
+}
+
+function flowNodeShape(pptx: PptxGenJS, kind: string | undefined) {
+  if (kind === "decision") return pptx.ShapeType.flowChartDecision
   if (kind === "start" || kind === "end") return pptx.ShapeType.ellipse
-  return pptx.ShapeType.roundRect
+  return pptx.ShapeType.rect
 }
 
 type Pt = { x: number; y: number }
@@ -266,7 +332,7 @@ function addStraightLine(
 
   const lineOpts = {
     color: opts.color ?? "000000",
-    width: opts.width ?? 1.5,
+    width: opts.width ?? 2.25,
     dashType: opts.dash ? ("dash" as const) : undefined,
     endArrowType: (opts.endArrow ? "triangle" : "none") as "triangle" | "none",
   }
@@ -309,9 +375,10 @@ function addOrthoConnector(
   from: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
   to: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
   backward: boolean,
-) {
-  const color = "000000"
-  const width = 1.5
+  detourSlot = 0,
+): Pt {
+  const color = backward ? "595959" : "000000"
+  const width = backward ? 1.0 : 2.25
   const dash = backward
 
   if (!backward && Math.abs(from.cy - to.cy) < 0.04) {
@@ -320,7 +387,7 @@ function addOrthoConnector(
       width,
       endArrow: true,
     })
-    return
+    return { x: (from.right + to.left) / 2, y: from.cy }
   }
 
   if (!backward && to.left >= from.right - 0.02) {
@@ -335,11 +402,10 @@ function addOrthoConnector(
       width,
       endArrow: true,
     })
-    return
+    return { x: midX, y: (from.cy + to.cy) / 2 }
   }
 
-  // 差戻し・後退: 下側迂回
-  const detourY = Math.max(from.bottom, to.bottom) + 0.18
+  const detourY = Math.max(from.bottom, to.bottom) + 0.18 + detourSlot * 0.1
   addStraightLine(pptx, slide, { x: from.cx, y: from.bottom }, { x: from.cx, y: detourY }, {
     color,
     width,
@@ -356,13 +422,170 @@ function addOrthoConnector(
     dash,
     endArrow: true,
   })
+  return { x: (from.cx + to.cx) / 2, y: detourY }
+}
+
+function drawFlowLegend(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  theme: ExportTheme,
+  present: Set<FlowNodeVisual["legendKey"]>,
+  hasForward: boolean,
+  hasBackward: boolean,
+  hasSectionNo: boolean,
+) {
+  const items: { key: string; label: string; draw: (x: number, y: number) => void }[] = []
+
+  const push = (
+    key: FlowNodeVisual["legendKey"],
+    label: string,
+    draw: (x: number, y: number) => void,
+  ) => {
+    if (present.has(key)) items.push({ key, label, draw })
+  }
+
+  push("terminal", "開始・終了", (x, y) => {
+    slide.addShape(pptx.ShapeType.ellipse, {
+      x,
+      y: y + 0.02,
+      w: 0.18,
+      h: 0.12,
+      fill: { color: "FFFFFF" },
+      line: { color: theme.accent, width: 1.25 },
+    })
+  })
+  push("process", "処理", (x, y) => {
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y: y + 0.02,
+      w: 0.18,
+      h: 0.12,
+      fill: { color: "FFFFFF" },
+      line: { color: "000000", width: 0.75 },
+    })
+  })
+  push("approval", "承認", (x, y) => {
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y: y + 0.02,
+      w: 0.18,
+      h: 0.12,
+      fill: { color: "DAE3F3" },
+      line: { color: "2F5597", width: 0.75 },
+    })
+  })
+  push("notify", "通知・連絡", (x, y) => {
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y: y + 0.02,
+      w: 0.18,
+      h: 0.12,
+      fill: { color: "EDEDED" },
+      line: { color: "595959", width: 0.75 },
+    })
+  })
+  push("decision", "判断・分岐", (x, y) => {
+    slide.addShape(pptx.ShapeType.flowChartDecision, {
+      x,
+      y: y + 0.02,
+      w: 0.18,
+      h: 0.12,
+      fill: { color: "FFF2CC" },
+      line: { color: "BF8F00", width: 0.75 },
+    })
+  })
+
+  if (hasForward) {
+    items.push({
+      key: "fwd",
+      label: "順方向",
+      draw: (x, y) => {
+        slide.addShape(pptx.ShapeType.line, {
+          x,
+          y: y + 0.08,
+          w: 0.22,
+          h: 0,
+          line: { color: "000000", width: 2.25, endArrowType: "triangle" },
+        })
+      },
+    })
+  }
+  if (hasBackward) {
+    items.push({
+      key: "back",
+      label: "差戻し・再実行",
+      draw: (x, y) => {
+        slide.addShape(pptx.ShapeType.line, {
+          x,
+          y: y + 0.08,
+          w: 0.22,
+          h: 0,
+          line: {
+            color: "595959",
+            width: 1,
+            dashType: "dash",
+            endArrowType: "triangle",
+          },
+        })
+      },
+    })
+  }
+  if (hasSectionNo) {
+    items.push({
+      key: "sec",
+      label: "1-1. 手順書の項番",
+      draw: () => {},
+    })
+  }
+
+  if (items.length === 0) return
+
+  const legendY = 6.4
+  slide.addShape(pptx.ShapeType.line, {
+    x: 0.32,
+    y: 6.36,
+    w: 12.7,
+    h: 0,
+    line: { color: "D9D9D9", width: 0.75 },
+  })
+
+  slide.addText("凡例", {
+    x: 0.32,
+    y: legendY,
+    w: 0.55,
+    h: 0.28,
+    fontSize: 9,
+    bold: true,
+    color: "404040",
+    fontFace: FONT_FACE,
+    valign: "middle",
+  })
+
+  const startX = 0.9
+  const avail = 12.1
+  const slot = Math.min(2.2, avail / items.length)
+  items.forEach((item, i) => {
+    const x = startX + i * slot
+    item.draw(x, legendY + 0.02)
+    const textX = item.key === "sec" ? x : x + 0.24
+    slide.addText(item.label, {
+      x: textX,
+      y: legendY,
+      w: slot - 0.28,
+      h: 0.28,
+      fontSize: 9,
+      color: "404040",
+      fontFace: FONT_FACE,
+      valign: "middle",
+    })
+  })
 }
 
 function drawFlowOnSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
   flow: FlowState,
-  _theme: ExportTheme,
+  theme: ExportTheme,
   nodeFilter?: Set<string>,
 ) {
   const nodes = (nodeFilter ? flow.nodes.filter((n) => nodeFilter.has(n.id)) : flow.nodes).filter(
@@ -373,7 +596,6 @@ function drawFlowOnSlide(
   const nodeIds = new Set(nodes.map((n) => n.id))
   const edges = flow.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
   const lanes = flow.lanes.length > 0 ? flow.lanes : ["担当"]
-  // レーン高さは全フローの metrics（分割スライドでも行位置を揃える）
   const metrics = computeLaneRowMetrics(flow.nodes, lanes)
 
   const cols = nodes.map((n) => colFromX(n.position.x, dimForKind(n.data.kind ?? "process").w))
@@ -390,79 +612,116 @@ function drawFlowOnSlide(
   const pxH = Math.max(contentMaxY - contentMinY, 1)
 
   const areaX = 0.32
-  const areaY = 1.28
+  const areaY = 1.3
   const areaW = 12.7
-  const areaH = 5.35
-  const labelW = 1.05
+  const areaH = 4.96
+  const labelW = 1.2
   const plotX = areaX + labelW
   const plotY = areaY
   const plotW = areaW - labelW
   const plotH = areaH
   const scale = Math.min(plotW / pxW, plotH / pxH)
+  const usedW = pxW * scale
+  const offsetX = Math.max(0, (plotW - usedW) / 2)
 
-  const toX = (px: number) => plotX + (px - contentMinX) * scale
+  const toX = (px: number) => plotX + offsetX + (px - contentMinX) * scale
   const toY = (px: number) => plotY + (px - contentMinY) * scale
   const toS = (px: number) => px * scale
 
-  // レーン帯（可変行高を同じスケールで）
+  // レーン: 左チップ（theme.navy）＋プロットは白地＋薄い境界線のみ
   lanes.forEach((lane, i) => {
     const m = metrics[i] ?? { top: FLOW_ORIGIN_Y + i * 112, height: 112 }
     const y = toY(m.top)
     const h = toS(m.height)
-    const bandFill = i % 2 === 0 ? "F2F2F2" : "FFFFFF"
     slide.addShape(pptx.ShapeType.rect, {
       x: areaX,
       y,
       w: labelW,
       h,
-      fill: { color: i % 2 === 0 ? "D9E2F3" : "BDD7EE" },
-      line: { color: "000000", width: 1 },
+      fill: { color: theme.navy },
+      line: { color: theme.navy, width: 0 },
     })
+    const laneFs = [...lane].length >= 7 ? 9 : 11
     slide.addText(lane, {
-      x: areaX,
+      x: areaX + 0.04,
       y,
-      w: labelW,
+      w: labelW - 0.08,
       h,
-      fontSize: Math.min(11, Math.max(8, h * 10)),
+      fontSize: laneFs,
       bold: true,
-      color: "000000",
+      color: "FFFFFF",
       fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
     })
-    slide.addShape(pptx.ShapeType.rect, {
-      x: plotX,
-      y,
-      w: toS(pxW),
-      h,
-      fill: { color: bandFill },
-      line: { color: "000000", width: 1 },
-    })
+    if (i > 0) {
+      slide.addShape(pptx.ShapeType.line, {
+        x: plotX,
+        y,
+        w: plotW,
+        h: 0,
+        line: { color: "D9D9D9", width: 0.75 },
+      })
+    }
   })
 
-  // 利用システム軸
+  // プロット外枠（右端まで）
+  const plotBottom = toY(last ? last.top + last.height : contentMaxY - SYSTEM_ROW_HEIGHT)
+  slide.addShape(pptx.ShapeType.line, {
+    x: plotX,
+    y: plotY,
+    w: plotW,
+    h: 0,
+    line: { color: "D9D9D9", width: 0.75 },
+  })
+  slide.addShape(pptx.ShapeType.line, {
+    x: plotX,
+    y: plotBottom,
+    w: plotW,
+    h: 0,
+    line: { color: "D9D9D9", width: 0.75 },
+  })
+
+  // 利用システム軸（ラベルがある列のみ・磁気ディスク）
   const systems = flow.layoutMeta?.columnSystems ?? []
   const sysY = toY(last ? last.top + last.height : contentMaxY - SYSTEM_ROW_HEIGHT)
   const sysH = Math.max(toS(SYSTEM_ROW_HEIGHT), 0.28)
-  for (let c = minCol; c <= maxCol; c++) {
+  const systemEntries = Array.from({ length: maxCol - minCol + 1 }, (_, i) => {
+    const c = minCol + i
     const entry = systems[c]
-    const x = toX(FLOW_ORIGIN_X + c * COL_WIDTH)
-    const w = toS(COL_WIDTH)
-    slide.addShape(pptx.ShapeType.rect, {
-      x,
+    return entry?.label && entry.label !== "—" ? { c, label: entry.label } : null
+  }).filter(Boolean) as { c: number; label: string }[]
+
+  if (systemEntries.length > 0) {
+    slide.addText("利用システム", {
+      x: areaX,
       y: sysY,
-      w,
+      w: labelW,
       h: sysH,
-      fill: { color: "FFF2CC" },
-      line: { color: "000000", width: 0.75 },
+      fontSize: 8,
+      bold: true,
+      color: "595959",
+      fontFace: FONT_FACE,
+      align: "center",
+      valign: "middle",
     })
-    if (entry?.label && entry.label !== "—") {
-      slide.addText(entry.label, {
+    for (const { c, label } of systemEntries) {
+      const x = toX(FLOW_ORIGIN_X + c * COL_WIDTH) + toS(COL_WIDTH) * 0.08
+      const w = toS(COL_WIDTH) * 0.84
+      slide.addShape(pptx.ShapeType.flowChartMagneticDisk, {
         x,
-        y: sysY,
+        y: sysY + 0.02,
         w,
-        h: sysH,
-        fontSize: 8,
+        h: sysH - 0.04,
+        fill: { color: "FFFFFF" },
+        line: { color: "595959", width: 0.75 },
+      })
+      slide.addText(label, {
+        x,
+        y: sysY + 0.02,
+        w,
+        h: sysH - 0.04,
+        fontSize: 9,
         color: "000000",
         fontFace: FONT_FACE,
         align: "center",
@@ -498,44 +757,56 @@ function drawFlowOnSlide(
     })
   }
 
-  // コネクタ（ノードの下）
+  let hasForward = false
+  let hasBackward = false
+  let detourSlot = 0
+
   for (const e of edges as FlowEdge[]) {
     const a = boxes.get(e.source)
     const b = boxes.get(e.target)
     if (!a || !b) continue
 
-    const sameCol = Math.abs(a.cx - b.cx) < 0.22
+    const sameCol = a.col === b.col
     const backward = b.col < a.col
+    if (backward) hasBackward = true
+    else hasForward = true
 
+    let mid: Pt
     if (sameCol && b.cy >= a.cy) {
       addStraightLine(
         pptx,
         slide,
         { x: a.cx, y: a.bottom },
         { x: b.cx, y: b.top },
-        { color: "000000", width: 1.5, endArrow: true },
+        { color: "000000", width: 2.25, endArrow: true },
       )
+      mid = { x: a.cx, y: (a.bottom + b.top) / 2 }
     } else {
-      addOrthoConnector(pptx, slide, a, b, backward)
+      mid = addOrthoConnector(pptx, slide, a, b, backward, backward ? detourSlot++ : 0)
     }
 
     const label =
       typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
+      const lw = Math.min(1.1, Math.max(0.45, approxZenLen(label) * 0.125 + 0.1))
       slide.addText(label, {
-        x: (a.cx + b.cx) / 2 - 0.55,
-        y: (a.cy + b.cy) / 2 - 0.14,
-        w: 1.1,
+        x: mid.x - lw / 2,
+        y: mid.y - 0.13,
+        w: lw,
         h: 0.26,
-        fontSize: 8,
+        fontSize: 9,
         color: "000000",
         fontFace: FONT_FACE,
         align: "center",
+        valign: "middle",
+        fill: { color: "FFFFFF" },
       })
     }
   }
 
-  // ノード
+  const present = new Set<FlowNodeVisual["legendKey"]>()
+  let hasSectionNo = false
+
   for (const n of nodes) {
     const kind = n.data.kind
     const d = dimForKind(kind ?? "process")
@@ -543,55 +814,54 @@ function drawFlowOnSlide(
     const y = toY(n.position.y)
     const w = toS(d.w)
     const h = toS(d.h)
-    const fill = nodeFill(kind)
-    const textColor = kind === "start" || kind === "end" ? "FFFFFF" : "000000"
-    const shape = nodeShape(pptx, kind)
-    const num = formatFlowSectionNo(n.data.sectionNumber)
-    const label = num ? `${num}\n${n.data.label}` : n.data.label
-    const fontSize = Math.min(10, Math.max(7, Math.min(w, h) * 9))
+    const visual = flowNodeVisual(kind, n.data.connectorId, theme)
+    present.add(visual.legendKey)
+    const shape = flowNodeShape(pptx, kind)
+    const num =
+      kind === "start" || kind === "end" ? "" : formatFlowSectionNo(n.data.sectionNumber)
+    if (num) hasSectionNo = true
+    const body = n.data.label ?? ""
+    const measure = num ? `${num} ${body}` : body
+    const fontSize = flowNodeFontSize(w, h, measure)
 
-    const shapeOpts: {
-      x: number
-      y: number
-      w: number
-      h: number
-      fill: { color: string }
-      line: { color: string; width: number }
-      rectRadius?: number
-    } = {
+    slide.addShape(shape, {
       x,
       y,
       w,
       h,
-      fill: { color: fill },
-      line: { color: "000000", width: 1.5 },
-    }
-    if (shape === pptx.ShapeType.roundRect) shapeOpts.rectRadius = 0.08
-    slide.addShape(shape, shapeOpts)
-    slide.addText(label, {
-      x: x + 0.04,
-      y: y + 0.02,
-      w: w - 0.08,
-      h: h - 0.04,
-      fontSize,
-      color: textColor,
-      fontFace: FONT_FACE,
-      align: "center",
-      valign: "middle",
-      bold: true,
+      fill: { color: visual.fill },
+      line: { color: visual.line, width: visual.lineW },
     })
+
+    const tx = kind === "decision" ? x - 0.04 : x + 0.04
+    const tw = kind === "decision" ? w + 0.08 : w - 0.08
+    const textOpts = {
+      x: tx,
+      y: y + 0.02,
+      w: tw,
+      h: h - 0.04,
+      fontFace: FONT_FACE,
+      align: "center" as const,
+      valign: "middle" as const,
+      color: visual.text,
+      fontSize,
+      margin: 2,
+    }
+
+    if (num) {
+      slide.addText(
+        [
+          { text: `${num} `, options: { bold: true, fontSize, color: visual.text } },
+          { text: body, options: { bold: false, fontSize, color: visual.text } },
+        ],
+        textOpts,
+      )
+    } else {
+      slide.addText(body, { ...textOpts, bold: kind === "start" || kind === "end" })
+    }
   }
 
-  // 凡例（枠外フッター付近・重なり回避）
-  slide.addText("凡例　赤丸:開始/終了　ひし形:分岐　四角:処理", {
-    x: 0.35,
-    y: 6.75,
-    w: 10,
-    h: 0.28,
-    fontSize: 9,
-    color: "444444",
-    fontFace: FONT_FACE,
-  })
+  drawFlowLegend(pptx, slide, theme, present, hasForward, hasBackward, hasSectionNo)
 }
 
 /** 列が多いフローは複数スライドに分割（可読なノードサイズを確保） */
