@@ -433,6 +433,7 @@ function drawFlowLegend(
   hasForward: boolean,
   hasBackward: boolean,
   hasSectionNo: boolean,
+  hasOffPage: boolean,
 ) {
   const items: { key: string; label: string; draw: (x: number, y: number) => void }[] = []
 
@@ -530,6 +531,34 @@ function drawFlowLegend(
       },
     })
   }
+  if (hasOffPage) {
+    items.push({
+      key: "off",
+      label: "ページ間の接続",
+      draw: (x, y) => {
+        slide.addShape(pptx.ShapeType.ellipse, {
+          x: x + 0.02,
+          y: y + 0.02,
+          w: 0.14,
+          h: 0.14,
+          fill: { color: "C00000" },
+          line: { color: "000000", width: 0.75 },
+        })
+        slide.addText("A", {
+          x: x + 0.02,
+          y: y + 0.02,
+          w: 0.14,
+          h: 0.14,
+          fontSize: 8,
+          bold: true,
+          color: "FFFFFF",
+          fontFace: FONT_FACE,
+          align: "center",
+          valign: "middle",
+        })
+      },
+    })
+  }
   if (hasSectionNo) {
     items.push({
       key: "sec",
@@ -563,7 +592,7 @@ function drawFlowLegend(
 
   const startX = 0.9
   const avail = 12.1
-  const slot = Math.min(2.2, avail / items.length)
+  const slot = Math.min(1.85, avail / items.length)
   items.forEach((item, i) => {
     const x = startX + i * slot
     item.draw(x, legendY + 0.02)
@@ -581,12 +610,21 @@ function drawFlowLegend(
   })
 }
 
+type FlowOffPageLink = { letter: string; nodeId: string; side: "out" | "in" }
+
+type FlowPartitionOpts = {
+  overlapPrevCol?: number
+  overlapNextCol?: number
+  offPage?: FlowOffPageLink[]
+}
+
 function drawFlowOnSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
   flow: FlowState,
   theme: ExportTheme,
   nodeFilter?: Set<string>,
+  partition?: FlowPartitionOpts,
 ) {
   const nodes = (nodeFilter ? flow.nodes.filter((n) => nodeFilter.has(n.id)) : flow.nodes).filter(
     (n) => n.data.kind !== undefined || n.data.label,
@@ -682,7 +720,7 @@ function drawFlowOnSlide(
     line: { color: "D9D9D9", width: 0.75 },
   })
 
-  // 利用システム軸（ラベルがある列のみ・磁気ディスク）
+  // 利用システム軸（ラベルがある列のみ・連続同一ラベルは結合）
   const systems = flow.layoutMeta?.columnSystems ?? []
   const sysY = toY(last ? last.top + last.height : contentMaxY - SYSTEM_ROW_HEIGHT)
   const sysH = Math.max(toS(SYSTEM_ROW_HEIGHT), 0.28)
@@ -692,7 +730,25 @@ function drawFlowOnSlide(
     return entry?.label && entry.label !== "—" ? { c, label: entry.label } : null
   }).filter(Boolean) as { c: number; label: string }[]
 
-  if (systemEntries.length > 0) {
+  type SysSpan = { from: number; to: number; label: string }
+  const systemSpans: SysSpan[] = []
+  for (let i = 0; i < systemEntries.length; ) {
+    const start = systemEntries[i]!
+    let end = start.c
+    let j = i + 1
+    while (
+      j < systemEntries.length &&
+      systemEntries[j]!.label === start.label &&
+      systemEntries[j]!.c === end + 1
+    ) {
+      end = systemEntries[j]!.c
+      j += 1
+    }
+    systemSpans.push({ from: start.c, to: end, label: start.label })
+    i = j
+  }
+
+  if (systemSpans.length > 0) {
     slide.addText("利用システム", {
       x: areaX,
       y: sysY,
@@ -705,9 +761,12 @@ function drawFlowOnSlide(
       align: "center",
       valign: "middle",
     })
-    for (const { c, label } of systemEntries) {
-      const x = toX(FLOW_ORIGIN_X + c * COL_WIDTH) + toS(COL_WIDTH) * 0.08
-      const w = toS(COL_WIDTH) * 0.84
+    for (const span of systemSpans) {
+      const x0 = toX(FLOW_ORIGIN_X + span.from * COL_WIDTH)
+      const x1 = toX(FLOW_ORIGIN_X + (span.to + 1) * COL_WIDTH)
+      const pad = toS(COL_WIDTH) * 0.08
+      const x = x0 + pad
+      const w = Math.max(x1 - x0 - pad * 2, 0.4)
       slide.addShape(pptx.ShapeType.flowChartMagneticDisk, {
         x,
         y: sysY + 0.02,
@@ -716,7 +775,7 @@ function drawFlowOnSlide(
         fill: { color: "FFFFFF" },
         line: { color: "595959", width: 0.75 },
       })
-      slide.addText(label, {
+      slide.addText(span.label, {
         x,
         y: sysY + 0.02,
         w,
@@ -729,6 +788,34 @@ function drawFlowOnSlide(
       })
     }
   }
+
+  // 分割オーバーラップ列の下地
+  const shadeCol = (col: number, caption: string) => {
+    const x = toX(FLOW_ORIGIN_X + col * COL_WIDTH)
+    const w = toS(COL_WIDTH)
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y: plotY,
+      w,
+      h: Math.max(plotBottom - plotY, 0.2),
+      fill: { color: "F7F7F7" },
+      line: { color: "F7F7F7", width: 0 },
+    })
+    slide.addText(caption, {
+      x,
+      y: plotY + 0.04,
+      w,
+      h: 0.22,
+      fontSize: 8,
+      color: "595959",
+      fontFace: FONT_FACE,
+      align: "center",
+      valign: "middle",
+    })
+  }
+  if (partition?.overlapPrevCol != null) shadeCol(partition.overlapPrevCol, "前ページと重複")
+  if (partition?.overlapNextCol != null) shadeCol(partition.overlapNextCol, "次ページに続く")
+
 
   type Box = {
     left: number
@@ -861,14 +948,76 @@ function drawFlowOnSlide(
     }
   }
 
-  drawFlowLegend(pptx, slide, theme, present, hasForward, hasBackward, hasSectionNo)
+  // ページ跨ぎ接続記号（参考資料の赤丸＋英字）
+  const offPage = partition?.offPage ?? []
+  for (const link of offPage) {
+    const box = boxes.get(link.nodeId)
+    if (!box) continue
+    const size = 0.22
+    const x = link.side === "out" ? box.right + 0.04 : box.left - size - 0.04
+    const y = box.cy - size / 2
+    slide.addShape(pptx.ShapeType.ellipse, {
+      x,
+      y,
+      w: size,
+      h: size,
+      fill: { color: "C00000" },
+      line: { color: "000000", width: 1 },
+    })
+    slide.addText(link.letter, {
+      x,
+      y,
+      w: size,
+      h: size,
+      fontSize: 10,
+      bold: true,
+      color: "FFFFFF",
+      fontFace: FONT_FACE,
+      align: "center",
+      valign: "middle",
+    })
+  }
+
+  drawFlowLegend(
+    pptx,
+    slide,
+    theme,
+    present,
+    hasForward,
+    hasBackward,
+    hasSectionNo,
+    offPage.length > 0,
+  )
+}
+
+type FlowChunk = {
+  nodes: FlowNode[]
+  cols: number[]
+  overlapPrevCol?: number
+  overlapNextCol?: number
+}
+
+/** 9pt が成立する最大列数（上限 6） */
+function chooseMaxColsPerSlide(flow: FlowState): number {
+  const laneCount = Math.max(1, flow.lanes?.length || 1)
+  const plotW = 11.5
+  const plotH = 4.7
+  const process = dimForKind("process")
+  for (let max = 6; max >= 3; max--) {
+    const pxW = max * COL_WIDTH
+    const pxH = laneCount * 112 + SYSTEM_ROW_HEIGHT + 24
+    const scale = Math.min(plotW / pxW, plotH / pxH)
+    if (process.w * scale >= 0.95 && process.h * scale >= 0.5) return max
+  }
+  return 3
 }
 
 /** 列が多いフローは複数スライドに分割（可読なノードサイズを確保） */
-function partitionFlowByColumns(flow: FlowState, maxColsPerSlide = 4): FlowNode[][] {
+function partitionFlowByColumns(flow: FlowState): FlowChunk[] {
   const nodes = [...flow.nodes]
   if (nodes.length === 0) return []
 
+  const maxColsPerSlide = chooseMaxColsPerSlide(flow)
   const cols = new Map<number, FlowNode[]>()
   for (const n of nodes) {
     const col = colFromX(n.position.x, dimForKind(n.data.kind ?? "process").w)
@@ -877,26 +1026,68 @@ function partitionFlowByColumns(flow: FlowState, maxColsPerSlide = 4): FlowNode[
     cols.set(col, list)
   }
   const sortedCols = [...cols.keys()].sort((a, b) => a - b)
-  if (sortedCols.length <= maxColsPerSlide) return [nodes]
+  if (sortedCols.length <= maxColsPerSlide) {
+    return [{ nodes, cols: sortedCols }]
+  }
 
-  // 1列オーバーラップさせて、分割境界のコネクタが切れないようにする
-  const chunks: FlowNode[][] = []
+  const chunks: FlowChunk[] = []
   let i = 0
   while (i < sortedCols.length) {
     const slice = sortedCols.slice(i, i + maxColsPerSlide)
     const chunkNodes = slice.flatMap((c) => cols.get(c) ?? [])
-    if (chunkNodes.length) chunks.push(chunkNodes)
+    if (chunkNodes.length) {
+      const overlapPrevCol = i > 0 ? slice[0] : undefined
+      const hasMore = i + maxColsPerSlide < sortedCols.length
+      const overlapNextCol = hasMore ? slice[slice.length - 1] : undefined
+      chunks.push({
+        nodes: chunkNodes,
+        cols: slice,
+        overlapPrevCol,
+        overlapNextCol,
+      })
+    }
     if (i + maxColsPerSlide >= sortedCols.length) break
     i += maxColsPerSlide - 1
   }
-  return chunks.length > 0 ? chunks : [nodes]
+  return chunks.length > 0 ? chunks : [{ nodes, cols: sortedCols }]
+}
+
+function assignOffPageLinks(
+  flow: FlowState,
+  chunkNodes: FlowNode[],
+  letterMap: Map<string, string>,
+): FlowOffPageLink[] {
+  const ids = new Set(chunkNodes.map((n) => n.id))
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  const links: FlowOffPageLink[] = []
+  for (const e of flow.edges) {
+    const srcIn = ids.has(e.source)
+    const tgtIn = ids.has(e.target)
+    if (srcIn === tgtIn) continue
+    let letter = letterMap.get(e.id)
+    if (!letter) {
+      letter = letters[letterMap.size % letters.length]!
+      letterMap.set(e.id, letter)
+    }
+    if (srcIn && !tgtIn) links.push({ letter, nodeId: e.source, side: "out" })
+    if (!srcIn && tgtIn) links.push({ letter, nodeId: e.target, side: "in" })
+  }
+  return links
 }
 
 /* ---------- スライド計画（目次リンク用に番号を先に確定） ---------- */
 
 type Planned =
   | { kind: "cover" }
-  | { kind: "flow"; nodes: FlowNode[]; part: number; total: number }
+  | {
+      kind: "flow"
+      nodes: FlowNode[]
+      part: number
+      total: number
+      overlapPrevCol?: number
+      overlapNextCol?: number
+      offPage: FlowOffPageLink[]
+    }
   | { kind: "toc" }
   | { kind: "major"; majorNumber: string; majorTitle: string }
   | { kind: "procedure"; part: ProcedurePart }
@@ -909,14 +1100,24 @@ function planPresentation(
   planned: Planned[]
   sectionSlide: Map<string, number>
   majorSlide: Map<string, number>
+  flowSlide?: number
 } {
   const planned: Planned[] = [{ kind: "cover" }]
 
   if (options.includeFlow && project.flow?.nodes?.length) {
     const flow = prepareFlow(project.flow)
     const chunks = partitionFlowByColumns(flow)
-    chunks.forEach((nodes, i) => {
-      planned.push({ kind: "flow", nodes, part: i + 1, total: chunks.length })
+    const letterMap = new Map<string, string>()
+    chunks.forEach((chunk, i) => {
+      planned.push({
+        kind: "flow",
+        nodes: chunk.nodes,
+        part: i + 1,
+        total: chunks.length,
+        overlapPrevCol: chunk.overlapPrevCol,
+        overlapNextCol: chunk.overlapNextCol,
+        offPage: assignOffPageLinks(flow, chunk.nodes, letterMap),
+      })
     })
   }
 
@@ -938,15 +1139,17 @@ function planPresentation(
 
   const sectionSlide = new Map<string, number>()
   const majorSlide = new Map<string, number>()
+  let flowSlide: number | undefined
   planned.forEach((p, idx) => {
     const slideNo = idx + 1
     if (p.kind === "major") majorSlide.set(p.majorNumber, slideNo)
     if (p.kind === "procedure" && !sectionSlide.has(p.part.section.id)) {
       sectionSlide.set(p.part.section.id, slideNo)
     }
+    if (p.kind === "flow" && flowSlide === undefined) flowSlide = slideNo
   })
 
-  return { planned, sectionSlide, majorSlide }
+  return { planned, sectionSlide, majorSlide, flowSlide }
 }
 
 /** マニュアルを PowerPoint 出力（フロー図・ハイパーリンク目次付き） */
@@ -967,10 +1170,14 @@ export async function buildManualPptxArrayBuffer(
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const preparedFlow = project.flow?.nodes?.length ? prepareFlow(project.flow) : project.flow
   const projectForExport = { ...project, flow: preparedFlow }
-  const { planned, sectionSlide, majorSlide } = planPresentation(projectForExport, sections, {
-    includeImages,
-    includeFlow,
-  })
+  const { planned, sectionSlide, majorSlide, flowSlide } = planPresentation(
+    projectForExport,
+    sections,
+    {
+      includeImages,
+      includeFlow,
+    },
+  )
 
   planned.forEach((item, idx) => {
     const pageNum = idx + 1
@@ -1014,7 +1221,11 @@ export async function buildManualPptxArrayBuffer(
         item.total > 1 ? `業務フロー図（${item.part}/${item.total}）` : "業務フロー図"
       addChrome(pptx, slide, theme, { title, pageNum })
       if (preparedFlow) {
-        drawFlowOnSlide(pptx, slide, preparedFlow, theme, new Set(item.nodes.map((n) => n.id)))
+        drawFlowOnSlide(pptx, slide, preparedFlow, theme, new Set(item.nodes.map((n) => n.id)), {
+          overlapPrevCol: item.overlapPrevCol,
+          overlapNextCol: item.overlapNextCol,
+          offPage: item.offPage,
+        })
       }
       return
     }
@@ -1024,6 +1235,20 @@ export async function buildManualPptxArrayBuffer(
       const left: PptxGenJS.TextProps[] = []
       const right: PptxGenJS.TextProps[] = []
       const mid = Math.ceil(outline.length / 2)
+
+      if (flowSlide != null) {
+        left.push({
+          text: "業務フロー図",
+          options: {
+            bold: true,
+            fontSize: 13,
+            breakLine: true,
+            color: "0563C1",
+            hyperlink: { slide: flowSlide, tooltip: "業務フロー図へ" },
+          },
+        })
+        left.push({ text: " ", options: { fontSize: 6, breakLine: true } })
+      }
 
       outline.forEach((major, mi) => {
         const bucket = mi < mid ? left : right

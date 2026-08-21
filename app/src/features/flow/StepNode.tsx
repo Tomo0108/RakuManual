@@ -191,7 +191,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
         {addAfterButton}
         <div
           className={cn(
-            "flex flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-50 px-2 py-1.5 shadow-sm",
+            "flex flex-col items-center justify-center rounded-full border-2 border-[#BF0000] bg-white px-2 py-1.5 shadow-sm",
             selected && "ring-2 ring-primary ring-offset-1",
             diffClass,
             validationClass,
@@ -211,7 +211,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
         <FourWayHandles sources={false} />
         <div
           className={cn(
-            "flex flex-col items-center justify-center rounded-full border-2 border-rose-400 bg-rose-50 px-2 py-1.5 shadow-sm",
+            "flex flex-col items-center justify-center rounded-full border-2 border-[#BF0000] bg-white px-2 py-1.5 shadow-sm",
             selected && "ring-2 ring-primary ring-offset-1",
             diffClass,
             validationClass,
@@ -262,7 +262,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
           <polygon
             points={`${dims.w / 2},1 ${dims.w - 1},${dims.h / 2} ${dims.w / 2},${dims.h - 1} 1,${dims.h / 2}`}
             className={cn(
-              "fill-amber-50/90 stroke-amber-500",
+              "fill-[#FFF2CC] stroke-[#BF8F00]",
               selected && "stroke-primary",
               diffClass.includes("emerald") && "fill-emerald-50 stroke-emerald-400",
               diffClass.includes("red") && "fill-red-50 stroke-red-300",
@@ -325,8 +325,8 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
 
 function KindBadge({ kind }: { kind: StepKind }) {
   const styles: Record<StepKind, string> = {
-    start: "text-emerald-700 bg-emerald-100/80",
-    end: "text-rose-700 bg-rose-100/80",
+    start: "text-red-800 bg-red-50",
+    end: "text-red-800 bg-red-50",
     process: "text-slate-600 bg-slate-100/80",
     decision: "text-amber-800 bg-amber-100/80",
   }

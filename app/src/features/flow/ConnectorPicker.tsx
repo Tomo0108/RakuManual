@@ -144,8 +144,8 @@ function ConnectorShapePreview({ connector }: { connector: FlowConnector }) {
       ? "border-indigo-300 bg-indigo-50 text-indigo-700"
       : connector.tone === "sky"
         ? "border-sky-300 bg-sky-50 text-sky-700"
-        : connector.tone === "violet"
-          ? "border-violet-300 bg-violet-50 text-violet-700"
+        : connector.tone === "stone"
+        ? "border-neutral-400 bg-neutral-100 text-neutral-700"
           : "border-slate-300 bg-slate-50 text-slate-700"
   return (
     <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md border-2", tone)}>

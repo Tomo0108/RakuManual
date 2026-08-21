@@ -23,8 +23,8 @@ export interface FlowConnector {
   frequent?: boolean
   /** キャンバス上のバッジ文言（省略時は KIND ラベル） */
   badge?: string
-  /** 処理系の枠・背景トーン */
-  tone?: "slate" | "indigo" | "sky" | "violet"
+  /** 処理系の枠・背景トーン（PPTX 出力と揃える。紫は使わない） */
+  tone?: "slate" | "indigo" | "sky" | "stone"
 }
 
 export const CONNECTOR_CATEGORIES: { id: ConnectorCategory; label: string }[] = [
@@ -78,7 +78,7 @@ export const FLOW_CONNECTORS: FlowConnector[] = [
     icon: Mail,
     category: "process",
     badge: "通知",
-    tone: "violet",
+    tone: "stone",
   },
   {
     id: "decision",
@@ -142,14 +142,14 @@ const TONE_CLASS: Record<NonNullable<FlowConnector["tone"]>, string> = {
   slate: "border-slate-300 bg-card",
   indigo: "border-indigo-300 bg-indigo-50/80",
   sky: "border-sky-300 bg-sky-50/80",
-  violet: "border-violet-300 bg-violet-50/80",
+  stone: "border-neutral-400 bg-neutral-100",
 }
 
 const TONE_BADGE: Record<NonNullable<FlowConnector["tone"]>, string> = {
   slate: "text-slate-600 bg-slate-100/80",
   indigo: "text-indigo-800 bg-indigo-100/90",
   sky: "text-sky-800 bg-sky-100/90",
-  violet: "text-violet-800 bg-violet-100/90",
+  stone: "text-neutral-700 bg-neutral-200/90",
 }
 
 /** キャンバス上の処理ノード見た目 */
