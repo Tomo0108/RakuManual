@@ -44,20 +44,32 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
   const appendixImages: string[] = []
 
   let body = ""
+  let lastMajor = ""
+  let lastMedium = ""
+
   for (const section of sections) {
+    const major = section.majorTitle?.trim() ?? ""
+    const medium = section.mediumTitle?.trim() ?? ""
     const num = section.sectionNumber ? `${section.sectionNumber} ` : ""
-    if (section.majorTitle) {
-      body += `<h1 class="major">${escapeHtml(section.majorTitle)}</h1>`
+
+    // 連続する同一の大/中項目見出しは重複出力しない
+    if (major && major !== lastMajor) {
+      body += `<h1 class="major">${escapeHtml(major)}</h1>`
+      lastMajor = major
+      lastMedium = ""
     }
-    if (section.mediumTitle) {
-      body += `<h2 class="medium">${escapeHtml(section.mediumTitle)}</h2>`
+    if (medium && medium !== lastMedium) {
+      body += `<h2 class="medium">${escapeHtml(medium)}</h2>`
+      lastMedium = medium
     }
     body += `<h3 class="section">${escapeHtml(num + (section.title ?? ""))}</h3>`
 
+    let stepNo = 0
     for (const block of section.blocks ?? []) {
       const text = escapeHtml(block.text ?? "")
       if (block.type === "step") {
-        body += `<p class="step">${text}</p>`
+        stepNo += 1
+        body += `<p class="step"><span class="step-no">${stepNo}</span> ${text}</p>`
       } else if (block.type === "note") {
         body += `<aside class="note">${text}</aside>`
       } else {
@@ -94,11 +106,12 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
     h1.major { color: ${accent}; font-size: 1.5rem; border-bottom: 2px solid ${accent}; padding-bottom: 0.25rem; }
     h2.medium { font-size: 1.15rem; margin-top: 1.5rem; color: #444; }
     h3.section { font-size: 1rem; margin-top: 1.25rem; }
-    p.step { padding-left: 1rem; border-left: 3px solid ${accent}; }
+    p.step { padding-left: 0.25rem; }
+    p.step .step-no { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4em; margin-right: 0.35rem; font-weight: 700; color: ${accent}; }
     aside.note { background: #f5f5f5; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9rem; }
     figure { margin: 1rem 0; }
     figure img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
-    figcaption { font-size: 0.8rem; color: #666; margin-top: 0.25rem; }
+    figcaption { font-size: 0.8rem; color: #666; margin-top: 0.25rem; text-align: center; }
     .flow ol { padding-left: 1.25rem; }
     .meta { font-size: 0.85rem; color: #666; margin-bottom: 2rem; }
   </style>

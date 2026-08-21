@@ -1,5 +1,6 @@
 import type { ManualBlock, ManualSection, Project } from "@/lib/types"
 import { displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
+import { downloadBlob, embedJapaneseFontInPptx, FONT_FACE } from "@/lib/pptx-embed-font"
 import PptxGenJS from "pptxgenjs"
 
 function blockLines(blocks: ManualBlock[], includeImages: boolean): string[] {
@@ -21,7 +22,7 @@ function blockLines(blocks: ManualBlock[], includeImages: boolean): string[] {
   return lines
 }
 
-/** マニュアルを PowerPoint 出力（1セクション = 1スライド） */
+/** マニュアルを PowerPoint 出力（1セクション = 1スライド、Noto Sans JP 埋め込み） */
 export async function exportManualPptx(
   project: Project,
   sections: ManualSection[],
@@ -48,7 +49,7 @@ export async function exportManualPptx(
     fontSize: 28,
     bold: true,
     color: accent,
-    fontFace: "Meiryo",
+    fontFace: FONT_FACE,
   })
   titleSlide.addText(
     `全 ${sections.length} セクション / テンプレート: ${options?.template ?? "corporate"}`,
@@ -59,7 +60,7 @@ export async function exportManualPptx(
       h: 0.5,
       fontSize: 14,
       color: "6B7280",
-      fontFace: "Meiryo",
+      fontFace: FONT_FACE,
     },
   )
 
@@ -67,9 +68,7 @@ export async function exportManualPptx(
     const slide = pptx.addSlide()
     const num = resolveSectionNumber(section)
     const title = displaySectionTitle(section)
-    const imageBlocks = includeImages
-      ? section.blocks.filter((b) => b.image?.url)
-      : []
+    const imageBlocks = includeImages ? section.blocks.filter((b) => b.image?.url) : []
     const hasImage = imageBlocks.length > 0
     const lines = blockLines(section.blocks, includeImages)
 
@@ -91,7 +90,7 @@ export async function exportManualPptx(
         fontSize: 11,
         bold: true,
         color: accent,
-        fontFace: "Meiryo",
+        fontFace: FONT_FACE,
       })
     }
 
@@ -103,10 +102,9 @@ export async function exportManualPptx(
       fontSize: 18,
       bold: true,
       color: "111827",
-      fontFace: "Meiryo",
+      fontFace: FONT_FACE,
     })
 
-    // 画像あり: 左に本文、右に図（重なり回避）。複数画像は縦に積む
     slide.addText(lines.join("\n"), {
       x: 0.55,
       y: 0.85,
@@ -115,7 +113,7 @@ export async function exportManualPptx(
       fontSize: 13,
       color: "374151",
       valign: "top",
-      fontFace: "Meiryo",
+      fontFace: FONT_FACE,
       lineSpacingMultiple: 1.15,
     })
 
@@ -140,7 +138,7 @@ export async function exportManualPptx(
             h: 0.28,
             fontSize: 10,
             color: "6B7280",
-            fontFace: "Meiryo",
+            fontFace: FONT_FACE,
             align: "center",
           })
         }
@@ -148,6 +146,8 @@ export async function exportManualPptx(
     }
   }
 
+  const raw = (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
+  const withFont = await embedJapaneseFontInPptx(raw)
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
-  await pptx.writeFile({ fileName: `${safeName}.pptx` })
+  downloadBlob(withFont, `${safeName}.pptx`)
 }

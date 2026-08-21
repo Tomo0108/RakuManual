@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { findCaptionIssues } from "@/lib/caption-quality"
 import { cn } from "@/lib/utils"
 
 const FALLBACK_TEMPLATES: DesignTemplate[] = [
@@ -90,7 +91,9 @@ export function ExportTab({ project, updateProject }: Props) {
     (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
     0,
   )
-  const canPublish = allApproved && needsConfirm === 0 && project.status !== "published"
+  const captionIssues = findCaptionIssues(project.sections)
+  const canPublish =
+    allApproved && needsConfirm === 0 && captionIssues.length === 0 && project.status !== "published"
   // 未設定の既存公開分は組織全体公開（後方互換）、未公開はメンバー限定を既定にする
   const visibility: ProjectVisibility =
     project.visibility ?? (project.status === "published" ? "org" : "members")
@@ -223,6 +226,21 @@ export function ExportTab({ project, updateProject }: Props) {
                 )}
                 {needsConfirm > 0 && (
                   <p className={cn("text-xs", WARNING_TEXT)}>要確認ブロックが {needsConfirm} 件残っています</p>
+                )}
+                {captionIssues.length > 0 && (
+                  <div className={cn("rounded-md px-3 py-2 text-xs leading-relaxed", WARNING_BOX)}>
+                    <p className={cn("font-medium", WARNING_TEXT)}>
+                      図の説明（キャプション）を直してから公開してください（{captionIssues.length} 件）
+                    </p>
+                    <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-muted-foreground">
+                      {captionIssues.slice(0, 5).map((issue) => (
+                        <li key={`${issue.sectionId}-${issue.blockId}`}>
+                          {issue.sectionTitle}: {issue.message}
+                        </li>
+                      ))}
+                      {captionIssues.length > 5 && <li>ほか {captionIssues.length - 5} 件</li>}
+                    </ul>
+                  </div>
                 )}
                 <Button
                   className="w-fit gap-1.5"

@@ -8,6 +8,9 @@ import type { ExportOptions } from "./manual-html.js"
 
 function resolveJapaneseFont(): string | null {
   const candidates = [
+    path.resolve(process.cwd(), "app/public/fonts/NotoSansJP-Regular.ttf"),
+    path.resolve(process.cwd(), "public/fonts/NotoSansJP-Regular.ttf"),
+    path.resolve(import.meta.dirname, "../../../app/public/fonts/NotoSansJP-Regular.ttf"),
     "/Library/Fonts/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
   ]
@@ -52,7 +55,6 @@ function loadImageBuffer(image: BlockImage): Buffer | null {
     image.storageKey ?? (url.startsWith(UPLOADS_PREFIX) ? url.slice(UPLOADS_PREFIX.length) : null)
   if (!key) return null
   const resolved = path.resolve(UPLOADS_ROOT, decodeURIComponent(key))
-  // uploads 配下から出るパスは読み込まない
   if (resolved !== UPLOADS_ROOT && !resolved.startsWith(`${UPLOADS_ROOT}${path.sep}`)) return null
   if (!fs.existsSync(resolved)) return null
   try {
@@ -82,7 +84,6 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
     doc.font("Helvetica")
   }
 
-  /** pdfkit は PNG/JPEG のみ対応。非対応形式はキャプションのみ残す */
   const drawImage = (image: BlockImage) => {
     const buffer = loadImageBuffer(image)
     if (!buffer) return false
@@ -90,7 +91,7 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
       doc.image(buffer, { fit: [420, 260], align: "center" })
       doc.moveDown(0.2)
       if (image.caption) {
-        doc.fontSize(9).fillColor("#555555").text(image.caption)
+        doc.fontSize(9).fillColor("#555555").text(image.caption, { align: "center" })
         doc.fillColor("#000000").fontSize(11)
       }
       doc.moveDown(0.3)
@@ -122,23 +123,39 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
     doc.moveDown()
   }
 
+  let lastMajor = ""
+  let lastMedium = ""
+
   for (const section of sections) {
-    if (section.majorTitle) {
-      doc.fontSize(16).fillColor("#2563eb").text(section.majorTitle)
+    const major = section.majorTitle?.trim() ?? ""
+    const medium = section.mediumTitle?.trim() ?? ""
+
+    if (major && major !== lastMajor) {
+      doc.fontSize(16).fillColor("#2563eb").text(major)
       doc.fillColor("#000000")
       doc.moveDown(0.3)
+      lastMajor = major
+      lastMedium = ""
     }
-    if (section.mediumTitle) {
-      doc.fontSize(13).text(section.mediumTitle)
+    if (medium && medium !== lastMedium) {
+      doc.fontSize(13).text(medium)
       doc.moveDown(0.2)
+      lastMedium = medium
     }
     const num = section.sectionNumber ? `${section.sectionNumber} ` : ""
     doc.fontSize(12).text(`${num}${section.title ?? ""}`, { underline: true })
     doc.moveDown(0.3)
     doc.fontSize(11)
+    let stepNo = 0
     for (const block of section.blocks ?? []) {
-      const prefix = block.type === "step" ? "▸ " : block.type === "note" ? "※ " : ""
-      doc.text(`${prefix}${block.text ?? ""}`, { indent: block.type === "step" ? 12 : 0 })
+      if (block.type === "step") {
+        stepNo += 1
+        doc.text(`${stepNo}. ${block.text ?? ""}`, { indent: 12 })
+      } else if (block.type === "note") {
+        doc.text(`※ ${block.text ?? ""}`)
+      } else {
+        doc.text(block.text ?? "")
+      }
       doc.moveDown(0.2)
       if (block.image && imageMode !== "none") {
         if (imageMode === "appendix") appendix.push(block.image)

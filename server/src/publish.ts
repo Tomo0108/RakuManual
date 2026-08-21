@@ -1,4 +1,5 @@
 import type { Project } from "./types.js"
+import { findCaptionIssues } from "./caption-quality.js"
 
 export interface PublishValidation {
   ok: boolean
@@ -11,7 +12,11 @@ export function validatePublish(project: Project): PublishValidation {
     id: string
     status?: string
     title?: string
-    blocks?: Array<{ needsConfirm?: boolean }>
+    blocks?: Array<{
+      id: string
+      needsConfirm?: boolean
+      image?: { url?: string; caption?: string; name?: string }
+    }>
   }>
 
   if (sections.length === 0) {
@@ -29,6 +34,16 @@ export function validatePublish(project: Project): PublishValidation {
   )
   if (needsConfirm > 0) {
     errors.push(`「要確認」ブロックが ${needsConfirm} 件残っています`)
+  }
+
+  const captionIssues = findCaptionIssues(sections)
+  if (captionIssues.length > 0) {
+    const empty = captionIssues.filter((i) => i.kind === "empty").length
+    const filename = captionIssues.filter((i) => i.kind === "filename_like").length
+    const parts: string[] = []
+    if (empty > 0) parts.push(`図の説明未入力 ${empty} 件`)
+    if (filename > 0) parts.push(`ファイル名のまま ${filename} 件`)
+    errors.push(`キャプション品質: ${parts.join("、")}（マニュアルタブで修正してください）`)
   }
 
   return { ok: errors.length === 0, errors }

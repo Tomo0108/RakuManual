@@ -721,6 +721,8 @@ function SectionEditor({
   let stepNo = 0
   const sectionNum = resolveSectionNumber(section)
   const sectionTitle = displaySectionTitle(section)
+  const isApproved = section.status === "approved"
+  const chromeCollapsed = isApproved && sync === "ok" && confirms === 0
 
   const syncActions =
     sync === "needs_review" || sync === "orphaned" ? (
@@ -866,26 +868,52 @@ function SectionEditor({
           </div>
         </div>
 
-        {/* ② アプリUI（メタ・操作）— 本文とは別レイヤ */}
+        {/* ② アプリUI（メタ・操作）— 承認済みは畳んで読み面を優先 */}
         {!(isMobile && !embedded) && (
-          <div className={cn("mt-3 px-3 py-2.5", APP_CHROME)}>
-            <div className={cn("flex gap-2", isMobile ? "flex-col" : "items-center justify-between")}>
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                <span className={APP_CHROME_LABEL}>
-                  <Wrench className="size-3" aria-hidden />
-                  アプリ操作
+          chromeCollapsed ? (
+            <details className={cn("mt-3", APP_CHROME, "open:bg-muted/55")}>
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className={APP_CHROME_LABEL}>
+                      <Wrench className="size-3" aria-hidden />
+                      アプリ操作
+                    </span>
+                    <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
+                      {SECTION_LABEL[section.status]}
+                    </Badge>
+                    <span className="text-muted-foreground">v{section.version}</span>
+                  </span>
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
                 </span>
-                <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
-                  {SECTION_LABEL[section.status]}
-                </Badge>
-                {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
-                <span>v{section.version}</span>
-                <span>·</span>
-                <span>{section.updatedAt}</span>
+              </summary>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 px-3 py-2.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>{section.updatedAt}</span>
+                </div>
+                {actionToolbar}
               </div>
-              {actionToolbar}
+            </details>
+          ) : (
+            <div className={cn("mt-3 px-3 py-2.5", APP_CHROME)}>
+              <div className={cn("flex gap-2", isMobile ? "flex-col" : "items-center justify-between")}>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                  <span className={APP_CHROME_LABEL}>
+                    <Wrench className="size-3" aria-hidden />
+                    アプリ操作
+                  </span>
+                  <Badge variant="outline" className={cn("h-5 text-[10px]", SECTION_STYLE[section.status])}>
+                    {SECTION_LABEL[section.status]}
+                  </Badge>
+                  {sync !== "ok" && <SyncStatusBadge status={section.syncStatus} />}
+                  <span>v{section.version}</span>
+                  <span>·</span>
+                  <span>{section.updatedAt}</span>
+                </div>
+                {actionToolbar}
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {regenError && (
@@ -949,6 +977,7 @@ function SectionEditor({
                   block={block}
                   stepNo={block.type === "step" ? stepNo : undefined}
                   isMobile={isMobile}
+                  chromeCollapsed={chromeCollapsed}
                   editing={editingBlockId === block.id}
                   draft={blockDraft}
                   setDraft={setBlockDraft}
@@ -999,6 +1028,7 @@ function BlockView({
   block,
   stepNo,
   isMobile,
+  chromeCollapsed,
   editing,
   draft,
   setDraft,
@@ -1013,6 +1043,7 @@ function BlockView({
   block: ManualBlock
   stepNo?: number
   isMobile?: boolean
+  chromeCollapsed?: boolean
   editing: boolean
   draft: string
   setDraft: (v: string) => void
@@ -1139,6 +1170,7 @@ function BlockView({
 
               <BlockImageSection
                 block={block}
+                chromeCollapsed={chromeCollapsed}
                 captionDraft={captionDraft}
                 setCaptionDraft={setCaptionDraft}
                 imageError={imageError}
@@ -1172,6 +1204,7 @@ function BlockView({
 
 function BlockImageSection({
   block,
+  chromeCollapsed,
   captionDraft,
   setCaptionDraft,
   imageError,
@@ -1183,6 +1216,7 @@ function BlockImageSection({
   onSaveCaption,
 }: {
   block: ManualBlock
+  chromeCollapsed?: boolean
   captionDraft: string
   setCaptionDraft: (v: string) => void
   imageError: string | null
@@ -1194,6 +1228,33 @@ function BlockImageSection({
   onSaveCaption: () => void
 }) {
   const image = block.image
+
+  const imageOps = (
+    <div className={cn("flex flex-wrap items-center gap-1.5", !chromeCollapsed && "px-2.5 py-2", !chromeCollapsed && APP_CHROME)}>
+      {!chromeCollapsed && <span className={cn(APP_CHROME_LABEL, "mr-1")}>画像操作</span>}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 border bg-background px-2 text-[11px]"
+        onClick={onPickImage}
+        disabled={uploading}
+      >
+        <ImagePlus className="size-3" />
+        {uploading ? "読込中…" : image?.url ? "変更" : "画像を添付"}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 border bg-background px-2 text-[11px] text-muted-foreground"
+        onClick={onRemoveImage}
+      >
+        <Trash2 className="size-3" />
+        削除
+      </Button>
+    </div>
+  )
 
   return (
     <div className="mt-2">
@@ -1207,30 +1268,19 @@ function BlockImageSection({
 
       {image ? (
         <>
-          <div className={cn("mt-2 flex flex-wrap items-center gap-1.5 px-2.5 py-2", APP_CHROME)}>
-            <span className={cn(APP_CHROME_LABEL, "mr-1")}>画像操作</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 border bg-background px-2 text-[11px]"
-              onClick={onPickImage}
-              disabled={uploading}
-            >
-              <ImagePlus className="size-3" />
-              {uploading ? "読込中…" : image.url ? "変更" : "画像を添付"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 border bg-background px-2 text-[11px] text-muted-foreground"
-              onClick={onRemoveImage}
-            >
-              <Trash2 className="size-3" />
-              削除
-            </Button>
-          </div>
+          {chromeCollapsed ? (
+            <details className={cn("mt-2", APP_CHROME)}>
+              <summary className="cursor-pointer list-none px-2.5 py-1.5 text-[11px] marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  <span className={APP_CHROME_LABEL}>画像操作</span>
+                  <ChevronDown className="size-3 text-muted-foreground" />
+                </span>
+              </summary>
+              <div className="border-t border-border/50 px-2.5 py-2">{imageOps}</div>
+            </details>
+          ) : (
+            <div className="mt-2">{imageOps}</div>
+          )}
           <figure className="manual-figure mt-2 overflow-hidden rounded-lg border">
             {image.url ? (
               <img
@@ -1276,17 +1326,19 @@ function BlockImageSection({
           </figure>
         </>
       ) : (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="mt-2 h-8 gap-1.5 border bg-background px-2.5 text-[11px] text-muted-foreground hover:text-foreground"
-          onClick={onPickImage}
-          disabled={uploading}
-        >
-          <ImagePlus className="size-3.5" />
-          {uploading ? "読込中…" : "画像を添付"}
-        </Button>
+        !chromeCollapsed && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-2 h-8 gap-1.5 border bg-background px-2.5 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={onPickImage}
+            disabled={uploading}
+          >
+            <ImagePlus className="size-3.5" />
+            {uploading ? "読込中…" : "画像を添付"}
+          </Button>
+        )
       )}
 
       {imageError && (
