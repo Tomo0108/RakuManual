@@ -24,7 +24,7 @@ function pageTitle(view: View, projects: Project[]): string {
     case "viewer":
       return projects.find((p) => p.id === view.projectId)?.name ?? "マニュアル閲覧"
     default:
-      return "RakuManual"
+      return "Rakumanual"
   }
 }
 
@@ -43,7 +43,7 @@ export function MobileHeader({ view, projects, onMenuOpen }: MobileHeaderProps) 
       <img src={logo} alt="" className="size-8 shrink-0" aria-hidden />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">{pageTitle(view, projects)}</div>
-        <div className="truncate text-[10px] text-muted-foreground">RakuManual</div>
+        <div className="truncate text-[10px] text-muted-foreground">Rakumanual</div>
       </div>
     </header>
   )

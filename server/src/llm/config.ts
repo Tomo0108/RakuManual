@@ -99,7 +99,7 @@ export function resolveLlmConfig(): LlmRuntimeConfig {
           : { "HTTP-Referer": "https://rakumanual.local" }),
         ...(firstEnv("OPENROUTER_APP_TITLE", "LLM_APP_TITLE")
           ? { "X-Title": firstEnv("OPENROUTER_APP_TITLE", "LLM_APP_TITLE")! }
-          : { "X-Title": "RakuManual" }),
+          : { "X-Title": "Rakumanual" }),
       },
     }
   }

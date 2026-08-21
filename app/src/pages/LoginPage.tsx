@@ -27,7 +27,7 @@ export function LoginPage({ busy, error, onLogin }: Props) {
       <div className="w-full max-w-sm rounded-2xl border bg-card/95 p-8 shadow-sm backdrop-blur-sm">
         <div className="flex flex-col items-center text-center">
           <img src={logo} alt="" className="size-16 rounded-2xl" />
-          <h1 className="mt-5 text-2xl font-bold tracking-tight">ラクマニュアル</h1>
+          <h1 className="mt-5 text-2xl font-bold tracking-tight">Rakumanual</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             業務マニュアルを、ヒアリングから公開まで一気通貫で整える
           </p>

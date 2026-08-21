@@ -230,7 +230,7 @@ export async function exportManualPptx(
   const includeImages = options?.includeImages ?? true
   const theme = resolveExportTheme(options?.template)
   const pptx = new PptxGenJS()
-  pptx.author = "ラクマニュアル"
+  pptx.author = "Rakumanual"
   pptx.title = project.name
   pptx.layout = "LAYOUT_WIDE"
   pptx.defineLayout({ name: "LAYOUT_WIDE", width: SLIDE_W, height: SLIDE_H })

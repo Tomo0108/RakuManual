@@ -21,8 +21,8 @@ export default defineConfig({
       ],
       manifest: {
         id: "/",
-        name: "RakuManual",
-        short_name: "RakuManual",
+        name: "Rakumanual",
+        short_name: "Rakumanual",
         description: "業務フローからマニュアルを作成・管理するプラットフォーム",
         theme_color: "#f8f6f4",
         background_color: "#f8f6f4",

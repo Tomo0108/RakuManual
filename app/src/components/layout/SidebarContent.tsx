@@ -77,9 +77,9 @@ export function SidebarContent({
   return (
     <div className={cn("flex h-full flex-col bg-sidebar", className)}>
       <div className="flex items-center gap-2.5 px-4 py-4">
-        <img src={logo} alt="RakuManual ロゴ" className="size-9" />
+        <img src={logo} alt="Rakumanual ロゴ" className="size-9" />
         <div>
-          <div className="text-sm font-bold tracking-tight">ラクマニュアル</div>
+          <div className="text-sm font-bold tracking-tight">Rakumanual</div>
           <div className="text-[10px] text-muted-foreground">業務マニュアル自動作成AI</div>
         </div>
       </div>
