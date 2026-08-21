@@ -76,24 +76,46 @@ export function toSlideSectionNumber(mediumNumber?: string, index = 0): string |
   const parts = sectionNumberParts(mediumNumber)
   if (parts.length >= 3) return mediumNumber
   if (parts.length === 2) return `${mediumNumber}.${index + 1}`
-  if (parts.length === 1) return index === 0 ? `${mediumNumber}.1` : `${mediumNumber}.1.${index + 1}`
+  if (parts.length === 1) return `${mediumNumber}.1.${index + 1}`
   return undefined
 }
 
 /**
  * 中項目配下の小項目（手順セクション）項番。
- * フロー由来の 1.1 など2段のときは 1.1.1 に伸ばし、中項目番号との重複を避ける。
+ * - 既に 1.1.1 形式ならそのまま
+ * - 旧データの 1.1（2段）は中項目番号そのものとして扱い、勝手に 1.1.1 へ伸ばさない
+ *   （1 → 1.1.1 と飛んで中項目が欠けるのを防ぐ）
+ * - 同一中項目に複数セクションがあるときだけ 1.1.n へ細分化
  */
 export function resolveLeafSectionNumber(
   section: ManualSection,
   mediumNumber: string,
   indexInMedium: number,
+  mediumSectionCount = 1,
 ): string {
   const raw = resolveSectionNumber(section)
   if (sectionDepth(raw) >= 3) return raw
+  if (sectionDepth(raw) === 2 && mediumSectionCount <= 1) return raw
+  if (mediumSectionCount > 1) {
+    const slide = toSlideSectionNumber(mediumNumber, indexInMedium)
+    if (slide) return slide
+  }
+  if (sectionDepth(raw) >= 2) return raw
   const slide = toSlideSectionNumber(mediumNumber, indexInMedium)
   if (slide) return slide
   return raw || mediumNumber
+}
+
+/** 中項目見出しと二重になる場合は小項目項番を出さない */
+export function shouldShowLeafNumber(
+  leafNumber: string,
+  mediumNumber: string,
+  mediumSectionCount: number,
+): boolean {
+  if (!leafNumber?.trim()) return false
+  // 中項目配下にセクションが1つだけのときは中項目番号のみ（1 → 1.1.1 の飛ばし／二重表示を防ぐ）
+  if (mediumSectionCount <= 1) return false
+  return leafNumber !== mediumNumber
 }
 
 /** セクション一覧を大項目→中項目→小項目(スライド)の階層に整理 */
@@ -138,6 +160,9 @@ export function buildManualOutline(
     if (!mediumGroup.title && section.mediumTitle?.trim()) {
       mediumGroup.title = section.mediumTitle.trim()
     }
+    if (!mediumGroup.title) {
+      mediumGroup.title = displaySectionTitle(section) || "手順"
+    }
     mediumGroup.sections.push(section)
   }
 
@@ -150,7 +175,10 @@ export function buildLeafSectionNumberMap(sections: ManualSection[]): Map<string
   for (const major of buildManualOutline(sections)) {
     for (const medium of major.mediums) {
       medium.sections.forEach((section, i) => {
-        map.set(section.id, resolveLeafSectionNumber(section, medium.number, i))
+        map.set(
+          section.id,
+          resolveLeafSectionNumber(section, medium.number, i, medium.sections.length),
+        )
       })
     }
   }

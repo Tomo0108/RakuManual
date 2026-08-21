@@ -302,7 +302,18 @@ function buildProcedureParts(
     for (const medium of major.mediums) {
       for (const section of medium.sections) {
         const title = displaySectionTitle(section)
-        const num = resolveLeafSectionNumber(section, medium.number, medium.sections.indexOf(section))
+        const num = resolveLeafSectionNumber(
+          section,
+          medium.number,
+          medium.sections.indexOf(section),
+          medium.sections.length,
+        )
+        const headingTitle =
+          medium.sections.length === 1 && medium.title?.trim()
+            ? medium.title.trim()
+            : title
+        // 1セクションのみ: 中項目番号(1.1)で見出し。複数: 小項目(1.1.1)を使う
+        const headingNum = medium.sections.length === 1 ? medium.number : num
         const imageEntries: { url: string; caption?: string }[] = includeImages
           ? section.blocks.flatMap((b) => {
               const url = b.image?.url
@@ -317,7 +328,7 @@ function buildProcedureParts(
         if (imageEntries.length === 0) {
           const chunks = chunkBlocksByHeight(
             section.blocks,
-            formatMediumHeading(num, title),
+            formatMediumHeading(headingNum, headingTitle),
             5.0,
           )
           chunks.forEach((chunk, i) => {
@@ -327,8 +338,11 @@ function buildProcedureParts(
               majorNumber: major.number,
               mediumHeading:
                 chunks.length > 1
-                  ? formatMediumHeading(num, title, { index: i + 1, total: chunks.length })
-                  : formatMediumHeading(num, title),
+                  ? formatMediumHeading(headingNum, headingTitle, {
+                      index: i + 1,
+                      total: chunks.length,
+                    })
+                  : formatMediumHeading(headingNum, headingTitle),
               blocks: chunk,
               chip,
             })
@@ -361,7 +375,7 @@ function buildProcedureParts(
           const maxH = 2.55
           const chunks = chunkBlocksByHeight(
             withCaption,
-            formatMediumHeading(num, title, { index: i + 1, total }),
+            formatMediumHeading(headingNum, headingTitle, { index: i + 1, total }),
             maxH,
           )
           chunks.forEach((chunk, ci) => {
@@ -371,11 +385,11 @@ function buildProcedureParts(
               majorNumber: major.number,
               mediumHeading:
                 chunks.length > 1
-                  ? formatMediumHeading(num, title, {
+                  ? formatMediumHeading(headingNum, headingTitle, {
                       index: i + 1,
                       total,
                     }) + `（続き${ci + 1}/${chunks.length}）`
-                  : formatMediumHeading(num, title, { index: i + 1, total }),
+                  : formatMediumHeading(headingNum, headingTitle, { index: i + 1, total }),
               blocks: chunk,
               // 画像は最初のテキストチャンクの下に置く
               imageUrl: ci === 0 ? entry.url : undefined,
@@ -1417,50 +1431,102 @@ async function renderManualDeck(
 
     if (item.kind === "toc") {
       addChrome(gfx, theme, { title: "目次", pageNum })
-      const left: GfxTextRun[] = []
-      const right: GfxTextRun[] = []
-      const mid = Math.ceil(outline.length / 2)
-
-      if (flowSlide != null) {
-        left.push({
-          text: "業務フロー図",
-          bold: true,
-          fontSize: 13,
-          color: "0563C1",
-          breakLine: true,
-          hyperlink: { slide: flowSlide, tooltip: "業務フロー図へ" },
-        })
-        left.push({ text: " ", fontSize: 6, breakLine: true })
+      type TocRow = {
+        text: string
+        indent: 0 | 1 | 2
+        bold?: boolean
+        fontSize: number
+        color: string
+        slide?: number
+        tooltip?: string
       }
-
-      outline.forEach((major, mi) => {
-        const bucket = mi < mid ? left : right
+      const rows: TocRow[] = []
+      if (flowSlide != null) {
+        rows.push({
+          text: "業務フロー図",
+          indent: 0,
+          bold: true,
+          fontSize: 12,
+          color: "0563C1",
+          slide: flowSlide,
+          tooltip: "業務フロー図へ",
+        })
+      }
+      for (const major of outline) {
         const majorTarget = majorSlide.get(major.number) ?? pageNum
-        bucket.push({
+        rows.push({
           text: formatMajorTitle(major.number, major.title),
+          indent: 0,
           bold: true,
           fontSize: 13,
           color: theme.navy,
-          breakLine: true,
-          hyperlink: { slide: majorTarget, tooltip: "この章へ" },
+          slide: majorTarget,
+          tooltip: "この章へ",
         })
         for (const medium of major.mediums) {
           const first = medium.sections[0]
-          const label = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
-          const target = first ? sectionSlide.get(first.id) ?? majorTarget : majorTarget
-          bucket.push({
-            text: `  ${label}`,
+          const mediumLabel = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
+          const mediumTarget = first ? sectionSlide.get(first.id) ?? majorTarget : majorTarget
+          rows.push({
+            text: mediumLabel,
+            indent: 1,
             fontSize: 11,
             color: "0563C1",
-            breakLine: true,
-            hyperlink: { slide: target, tooltip: label },
+            slide: mediumTarget,
+            tooltip: mediumLabel,
           })
+          if (medium.sections.length > 1) {
+            medium.sections.forEach((section, si) => {
+              const leaf = resolveLeafSectionNumber(
+                section,
+                medium.number,
+                si,
+                medium.sections.length,
+              )
+              const leafLabel = `${leaf}　${displaySectionTitle(section)}`
+              const leafTarget = sectionSlide.get(section.id) ?? mediumTarget
+              rows.push({
+                text: leafLabel,
+                indent: 2,
+                fontSize: 10,
+                color: "0563C1",
+                slide: leafTarget,
+                tooltip: leafLabel,
+              })
+            })
+          }
         }
-        bucket.push({ text: " ", fontSize: 6, breakLine: true })
-      })
+      }
 
-      gfx.addText(left, { x: 0.45, y: 1.3, w: 6.0, h: 5.2, valign: "top" })
-      gfx.addText(right, { x: 6.7, y: 1.3, w: 6.0, h: 5.2, valign: "top" })
+      // 2段組: 行を半分で分割し、各行を独立テキスト枠にしてスライド内リンクを確実に張る
+      const mid = Math.ceil(rows.length / 2)
+      const columns = [
+        { rows: rows.slice(0, mid), x: 0.5 },
+        { rows: rows.slice(mid), x: 6.85 },
+      ] as const
+      const lineH = 0.34
+      const indentIn = [0, 0.32, 0.58] as const
+      const startY = 1.28
+      for (const col of columns) {
+        col.rows.forEach((row, i) => {
+          const x = col.x + indentIn[row.indent]
+          const y = startY + i * lineH
+          if (y + lineH > 6.7) return
+          gfx.addText(row.text, {
+            x,
+            y,
+            w: 5.7 - indentIn[row.indent],
+            h: lineH,
+            fontSize: row.fontSize,
+            bold: row.bold,
+            color: row.color,
+            valign: "middle",
+            hyperlink: row.slide
+              ? { slide: row.slide, tooltip: row.tooltip ?? row.text }
+              : undefined,
+          })
+        })
+      }
       return
     }
 
@@ -1566,23 +1632,63 @@ export async function buildManualPptxArrayBuffer(
   return { buffer, imageFailures }
 }
 
-const BUNDLED_CJK_FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Regular.ttf`
+const BUNDLED_CJK_REGULAR = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Regular.ttf`
+const BUNDLED_CJK_BOLD = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Bold.ttf`
+const MEIRYO_REGULAR_CANDIDATES = [
+  `${import.meta.env.BASE_URL}fonts/Meiryo.ttf`,
+  `${import.meta.env.BASE_URL}fonts/meiryo.ttf`,
+  `${import.meta.env.BASE_URL}fonts/Meiryo.ttc`,
+]
+const MEIRYO_BOLD_CANDIDATES = [
+  `${import.meta.env.BASE_URL}fonts/Meiryo-Bold.ttf`,
+  `${import.meta.env.BASE_URL}fonts/meiryob.ttf`,
+  `${import.meta.env.BASE_URL}fonts/MeiryoBold.ttf`,
+]
 const PDF_FONT_NAME = "Meiryo"
-let pdfFontBase64Cache: string | null = null
 
-async function loadPdfFontBase64(): Promise<string> {
-  if (pdfFontBase64Cache) return pdfFontBase64Cache
-  const res = await fetch(BUNDLED_CJK_FONT_URL)
-  if (!res.ok) throw new Error("日本語フォントの読み込みに失敗しました")
-  const buf = await res.arrayBuffer()
-  const bytes = new Uint8Array(buf)
-  let binary = ""
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+type PdfFontBundle = { regular: string; bold: string; source: "meiryo" | "noto" }
+let pdfFontCache: PdfFontBundle | null = null
+
+async function fetchFontBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const buf = await res.arrayBuffer()
+    if (buf.byteLength < 1000) return null
+    const bytes = new Uint8Array(buf)
+    let binary = ""
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    return btoa(binary)
+  } catch {
+    return null
   }
-  pdfFontBase64Cache = btoa(binary)
-  return pdfFontBase64Cache
+}
+
+async function fetchFirstFont(urls: string[]): Promise<string | null> {
+  for (const url of urls) {
+    const b64 = await fetchFontBase64(url)
+    if (b64) return b64
+  }
+  return null
+}
+
+/** PDF 埋め込み用フォント。Meiryo があれば優先、なければ Noto Sans JP（Regular/Bold） */
+async function loadPdfFontBundle(): Promise<PdfFontBundle> {
+  if (pdfFontCache) return pdfFontCache
+  const meiryoReg = await fetchFirstFont(MEIRYO_REGULAR_CANDIDATES)
+  if (meiryoReg) {
+    const meiryoBold = (await fetchFirstFont(MEIRYO_BOLD_CANDIDATES)) ?? meiryoReg
+    pdfFontCache = { regular: meiryoReg, bold: meiryoBold, source: "meiryo" }
+    return pdfFontCache
+  }
+  const regular = await fetchFontBase64(BUNDLED_CJK_REGULAR)
+  if (!regular) throw new Error("日本語フォントの読み込みに失敗しました")
+  const bold = (await fetchFontBase64(BUNDLED_CJK_BOLD)) ?? regular
+  pdfFontCache = { regular, bold, source: "noto" }
+  return pdfFontCache
 }
 
 /** PowerPoint と同じワイドスライドデザインの PDF を生成 */
@@ -1593,16 +1699,17 @@ export async function buildManualPdfBlob(
 ): Promise<{ blob: Blob; imageFailures: number }> {
   const includeImages = options?.includeImages ?? true
   const includeFlow = options?.includeFlow ?? true
-  const fontB64 = await loadPdfFontBase64()
+  const fonts = await loadPdfFontBundle()
 
   const doc = new jsPDF({
     orientation: "landscape",
     unit: "in",
     format: [SLIDE_W, SLIDE_H],
   })
-  doc.addFileToVFS(`${PDF_FONT_NAME}.ttf`, fontB64)
-  doc.addFont(`${PDF_FONT_NAME}.ttf`, PDF_FONT_NAME, "normal")
-  doc.addFont(`${PDF_FONT_NAME}.ttf`, PDF_FONT_NAME, "bold")
+  doc.addFileToVFS(`${PDF_FONT_NAME}-Regular.ttf`, fonts.regular)
+  doc.addFileToVFS(`${PDF_FONT_NAME}-Bold.ttf`, fonts.bold)
+  doc.addFont(`${PDF_FONT_NAME}-Regular.ttf`, PDF_FONT_NAME, "normal")
+  doc.addFont(`${PDF_FONT_NAME}-Bold.ttf`, PDF_FONT_NAME, "bold")
   doc.setFont(PDF_FONT_NAME, "normal")
 
   let first = true

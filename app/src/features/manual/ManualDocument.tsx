@@ -1,5 +1,5 @@
 import type { ManualBlock, ManualSection } from "@/lib/types"
-import { buildManualOutline, displaySectionTitle, resolveLeafSectionNumber } from "@/lib/manual-outline"
+import { buildManualOutline, displaySectionTitle, resolveLeafSectionNumber, shouldShowLeafNumber } from "@/lib/manual-outline"
 import { EmptyState } from "@/components/EmptyState"
 import { BookOpenText } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -68,13 +68,25 @@ export function ManualDocument({
               <div className="mt-3 mb-6 h-px bg-border/70" />
 
               <div className="flex flex-col gap-10">
-                {medium.sections.map((section, si) => (
-                  <ManualSectionView
-                    key={section.id}
-                    section={section}
-                    leafNumber={resolveLeafSectionNumber(section, medium.number, si)}
-                  />
-                ))}
+                {medium.sections.map((section, si) => {
+                  const leaf = resolveLeafSectionNumber(
+                    section,
+                    medium.number,
+                    si,
+                    medium.sections.length,
+                  )
+                  return (
+                    <ManualSectionView
+                      key={section.id}
+                      section={section}
+                      leafNumber={
+                        shouldShowLeafNumber(leaf, medium.number, medium.sections.length)
+                          ? leaf
+                          : ""
+                      }
+                    />
+                  )
+                })}
               </div>
             </div>
           ))}
@@ -89,7 +101,7 @@ function ManualSectionView({
   leafNumber,
 }: {
   section: ManualSection
-  leafNumber: string
+  leafNumber?: string
 }) {
   let stepNo = 0
 

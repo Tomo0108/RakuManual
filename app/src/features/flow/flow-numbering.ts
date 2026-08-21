@@ -1,7 +1,8 @@
 import type { FlowNode, FlowState } from "@/lib/types"
 
-/** フロー上の文書化対象ステップ(process / decision)に 1.1, 1.2 … の項番を付与。
- * 既存の sectionNumber は保持し、未設定ノードにのみ採番する(大項目跨ぎ・グルーピングを壊さない)。 */
+/** フロー上の文書化対象ステップ(process / decision)に 1.1.1, 1.1.2 … の項番を付与。
+ * 大項目(1) → 中項目(1.1) → 小項目(1.1.n) の3段階層になるよう採番する。
+ * 既存の sectionNumber は保持し、未設定ノードにのみ採番する。 */
 export function assignSectionNumbers(state: FlowState): FlowState {
   const { nodes, edges } = state
   if (nodes.length === 0) return state
@@ -31,24 +32,27 @@ export function assignSectionNumbers(state: FlowState): FlowState {
     if (!seen.has(n.id)) order.push(n.id)
   })
 
-  let maxSub = 0
+  let maxLeaf = 0
   for (const n of nodes) {
     const num = n.data.sectionNumber?.trim()
     if (!num) continue
     const parts = num.split(".").map(Number)
-    if (parts[0] === 1 && parts.length >= 2 && !Number.isNaN(parts[1])) {
-      maxSub = Math.max(maxSub, parts[1])
+    if (parts[0] !== 1 || parts.length < 2 || Number.isNaN(parts[parts.length - 1]!)) continue
+    if (parts.length >= 3 && parts[1] === 1) {
+      maxLeaf = Math.max(maxLeaf, parts[2]!)
+    } else if (parts.length === 2) {
+      maxLeaf = Math.max(maxLeaf, parts[1]!)
     }
   }
 
-  let sub = maxSub + 1
+  let leaf = maxLeaf + 1
   const numberMap = new Map<string, string>()
   for (const id of order) {
     const n = nodes.find((node) => node.id === id)!
     if (n.data.kind === "start" || n.data.kind === "end") continue
     if (n.data.sectionNumber?.trim()) continue
-    numberMap.set(id, `1.${sub}`)
-    sub++
+    numberMap.set(id, `1.1.${leaf}`)
+    leaf++
   }
 
   if (numberMap.size === 0) return state

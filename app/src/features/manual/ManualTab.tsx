@@ -25,6 +25,7 @@ import {
   displaySectionTitle,
   resolveLeafSectionNumber,
   resolveSectionNumber,
+  shouldShowLeafNumber,
 } from "@/lib/manual-outline"
 import {
   buildUnplacedCandidates,
@@ -389,11 +390,22 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                         <div className="mt-3 h-px bg-border/70" />
                       </div>
                       <div className="flex flex-col gap-10">
-                        {medium.sections.map((section, si) => (
+                        {medium.sections.map((section, si) => {
+                          const leaf = resolveLeafSectionNumber(
+                            section,
+                            medium.number,
+                            si,
+                            medium.sections.length,
+                          )
+                          return (
                           <article key={section.id} className="min-w-0">
                             <SectionEditor
                               section={section}
-                              leafNumber={resolveLeafSectionNumber(section, medium.number, si)}
+                              leafNumber={
+                                shouldShowLeafNumber(leaf, medium.number, medium.sections.length)
+                                  ? leaf
+                                  : ""
+                              }
                               project={project}
                               embedded
                               isMobile={isMobile}
@@ -402,7 +414,8 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                               onLog={logAction}
                             />
                           </article>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ))}
@@ -545,7 +558,12 @@ function SectionTocPanel({
                         <TocItem
                           key={s.id}
                           section={s}
-                          leafNumber={resolveLeafSectionNumber(s, medium.number, si)}
+                          leafNumber={resolveLeafSectionNumber(
+                            s,
+                            medium.number,
+                            si,
+                            medium.sections.length,
+                          )}
                           active={activeSectionId === s.id}
                           onNavigate={() => onNavigateSection(s.id)}
                         />
@@ -632,7 +650,7 @@ function TocItem({
   active: boolean
   onNavigate: () => void
 }) {
-  const num = leafNumber ?? resolveSectionNumber(section)
+  const num = leafNumber !== undefined ? leafNumber : resolveSectionNumber(section)
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
 
   const title = displaySectionTitle(section)
@@ -728,7 +746,7 @@ function SectionEditor({
   }
 
   let stepNo = 0
-  const sectionNum = leafNumber ?? resolveSectionNumber(section)
+  const sectionNum = leafNumber !== undefined ? leafNumber : resolveSectionNumber(section)
   const sectionTitle = displaySectionTitle(section)
   // 要確認が消え、フロー同期も問題なければ操作帯を畳んで読み面を優先
   const chromeCollapsed = confirms === 0 && sync === "ok"
