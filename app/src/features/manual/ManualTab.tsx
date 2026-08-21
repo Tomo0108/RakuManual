@@ -18,6 +18,8 @@ import type { ManualBlock, ManualSection, Project, ProjectTab } from "@/lib/type
 import { SECTION_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now, today } from "@/lib/project-utils"
+import { useAppSession } from "@/lib/api/use-app-session"
+import { actorName } from "@/lib/actor"
 import {
   buildManualOutline,
   displaySectionTitle,
@@ -33,6 +35,7 @@ import {
 import { placeUnplacedSection } from "@/lib/manual-regen"
 import { appendRevision, snapshotSection } from "@/lib/manual-version"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
+import { resolveMediaFetchUrl } from "@/lib/resolve-export-image"
 import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -88,6 +91,8 @@ interface Props {
 
 export function ManualTab({ project, updateProject, setTab }: Props) {
   const isMobile = useIsMobile()
+  const { user } = useAppSession()
+  const actor = actorName(user)
   const sections = project.sections
   const majorTitle = resolveMajorTitle(project)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(sections[0]?.id ?? null)
@@ -138,12 +143,12 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           status: base.status === "deepdive" ? "manual" : base.status,
           sections: generated,
           history: [
-            { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: `マニュアルを生成(全${generated.length}セクション)` },
+            { id: `h-${Date.now()}`, date: now(), user: actor, action: `マニュアルを生成(全${generated.length}セクション)` },
             ...base.history,
           ],
         }
         for (const section of generated) {
-          next = appendRevision(next, snapshotSection(section, { reason: "generate", user: "山田 太郎" }))
+          next = appendRevision(next, snapshotSection(section, { reason: "generate", user: actor }))
         }
         return next
       })
@@ -209,7 +214,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const logAction = (action: string) => {
     updateProject(project.id, (p) => ({
       ...p,
-      history: [{ id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action }, ...p.history],
+      history: [{ id: `h-${Date.now()}`, date: now(), user: actor, action }, ...p.history],
     }))
   }
 
@@ -320,7 +325,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                                 {
                                   id: `h-${Date.now()}`,
                                   date: now(),
-                                  user: "山田 太郎",
+                                  user: actor,
                                   action: `未配置ステップ「${c.label}」をマニュアルに追加`,
                                 },
                                 ...p.history,
@@ -455,7 +460,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               {
                 id: `h-${Date.now()}`,
                 date: now(),
-                user: "山田 太郎",
+                user: actor,
                 action: "フロー変更をマニュアルに選択反映",
               },
               ...next.history,
@@ -681,6 +686,8 @@ function SectionEditor({
   isMobile?: boolean
   embedded?: boolean
 }) {
+  const { user } = useAppSession()
+  const actor = actorName(user)
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [blockDraft, setBlockDraft] = useState("")
   const [regenerating, setRegenerating] = useState(false)
@@ -706,7 +713,7 @@ function SectionEditor({
       const { section: regenerated } = await aiRegenerateSection(project.id, section.id)
       const withSnapshot = appendRevision(
         project,
-        snapshotSection(section, { reason: "regenerate", user: "山田 太郎" }),
+        snapshotSection(section, { reason: "regenerate", user: actor }),
       )
       onReplaceProject({
         ...withSnapshot,
@@ -1270,7 +1277,7 @@ function BlockImageSection({
           )}
           <figure className="manual-figure overflow-hidden rounded-lg border border-border bg-card">
             <img
-              src={image.url}
+              src={resolveMediaFetchUrl(image.url ?? "")}
               alt={image.caption || "手順の参考画像"}
               className="manual-figure-img"
             />

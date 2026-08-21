@@ -105,7 +105,7 @@ export interface ApplyRegenInput {
 export function applyRegenChoices({
   project,
   choices,
-  user = "山田 太郎",
+  user = "システム",
 }: ApplyRegenInput): Project {
   const plan = buildRegenPlan(project)
   const nodeById = new Map(documentableNodes(project.flow).map((n) => [n.id, n]))

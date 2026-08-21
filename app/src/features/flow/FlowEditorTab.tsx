@@ -47,6 +47,8 @@ import { FlowPanBar } from "./FlowPanBar"
 import { FlowHelpButton } from "./FlowHelpButton"
 import { FlowMobileControls } from "./FlowMobileControls"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useAppSession } from "@/lib/api/use-app-session"
+import { actorName } from "@/lib/actor"
 import {
   autoLayout,
   makeNode,
@@ -126,6 +128,8 @@ interface Props {
 
 export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const isMobile = useIsMobile()
+  const { user } = useAppSession()
+  const actor = actorName(user)
   const [flow, setFlow] = useState<FlowState>(() => initialFlow(project.flow))
   const [undoStack, setUndoStack] = useState<FlowState[]>([])
   const [redoStack, setRedoStack] = useState<FlowState[]>([])
@@ -136,7 +140,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [genProgress, setGenProgress] = useState(0)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
-  const [isLocked, setIsLocked] = useState(false)
+  const [isLocked, setIsLocked] = useState(true)
   const [connectorPanelOpen, setConnectorPanelOpen] = useState(false)
   const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
   const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
@@ -828,7 +832,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           flow: generated,
           status: base.status === "hearing" ? "flow" : base.status,
           history: [
-            { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: "フロー図をAI生成" },
+            { id: `h-${Date.now()}`, date: now(), user: actor, action: "フロー図をAI生成" },
             ...base.history,
           ],
         }
@@ -855,7 +859,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           {
             id: `h-${Date.now()}`,
             date: now(),
-            user: "山田 太郎",
+            user: actor,
             action: "フロー図を再生成(手動修正ステップは保護)",
           },
           ...p.history,
@@ -899,7 +903,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         {
           id: `h-${Date.now()}`,
           date: now(),
-          user: "山田 太郎",
+          user: actor,
           action: `自然言語修正を適用: ${proposal.description.slice(0, 40)}…`,
         },
         ...p.history,
@@ -1006,7 +1010,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           {
             id: `h-${Date.now()}`,
             date: now(),
-            user: "山田 太郎",
+            user: actor,
             action:
               parts.length > 0 ? `フロー図を確定(${parts.join("、")})` : "フロー図を確定",
           },

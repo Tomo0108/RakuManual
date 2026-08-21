@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Project } from "@/lib/types"
 import { INITIAL_PROJECTS } from "@/lib/mock-data"
-import { today } from "@/lib/project-utils"
+import { stamp, today } from "@/lib/project-utils"
 import { ApiError } from "@/lib/api/client"
 import { apiUrl } from "@/lib/api/base"
 import { fetchMe, login as apiLogin, loginWithOidcCode, logout as apiLogout, updateMyProfile, type AuthUser } from "@/lib/api/auth"
@@ -234,7 +234,7 @@ export function useAppSession() {
       setProjects((prev) => {
         const next = prev.map((p) => {
           if (p.id !== id) return p
-          const updated = { ...updater(p), updatedAt: today() }
+          const updated = { ...updater(p), updatedAt: stamp() }
           schedulePersist(updated)
           return updated
         })

@@ -180,7 +180,7 @@ export default function App() {
               <ManualViewerPage
                 project={currentProject}
                 sectionId={view.sectionId}
-                onBack={() => setView({ name: "qa" })}
+                onBack={() => setView({ name: "projects" })}
               />
             )}
             {view.name === "project" && currentProject && session.user?.role === "viewer" && (

@@ -14,6 +14,8 @@ import type { DeepDiveItem, DeepDiveStatus, Project, ProjectTab } from "@/lib/ty
 import { DEEPDIVE_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { now } from "@/lib/project-utils"
+import { useAppSession } from "@/lib/api/use-app-session"
+import { actorName } from "@/lib/actor"
 import { fetchDeepdiveQuestions } from "@/lib/api/ai"
 import { describeAiError } from "@/lib/api/errors"
 import { REVIEW_STATUS, WARNING_BOX, SUCCESS_BOX } from "@/lib/semantic-styles"
@@ -64,6 +66,8 @@ interface Props {
 
 export function DeepDiveTab({ project, updateProject, setTab }: Props) {
   const isMobile = useIsMobile()
+  const { user } = useAppSession()
+  const actor = actorName(user)
   const items = useMemo(
     () =>
       [...project.deepdive].sort((a, b) => {
@@ -168,7 +172,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
       ...p,
       status: p.status === "deepdive" ? "manual" : p.status,
       history: [
-        { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: "マニュアル生成を開始" },
+        { id: `h-${Date.now()}`, date: now(), user: actor, action: "マニュアル生成を開始" },
         ...p.history,
       ],
     }))

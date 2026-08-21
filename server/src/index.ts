@@ -59,10 +59,32 @@ async function main() {
   })
   await app.register(cookie)
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } })
+  // sendFile 用のみ（serve: false で無認証公開はしない）
   await app.register(fastifyStatic, {
     root: UPLOADS_DIR,
-    prefix: "/api/uploads/",
-    decorateReply: false,
+    decorateReply: true,
+    serve: false,
+  })
+
+  // 画像は認証＋プロジェクト閲覧権限が必要
+  app.get<{ Params: { "*": string } }>("/api/uploads/*", async (request, reply) => {
+    const user = await requireAuth(request, reply)
+    if (!user) return
+    const raw = (request.params as { "*": string })["*"] ?? ""
+    const key = raw.replace(/^\/+/, "")
+    if (!key || key.includes("..") || path.isAbsolute(key)) {
+      return reply.status(400).send({ error: "Invalid path" })
+    }
+    const projectId = key.split("/")[0]
+    if (!projectId || !getProjectForUser(projectId, user.id)) {
+      return reply.status(404).send({ error: "Not found" })
+    }
+    const root = path.resolve(UPLOADS_DIR)
+    const abs = path.resolve(UPLOADS_DIR, key)
+    if (!abs.startsWith(root + path.sep) || !fs.existsSync(abs)) {
+      return reply.status(404).send({ error: "Not found" })
+    }
+    return reply.sendFile(key)
   })
 
   app.addHook("onSend", async (_request, reply, payload) => {

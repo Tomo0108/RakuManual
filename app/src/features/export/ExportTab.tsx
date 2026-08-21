@@ -312,7 +312,7 @@ export function ExportTab({ project, updateProject }: Props) {
           {(
             [
               { id: "pdf", icon: FileText, title: "PDF", desc: "PowerPointと同じスライドデザインで出力（閲覧・印刷用）" },
-              { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "1セクション = 1スライドで出力" },
+              { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "スライド形式で出力（長文は複数スライドに分割）" },
             ] as const
           ).map((f) => (
             <Card
@@ -444,16 +444,12 @@ export function ExportTab({ project, updateProject }: Props) {
           {project.sections.length === 0 && (
             <span className="text-xs text-muted-foreground">マニュアルを生成すると出力できます</span>
           )}
-          {exported && format === "pptx" && (
+          {exported && (
             <span className={cn("flex items-center justify-center gap-1 text-sm", SUCCESS_TEXT)}>
               <Check className="size-4" />
-              {targetSections.length} スライドの {project.name}.pptx をダウンロードしました
-            </span>
-          )}
-          {exported && format === "pdf" && (
-            <span className={cn("flex items-center justify-center gap-1 text-sm", SUCCESS_TEXT)}>
-              <Check className="size-4" />
-              {project.name}.pdf をダウンロードしました
+              {format === "pptx"
+                ? `${project.name}.pptx をダウンロードしました`
+                : `${project.name}.pdf をダウンロードしました`}
             </span>
           )}
           {exportError && (

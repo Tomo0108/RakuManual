@@ -1,3 +1,5 @@
+import { useAppSession } from "@/lib/api/use-app-session"
+import { actorName } from "@/lib/actor"
 import { useMemo, useState } from "react"
 import { Eye, History, RotateCcw } from "lucide-react"
 import type { Project } from "@/lib/types"
@@ -28,6 +30,8 @@ export function SectionHistoryButton({
   onRestore: (next: Project) => void
   isMobile?: boolean
 }) {
+  const { user } = useAppSession()
+  const actor = actorName(user)
   const [open, setOpen] = useState(false)
   const [diffRevId, setDiffRevId] = useState<string | null>(null)
   const revisions = revisionsForSection(project, sectionId)
@@ -86,7 +90,7 @@ export function SectionHistoryButton({
                     variant="outline"
                     className="gap-1"
                     onClick={() => {
-                      const next = restoreSection(project, sectionId, diffRev.id, "山田 太郎")
+                      const next = restoreSection(project, sectionId, diffRev.id, actor)
                       onRestore(next)
                       setOpen(false)
                       setDiffRevId(null)
@@ -151,7 +155,7 @@ export function SectionHistoryButton({
                         variant="outline"
                         className={cn("gap-1", isMobile && "h-10 w-full")}
                         onClick={() => {
-                          const next = restoreSection(project, sectionId, rev.id, "山田 太郎")
+                          const next = restoreSection(project, sectionId, rev.id, actor)
                           onRestore(next)
                           setOpen(false)
                         }}

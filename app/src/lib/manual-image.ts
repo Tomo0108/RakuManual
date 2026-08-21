@@ -50,8 +50,10 @@ export async function readImageFile(file: File, projectId?: string): Promise<Man
         mimeType: uploaded.mimeType,
         name: uploaded.name,
       }
-    } catch {
-      /* API 未起動時は data URL にフォールバック */
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "画像のアップロードに失敗しました"
+      throw new Error(message)
     }
   }
 

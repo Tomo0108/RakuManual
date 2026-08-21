@@ -2,7 +2,9 @@ import { useState } from "react"
 import { CalendarClock, FolderOpen, Plus, Search, Sparkles, Trash2, User } from "lucide-react"
 import type { Project, ProjectTab } from "@/lib/types"
 import { STATUS_LABEL } from "@/lib/types"
-import { STATUS_BADGE, STATUS_TAB, projectProgress, uid, today } from "@/lib/project-utils"
+import { STATUS_BADGE, STATUS_TAB, projectProgress, uid, today, formatUpdatedAt } from "@/lib/project-utils"
+import { useAppSession } from "@/lib/api/use-app-session"
+import { actorName } from "@/lib/actor"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -53,6 +55,7 @@ export function ProjectList({
   const [newName, setNewName] = useState("")
   const [newDesc, setNewDesc] = useState("")
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const { user } = useAppSession()
 
   const filtered = projects.filter(
     (p) => p.name.includes(query) || p.description.includes(query) || p.owner.includes(query),
@@ -64,10 +67,11 @@ export function ProjectList({
     onCreate({
       id,
       name: newName.trim(),
-      owner: "山田 太郎",
+      owner: actorName(user),
+      ownerId: user?.id,
       updatedAt: today(),
       status: "hearing",
-      description: newDesc.trim() || "(説明未入力)",
+      description: newDesc.trim() || "",
       hearingAnswers: [],
       flow: { lanes: [], nodes: [], edges: [] },
       deepdive: [],
@@ -181,7 +185,7 @@ export function ProjectList({
                   </span>
                   <span className="flex items-center gap-1.5">
                     <CalendarClock className="size-3.5" />
-                    更新 {p.updatedAt}
+                    更新 {formatUpdatedAt(p.updatedAt)}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">

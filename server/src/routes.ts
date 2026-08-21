@@ -108,12 +108,14 @@ function canEditProjects(user: AuthUser): boolean {
 }
 
 function todayStamp(): string {
-  return new Date().toISOString().slice(0, 10)
+  // 楽観ロック用。日付のみだと同日内の同時編集を検出できない
+  return new Date().toISOString()
 }
 
 function nowStamp(): string {
   const d = new Date()
-  return `${d.toISOString().slice(0, 10)} ${d.toTimeString().slice(0, 5)}`
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function appendHistory(project: Project, user: AuthUser, action: string): Project {

@@ -3,6 +3,7 @@ import { buildManualOutline, displaySectionTitle, resolveLeafSectionNumber } fro
 import { EmptyState } from "@/components/EmptyState"
 import { BookOpenText } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { resolveMediaFetchUrl } from "@/lib/resolve-export-image"
 
 interface ManualDocumentProps {
   sections: ManualSection[]
@@ -143,7 +144,7 @@ function ManualFigure({
 
   return (
     <figure className="manual-figure mt-3">
-      <img src={image.url} alt={caption || "手順の参考画像"} className="manual-figure-img" />
+      <img src={resolveMediaFetchUrl(image.url)} alt={caption || "手順の参考画像"} className="manual-figure-img" />
       {caption && <figcaption className="manual-figcaption">{caption}</figcaption>}
     </figure>
   )

@@ -49,7 +49,14 @@ export async function apiUpload(
     credentials: "include",
   })
   if (!res.ok) {
-    throw new ApiError(res.statusText, res.status)
+    let message = res.statusText
+    try {
+      const body = (await res.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(message || "画像のアップロードに失敗しました", res.status)
   }
   return res.json()
 }
