@@ -8,9 +8,10 @@ import type { ExportOptions } from "./manual-html.js"
 
 function resolveJapaneseFont(): string | null {
   const candidates = [
-    path.resolve(process.cwd(), "app/public/fonts/NotoSansJP-Regular.ttf"),
-    path.resolve(process.cwd(), "public/fonts/NotoSansJP-Regular.ttf"),
     path.resolve(import.meta.dirname, "../../../app/public/fonts/NotoSansJP-Regular.ttf"),
+    path.resolve(process.cwd(), "app/public/fonts/NotoSansJP-Regular.ttf"),
+    path.resolve(process.cwd(), "../app/public/fonts/NotoSansJP-Regular.ttf"),
+    path.resolve(process.cwd(), "public/fonts/NotoSansJP-Regular.ttf"),
     "/Library/Fonts/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
   ]

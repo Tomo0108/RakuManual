@@ -4,6 +4,7 @@ import type { Project, ProjectVisibility } from "@/lib/types"
 import { VISIBILITY_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { exportManualPptx } from "@/lib/export-pptx"
+import { exportManualPdfClient } from "@/lib/export-pdf-client"
 import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
 import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
@@ -120,14 +121,29 @@ export function ExportTab({ project, updateProject }: Props) {
           template,
         })
       } else {
-        const result = await exportProjectPdf(project.id, {
-          template,
-          includeFlow,
-          imageMode: imageMode as "expand" | "appendix" | "none",
-          sectionIds: range === "all" ? undefined : [range],
-        })
-        if (!result.pdfBase64) throw new Error("PDFデータがありません")
-        downloadPdfBase64(result.pdfBase64, result.filename)
+        // まず API（サーバーPDF）。不通・失敗時はクライアント生成にフォールバック
+        // （UIプレビューでは API が無いため、ここで PDF が必ず出せるようにする）
+        let usedClient = false
+        try {
+          const result = await exportProjectPdf(project.id, {
+            template,
+            includeFlow,
+            imageMode: imageMode as "expand" | "appendix" | "none",
+            sectionIds: range === "all" ? undefined : [range],
+          })
+          if (!result.pdfBase64) throw new Error("PDFデータがありません")
+          downloadPdfBase64(result.pdfBase64, result.filename)
+        } catch {
+          usedClient = true
+          await exportManualPdfClient(project, targetSections, {
+            includeImages: imageMode !== "none",
+            includeFlow,
+            template,
+          })
+        }
+        if (usedClient) {
+          /* クライアント出力で成功扱い */
+        }
       }
       setExported(true)
     } catch (err) {
