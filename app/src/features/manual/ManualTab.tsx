@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   AlertTriangle,
   Check,
@@ -1026,6 +1026,10 @@ function BlockView({
   const [captionDraft, setCaptionDraft] = useState(block.image?.caption ?? "")
   const [uploading, setUploading] = useState(false)
 
+  useEffect(() => {
+    setCaptionDraft(block.image?.caption ?? "")
+  }, [block.image?.caption, block.image?.url])
+
   const pickImage = () => {
     setImageError(null)
     fileRef.current?.click()
@@ -1133,20 +1137,6 @@ function BlockView({
                   </div>
                 </div>
               )}
-
-              <BlockImageSection
-                block={block}
-                chromeCollapsed={chromeCollapsed}
-                captionDraft={captionDraft}
-                setCaptionDraft={setCaptionDraft}
-                imageError={imageError}
-                uploading={uploading}
-                fileRef={fileRef}
-                onFileChange={onFileChange}
-                onPickImage={pickImage}
-                onRemoveImage={onRemoveImage}
-                onSaveCaption={saveCaption}
-              />
             </div>
 
             {!block.needsConfirm && (
@@ -1162,6 +1152,21 @@ function BlockView({
               </button>
             )}
           </div>
+
+          {/* 画像は手順番号のインデント外・ブロック全幅に配置 */}
+          <BlockImageSection
+            block={block}
+            chromeCollapsed={chromeCollapsed}
+            captionDraft={captionDraft}
+            setCaptionDraft={setCaptionDraft}
+            imageError={imageError}
+            uploading={uploading}
+            fileRef={fileRef}
+            onFileChange={onFileChange}
+            onPickImage={pickImage}
+            onRemoveImage={onRemoveImage}
+            onSaveCaption={saveCaption}
+          />
         </>
       )}
     </div>
@@ -1197,7 +1202,12 @@ function BlockImageSection({
   const hasRealImage = Boolean(image?.url)
 
   const imageOps = (
-    <div className={cn("flex flex-wrap items-center gap-1.5", !chromeCollapsed && "px-2.5 py-2", !chromeCollapsed && APP_CHROME)}>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-1.5",
+        !chromeCollapsed && cn("rounded-md border border-border/60 px-2.5 py-2", APP_CHROME),
+      )}
+    >
       {!chromeCollapsed && <span className={cn(APP_CHROME_LABEL, "mr-1")}>画像操作</span>}
       <Button
         type="button"
@@ -1226,7 +1236,7 @@ function BlockImageSection({
   )
 
   return (
-    <div className="mt-2">
+    <div className="mt-3">
       <input
         ref={fileRef}
         type="file"
@@ -1236,9 +1246,9 @@ function BlockImageSection({
       />
 
       {hasRealImage && image ? (
-        <>
+        <div className="space-y-2">
           {chromeCollapsed ? (
-            <details className={cn("mt-2", APP_CHROME)}>
+            <details className={cn(APP_CHROME)}>
               <summary className="cursor-pointer list-none px-2.5 py-1.5 text-[11px] marker:content-none [&::-webkit-details-marker]:hidden">
                 <span className="flex items-center justify-between gap-2">
                   <span className={APP_CHROME_LABEL}>画像操作</span>
@@ -1248,9 +1258,9 @@ function BlockImageSection({
               <div className="border-t border-border/50 px-2.5 py-2">{imageOps}</div>
             </details>
           ) : (
-            <div className="mt-2">{imageOps}</div>
+            imageOps
           )}
-          <figure className="manual-figure mt-2 overflow-hidden rounded-lg border border-border bg-card">
+          <figure className="manual-figure overflow-hidden rounded-lg border border-border bg-card">
             <img
               src={image.url}
               alt={image.caption || "手順の参考画像"}
@@ -1285,21 +1295,19 @@ function BlockImageSection({
               )}
             </figcaption>
           </figure>
-        </>
+        </div>
       ) : (
-        !chromeCollapsed && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mt-2 h-8 gap-1.5 border bg-background px-2.5 text-[11px] text-muted-foreground hover:text-foreground"
-            onClick={onPickImage}
-            disabled={uploading}
-          >
-            <ImagePlus className="size-3.5" />
-            {uploading ? "読込中…" : "画像を添付"}
-          </Button>
-        )
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 border border-dashed bg-background px-2.5 text-[11px] text-muted-foreground hover:border-solid hover:text-foreground"
+          onClick={onPickImage}
+          disabled={uploading}
+        >
+          <ImagePlus className="size-3.5" />
+          {uploading ? "読込中…" : "画像を添付"}
+        </Button>
       )}
 
       {imageError && (

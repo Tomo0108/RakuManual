@@ -262,26 +262,29 @@ export function OverviewTab({ project, setTab, updateProject }: Props) {
               見直し期限・権限
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 px-4 py-4 sm:px-6 sm:py-5">
-            <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-              <div>
+          <CardContent className="flex flex-col gap-5 px-4 py-4 sm:px-6 sm:py-5">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div className="space-y-2">
                 <Label htmlFor="deadline">見直し期限</Label>
                 <Input
                   id="deadline"
                   type="date"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
+                  className="h-9"
                 />
               </div>
-              <Button onClick={() => void saveDeadline()}>期限を保存</Button>
+              <Button className="sm:mt-7" onClick={() => void saveDeadline()}>
+                期限を保存
+              </Button>
             </div>
 
-            <div className="grid gap-2 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <div>
+            <div className="grid gap-3 border-t border-border/60 pt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div className="space-y-2">
                 <Label htmlFor="member">メンバー招待</Label>
                 <select
                   id="member"
-                  className="mt-1 w-full rounded-md border bg-background px-2 py-2 text-sm"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   value={memberUserId}
                   onChange={(e) => setMemberUserId(e.target.value)}
                 >
@@ -294,23 +297,41 @@ export function OverviewTab({ project, setTab, updateProject }: Props) {
                     ))}
                 </select>
                 {members.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    現在のメンバー: {members.map((m) => `${m.userId}:${m.permission}`).join(", ")}
-                  </p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    {members.map((m) => {
+                      const name = directory.find((u) => u.id === m.userId)?.name ?? m.userId
+                      const perm =
+                        m.permission === "edit"
+                          ? "編集可"
+                          : m.permission === "admin"
+                            ? "管理者"
+                            : "閲覧"
+                      return (
+                        <li key={m.userId}>
+                          {name}
+                          <span className="text-muted-foreground/80"> · {perm}</span>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 )}
               </div>
-              <Button variant="outline" className="gap-1.5" onClick={() => void inviteMember()}>
+              <Button
+                variant="outline"
+                className="gap-1.5 sm:mt-7"
+                onClick={() => void inviteMember()}
+              >
                 <UserPlus className="size-4" />
                 招待
               </Button>
             </div>
 
-            <div className="grid gap-2 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <div>
+            <div className="grid gap-3 border-t border-border/60 pt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div className="space-y-2">
                 <Label htmlFor="transfer">オーナー変更</Label>
                 <select
                   id="transfer"
-                  className="mt-1 w-full rounded-md border bg-background px-2 py-2 text-sm"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   value={transferUserId}
                   onChange={(e) => setTransferUserId(e.target.value)}
                 >
@@ -323,7 +344,7 @@ export function OverviewTab({ project, setTab, updateProject }: Props) {
                     ))}
                 </select>
               </div>
-              <Button variant="destructive" onClick={() => void doTransfer()}>
+              <Button variant="destructive" className="sm:mt-7" onClick={() => void doTransfer()}>
                 オーナー変更
               </Button>
             </div>

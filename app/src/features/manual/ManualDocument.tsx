@@ -101,22 +101,25 @@ function ManualSectionView({ section }: { section: ManualSection }) {
 
 function ManualBlockView({ block, stepNo }: { block: ManualBlock; stepNo?: number }) {
   return (
-    <div className="flex items-start gap-3">
-      {stepNo !== undefined && (
-        <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/80 bg-background text-[12px] font-semibold tabular-nums text-muted-foreground">
-          {stepNo}
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        {block.type === "note" ? (
-          <aside className="rounded-lg border border-[var(--semantic-warning-border)]/40 bg-[color-mix(in_oklch,var(--semantic-warning-bg)_40%,transparent)] px-3 py-2 text-[13.5px] leading-relaxed text-muted-foreground">
-            {block.text}
-          </aside>
-        ) : (
-          <p className="text-[15px] leading-[1.8] text-foreground/95">{block.text}</p>
+    <div>
+      <div className="flex items-start gap-3">
+        {stepNo !== undefined && (
+          <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/80 bg-background text-[12px] font-semibold tabular-nums text-muted-foreground">
+            {stepNo}
+          </span>
         )}
-        <ManualFigure image={block.image} />
+        <div className="min-w-0 flex-1">
+          {block.type === "note" ? (
+            <aside className="rounded-lg border border-[var(--semantic-warning-border)]/40 bg-[color-mix(in_oklch,var(--semantic-warning-bg)_40%,transparent)] px-3 py-2 text-[13.5px] leading-relaxed text-muted-foreground">
+              {block.text}
+            </aside>
+          ) : (
+            <p className="text-[15px] leading-[1.8] text-foreground/95">{block.text}</p>
+          )}
+        </div>
       </div>
+      {/* 画像は手順番号の外・ブロック全幅 */}
+      <ManualFigure image={block.image} />
     </div>
   )
 }
