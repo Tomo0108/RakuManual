@@ -112,7 +112,8 @@ export function DashboardPage({ projects }: Props) {
               </div>
               <Progress value={Math.min(100, tokenUsage)} className="mt-3 h-2" />
               <p className="mt-2 text-[11px] text-muted-foreground">
-                provider: {metrics?.llmProvider ?? "mock"} / 生成 {metrics?.generateCount ?? 0} /
+                provider: {metrics?.llmProvider ?? "mock"}
+                {metrics?.llmModel ? ` (${metrics.llmModel})` : ""} / 生成 {metrics?.generateCount ?? 0} /
                 出力 {metrics?.exportCount ?? 0} / 公開 {metrics?.publishCount ?? 0}
               </p>
             </CardContent>

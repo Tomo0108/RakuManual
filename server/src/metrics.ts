@@ -1,6 +1,7 @@
 import { averageCsat, getDb, listProjectsForUser } from "./db.js"
 import { getMonthlyLlmUsageYen } from "./llm-cost.js"
 import { countOperations } from "./operation-log.js"
+import { getLlmRuntimeInfo } from "./llm/adapter.js"
 
 export interface DashboardMetrics {
   publishedCount: number
@@ -18,7 +19,8 @@ export interface DashboardMetrics {
   exportCount: number
   editCount: number
   publishCount: number
-  llmProvider: "mock" | "openai"
+  llmProvider: string
+  llmModel: string
   hearingStartCount: number
   hearingCompleteCount: number
   hearingDropoutRate: number
@@ -81,7 +83,8 @@ export function getDashboardMetrics(userId: string): DashboardMetrics {
     exportCount: countOperations(userId, "export", thirtyDays),
     editCount: countOperations(userId, "edit", thirtyDays),
     publishCount: countOperations(userId, "publish", thirtyDays),
-    llmProvider: process.env.OPENAI_API_KEY?.trim() ? "openai" : "mock",
+    llmProvider: getLlmRuntimeInfo().provider,
+    llmModel: getLlmRuntimeInfo().model,
     hearingStartCount: startCount,
     hearingCompleteCount: completeCount,
     hearingDropoutRate: Math.max(0, hearingDropoutRate),

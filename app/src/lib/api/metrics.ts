@@ -16,7 +16,8 @@ export interface DashboardMetrics {
   exportCount: number
   editCount: number
   publishCount: number
-  llmProvider: "mock" | "openai"
+  llmProvider: string
+  llmModel?: string
   hearingStartCount: number
   hearingCompleteCount: number
   hearingDropoutRate: number

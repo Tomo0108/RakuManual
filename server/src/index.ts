@@ -5,6 +5,7 @@ import multipart from "@fastify/multipart"
 import fastifyStatic from "@fastify/static"
 import fs from "node:fs"
 import path from "node:path"
+import { loadEnvFiles } from "./llm/config.js"
 import { getDb, getProjectForUser, UPLOADS_DIR } from "./db.js"
 import { registerAiJobHandlers } from "./ai/jobs-handlers.js"
 import {
@@ -24,6 +25,7 @@ const PORT = Number(process.env.PORT ?? 3001)
 const HOST = process.env.HOST ?? "127.0.0.1"
 
 async function main() {
+  loadEnvFiles()
   fs.mkdirSync(UPLOADS_DIR, { recursive: true })
   getDb()
   registerAiJobHandlers()
@@ -50,7 +52,14 @@ async function main() {
     return payload
   })
 
-  app.get("/api/health", async () => ({ status: "ok" }))
+  app.get("/api/health", async () => {
+    const { getLlmRuntimeInfo } = await import("./llm/adapter.js")
+    const llm = getLlmRuntimeInfo()
+    return {
+      status: "ok",
+      llm: { provider: llm.provider, model: llm.model },
+    }
+  })
 
   await registerAuthRoutes(app)
   await registerProjectRoutes(app)

@@ -34,6 +34,7 @@ export function AdminSettingsPage({ isAdmin }: Props) {
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([])
   const [budget, setBudget] = useState(50000)
   const [provider, setProvider] = useState("mock")
+  const [llmModel, setLlmModel] = useState("mock")
   const [notify, setNotify] = useState<NotificationSettings>({
     reviewDeadline: true,
     qaUnanswered: true,
@@ -59,6 +60,7 @@ export function AdminSettingsPage({ isAdmin }: Props) {
         setUsers(u)
         setBudget(settings.llmBudgetYen)
         setProvider(settings.llmProvider)
+        setLlmModel(settings.llmModel ?? "")
         setAuditLogs(logs)
       }
     } catch (e) {
@@ -195,13 +197,17 @@ export function AdminSettingsPage({ isAdmin }: Props) {
                     onChange={(e) => setBudget(Number(e.target.value))}
                   />
                 </div>
-                <Badge variant="outline">provider: {provider}</Badge>
+                <Badge variant="outline">
+                  {provider}
+                  {llmModel ? ` / ${llmModel}` : ""}
+                </Badge>
                 <Button
                   onClick={() =>
                     void updateAdminSettings({ llmBudgetYen: budget })
                       .then((s) => {
                         setBudget(s.llmBudgetYen)
                         setProvider(s.llmProvider)
+                        setLlmModel(s.llmModel ?? "")
                         setMessage("予算を更新しました")
                       })
                       .catch((err) => setError(err instanceof Error ? err.message : "更新失敗"))

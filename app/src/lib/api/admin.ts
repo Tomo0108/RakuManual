@@ -95,13 +95,14 @@ export async function deleteTemplate(id: string): Promise<void> {
 export async function fetchAdminSettings(): Promise<{
   llmBudgetYen: number
   llmProvider: string
+  llmModel?: string
 }> {
   return apiFetch("/admin/settings")
 }
 
 export async function updateAdminSettings(body: {
   llmBudgetYen: number
-}): Promise<{ llmBudgetYen: number; llmProvider: string }> {
+}): Promise<{ llmBudgetYen: number; llmProvider: string; llmModel?: string }> {
   return apiFetch("/admin/settings", {
     method: "PUT",
     body: JSON.stringify(body),

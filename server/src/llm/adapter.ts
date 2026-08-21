@@ -1,43 +1,33 @@
 /**
  * LLM Adapter（プロバイダ抽象化）
- * OPENAI_API_KEY があれば実 API、なければモック（デモ用）にフォールバック。
- * complete / streamComplete の両方を提供（要件: ストリーミング表示）。
+ *
+ * - 試運転: OpenRouter（LLM_PROVIDER=openrouter / OPENROUTER_API_KEY）
+ * - 本番想定: 社内 Gateway（LLM_PROVIDER=gateway / LLM_GATEWAY_*）
+ * - 互換: OpenAI 直結も可
+ * - 未設定: 構造化モック
  */
 
 import { insertLlmIoLog } from "../db.js"
+import { resolveLlmConfig, type LlmRuntimeConfig } from "./config.js"
+import { chatComplete, chatStream } from "./openai-compatible.js"
+import type {
+  LlmAdapter,
+  LlmCallContext,
+  LlmCompleteOptions,
+  LlmCompletionResult,
+  LlmMessage,
+  LlmProviderId,
+  LlmStreamChunk,
+} from "./types.js"
 
-export interface LlmMessage {
-  role: "system" | "user" | "assistant"
-  content: string
-}
-
-export interface LlmCompletionResult {
-  text: string
-  tokens: number
-  provider: "mock" | "openai"
-}
-
-export interface LlmStreamChunk {
-  delta: string
-}
-
-export interface LlmCallContext {
-  userId: string
-  projectId?: string
-  action: string
-}
-
-export interface LlmCompleteOptions {
-  maxTokens?: number
-  context?: LlmCallContext
-}
-
-export interface LlmAdapter {
-  complete(messages: LlmMessage[], opts?: LlmCompleteOptions): Promise<LlmCompletionResult>
-  streamComplete(
-    messages: LlmMessage[],
-    opts?: LlmCompleteOptions,
-  ): AsyncGenerator<LlmStreamChunk, LlmCompletionResult>
+export type {
+  LlmAdapter,
+  LlmCallContext,
+  LlmCompleteOptions,
+  LlmCompletionResult,
+  LlmMessage,
+  LlmProviderId,
+  LlmStreamChunk,
 }
 
 async function* chunkText(text: string, size = 8): AsyncGenerator<LlmStreamChunk> {
@@ -74,7 +64,7 @@ class MockLlmAdapter implements LlmAdapter {
     const last = [...messages].reverse().find((m) => m.role === "user")?.content ?? ""
     const text = buildMockStructuredResponse(system, last)
     const tokens = Math.max(80, Math.round(text.length / 2) + 120)
-    const result = { text, tokens, provider: "mock" as const }
+    const result: LlmCompletionResult = { text, tokens, provider: "mock" }
     maybeLog(messages, result, opts)
     return result
   }
@@ -94,18 +84,31 @@ function buildMockStructuredResponse(system: string, user: string): string {
   if (system.includes("スイムレーンフロー") || system.includes('"lanes"')) {
     let name = "業務"
     try {
-      const parsed = JSON.parse(user) as { name?: string; hearingAnswers?: Array<{ questionId?: string; value?: string }> }
+      const parsed = JSON.parse(user) as {
+        name?: string
+        hearingAnswers?: Array<{ questionId?: string; value?: string }>
+      }
       name = parsed.name ?? name
       const steps = parsed.hearingAnswers?.find((a) => a.questionId === "q8")?.value
       const parts = steps
-        ? steps.split(/[、,。\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 2)
+        ? steps
+            .split(/[、,。\n]/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .slice(0, 2)
         : [`${name}の準備`, `${name}の実施`]
       return JSON.stringify({
         lanes: ["担当者", "確認者"],
         nodes: [
           { id: "n0", data: { label: "業務開始", lane: "担当者", kind: "start", source: "mock-llm" } },
-          { id: "n1", data: { label: parts[0] ?? `${name}準備`, lane: "担当者", kind: "process", source: "q8" } },
-          { id: "n2", data: { label: parts[1] ?? `${name}実施`, lane: "担当者", kind: "process", source: "q8" } },
+          {
+            id: "n1",
+            data: { label: parts[0] ?? `${name}準備`, lane: "担当者", kind: "process", source: "q8" },
+          },
+          {
+            id: "n2",
+            data: { label: parts[1] ?? `${name}実施`, lane: "担当者", kind: "process", source: "q8" },
+          },
           { id: "n3", data: { label: "内容確認", lane: "確認者", kind: "decision", source: "q3" } },
           { id: "n4", data: { label: "完了", lane: "担当者", kind: "end", source: "q6" } },
         ],
@@ -137,7 +140,11 @@ function buildMockStructuredResponse(system: string, user: string): string {
         return JSON.stringify({
           title: parsed.section.title ?? "再生成セクション",
           blocks: [
-            { type: "paragraph", text: `${parsed.section.title ?? ""}の手順を更新しました。`, needsConfirm: true },
+            {
+              type: "paragraph",
+              text: `${parsed.section.title ?? ""}の手順を更新しました。`,
+              needsConfirm: true,
+            },
             { type: "step", text: "作業を実施し結果を記録する。", needsConfirm: false },
           ],
         })
@@ -169,7 +176,11 @@ function buildMockStructuredResponse(system: string, user: string): string {
                 title: `${parsed.name ?? "業務"}の概要`,
                 sectionNumber: "1",
                 blocks: [
-                  { type: "paragraph", text: `${parsed.name ?? "業務"}の手順概要です。`, needsConfirm: true },
+                  {
+                    type: "paragraph",
+                    text: `${parsed.name ?? "業務"}の手順概要です。`,
+                    needsConfirm: true,
+                  },
                 ],
               },
             ]
@@ -219,33 +230,12 @@ function buildMockStructuredResponse(system: string, user: string): string {
   return `[モック生成] ${user.slice(0, 200)}`
 }
 
-class OpenAiAdapter implements LlmAdapter {
-  constructor(private readonly apiKey: string) {}
+/** OpenAI 互換エンドポイント向け（OpenRouter / Gateway / OpenAI） */
+class CompatibleLlmAdapter implements LlmAdapter {
+  constructor(private readonly config: LlmRuntimeConfig) {}
 
   async complete(messages: LlmMessage[], opts?: LlmCompleteOptions): Promise<LlmCompletionResult> {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-        messages,
-        max_tokens: opts?.maxTokens ?? 1024,
-      }),
-    })
-    if (!res.ok) {
-      const errText = await res.text()
-      throw new Error(`OpenAI API error: ${res.status} ${errText}`)
-    }
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>
-      usage?: { total_tokens?: number }
-    }
-    const text = data.choices?.[0]?.message?.content ?? ""
-    const tokens = data.usage?.total_tokens ?? Math.max(100, Math.round(text.length / 2))
-    const result = { text, tokens, provider: "openai" as const }
+    const result = await chatComplete(this.config, messages, { maxTokens: opts?.maxTokens })
     maybeLog(messages, result, opts)
     return result
   }
@@ -254,59 +244,19 @@ class OpenAiAdapter implements LlmAdapter {
     messages: LlmMessage[],
     opts?: LlmCompleteOptions,
   ): AsyncGenerator<LlmStreamChunk, LlmCompletionResult> {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-        messages,
-        max_tokens: opts?.maxTokens ?? 1024,
-        stream: true,
-      }),
-    })
-    if (!res.ok || !res.body) {
-      const errText = await res.text()
-      throw new Error(`OpenAI API error: ${res.status} ${errText}`)
+    const stream = chatStream(this.config, messages, { maxTokens: opts?.maxTokens })
+    let result: LlmCompletionResult = {
+      text: "",
+      tokens: 0,
+      provider: this.config.provider,
     }
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-    let text = ""
-
     while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith("data:")) continue
-        const payload = trimmed.slice(5).trim()
-        if (payload === "[DONE]") continue
-        try {
-          const json = JSON.parse(payload) as {
-            choices?: Array<{ delta?: { content?: string } }>
-          }
-          const delta = json.choices?.[0]?.delta?.content ?? ""
-          if (delta) {
-            text += delta
-            yield { delta }
-          }
-        } catch {
-          /* ignore partial JSON */
-        }
+      const step = await stream.next()
+      if (step.done) {
+        result = step.value
+        break
       }
-    }
-
-    const result: LlmCompletionResult = {
-      text,
-      tokens: Math.max(100, Math.round(text.length / 2)),
-      provider: "openai",
+      yield step.value
     }
     maybeLog(messages, result, opts)
     return result
@@ -314,14 +264,39 @@ class OpenAiAdapter implements LlmAdapter {
 }
 
 let cached: LlmAdapter | null = null
+let cachedConfig: LlmRuntimeConfig | null = null
 
 export function getLlmAdapter(): LlmAdapter {
   if (cached) return cached
-  const key = process.env.OPENAI_API_KEY?.trim()
-  cached = key ? new OpenAiAdapter(key) : new MockLlmAdapter()
+  const config = resolveLlmConfig()
+  cachedConfig = config
+  if (config.provider === "mock") {
+    cached = new MockLlmAdapter()
+  } else {
+    cached = new CompatibleLlmAdapter(config)
+  }
   return cached
 }
 
-export function getLlmProviderName(): "mock" | "openai" {
-  return process.env.OPENAI_API_KEY?.trim() ? "openai" : "mock"
+/** テストや設定変更時にキャッシュを捨てる */
+export function resetLlmAdapterCache() {
+  cached = null
+  cachedConfig = null
+}
+
+export function getLlmProviderName(): LlmProviderId {
+  return (cachedConfig ?? resolveLlmConfig()).provider
+}
+
+export function getLlmRuntimeInfo(): {
+  provider: LlmProviderId
+  model: string
+  baseUrl: string
+} {
+  const config = cachedConfig ?? resolveLlmConfig()
+  return {
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.provider === "mock" ? "" : config.baseUrl,
+  }
 }

@@ -40,7 +40,7 @@ import {
   enqueuePdfExport,
 } from "./ai/jobs-handlers.js"
 import { assertGenerationAllowed, getLlmBudgetYen, recordLlmUsage, setLlmBudgetYen } from "./llm-cost.js"
-import { getLlmAdapter, getLlmProviderName } from "./llm/adapter.js"
+import { getLlmAdapter, getLlmProviderName, getLlmRuntimeInfo } from "./llm/adapter.js"
 import { getJob } from "./jobs.js"
 import {
   getNotificationSettings,
@@ -824,7 +824,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         { context: { userId: user.id, projectId: existing.id, action }, maxTokens: 256 },
       )
 
-      let result = { text: "", tokens: 0, provider: getLlmProviderName() as "mock" | "openai" }
+      let result = { text: "", tokens: 0, provider: getLlmProviderName() }
       while (true) {
         const step = await stream.next()
         if (step.done) {
@@ -1361,6 +1361,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return {
       llmBudgetYen: getLlmBudgetYen(),
       llmProvider: getLlmProviderName(),
+      llmModel: getLlmRuntimeInfo().model,
       notificationDefaults: getNotificationSettings(user.id),
     }
   })
@@ -1380,6 +1381,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     return {
       llmBudgetYen: getLlmBudgetYen(),
       llmProvider: getLlmProviderName(),
+      llmModel: getLlmRuntimeInfo().model,
     }
   })
 
