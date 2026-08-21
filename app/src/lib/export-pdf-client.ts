@@ -35,8 +35,7 @@ async function loadFontBase64(): Promise<string | null> {
   }
 }
 
-function downloadPdfBytes(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes], { type: "application/pdf" })
+function downloadPdfBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
@@ -237,6 +236,5 @@ export async function exportManualPdfClient(
   }
 
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
-  const ab = doc.output("arraybuffer")
-  downloadPdfBytes(new Uint8Array(ab), `${safeName}.pdf`)
+  downloadPdfBlob(doc.output("blob"), `${safeName}.pdf`)
 }
