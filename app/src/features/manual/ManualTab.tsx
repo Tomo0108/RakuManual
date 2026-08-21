@@ -1,7 +1,6 @@
 import { useRef, useState } from "react"
 import {
   AlertTriangle,
-  BadgeCheck,
   Check,
   ChevronDown,
   ImagePlus,
@@ -181,7 +180,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
           </div>
           <h2 className="mt-4 text-lg font-bold">マニュアルをセクション単位で生成</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            フロー図のセクションごとにマニュアルを生成します。AIが推測で補った箇所には「要確認」マークが付き、あなたの承認なしに確定されることはありません。
+            フロー図のセクションごとにマニュアルを生成します。AIが推測で補った箇所には「要確認」が付くので、内容を直しながら完成させてください。
           </p>
           {!ready && (
             <p className={cn("mt-3 text-xs", WARNING_TEXT)}>
@@ -346,7 +345,15 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                 編集画面
               </span>
               <span className="text-[11px]">
-                承認 {sections.filter((s) => s.status === "approved").length} / {sections.length}
+                {(() => {
+                  const confirms = sections.reduce(
+                    (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
+                    0,
+                  )
+                  return confirms > 0
+                    ? `要確認 ${confirms} 件 · ${sections.length} セクション`
+                    : `${sections.length} セクション`
+                })()}
               </span>
             </div>
 
@@ -483,7 +490,15 @@ function SectionTocPanel({
           目次
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          ナビ · {sections.filter((s) => s.status === "approved").length} / {sections.length} 承認済み
+          {(() => {
+            const confirms = sections.reduce(
+              (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
+              0,
+            )
+            return confirms > 0
+              ? `ナビ · 要確認 ${confirms} 件 · ${sections.length} セクション`
+              : `ナビ · ${sections.length} セクション`
+          })()}
         </div>
       </div>
       <div className="scroll-touch min-h-0 flex-1 overflow-y-auto p-2">
@@ -664,37 +679,16 @@ function SectionEditor({
   const [regenError, setRegenError] = useState<string | null>(null)
 
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
-  const canApprove = confirms === 0 && section.status !== "approved"
   const sync = section.syncStatus ?? "ok"
 
   const updateBlock = (blockId: string, updater: (b: ManualBlock) => ManualBlock) => {
     onUpdate((s) => ({
       ...s,
-      // 承認済みセクションを編集したらレビュー中に戻す(公開版とドラフトの分離)
+      // 公開スナップショットとの差分を残すため、旧承認ステータスは編集時に review へ
       status: s.status === "approved" ? "review" : s.status,
       updatedAt: today(),
       blocks: s.blocks.map((b) => (b.id === blockId ? updater(b) : b)),
     }))
-  }
-
-  const approve = () => {
-    onReplaceProject(
-      appendRevision(
-        {
-          ...project,
-          sections: project.sections.map((s) =>
-            s.id === section.id
-              ? { ...s, status: "approved", version: s.version + 1, updatedAt: today() }
-              : s,
-          ),
-        },
-        snapshotSection(
-          { ...section, status: "approved", version: section.version + 1, updatedAt: today() },
-          { reason: "approve", user: "山田 太郎" },
-        ),
-      ),
-    )
-    onLog(`セクション「${section.title}」を承認(v${section.version + 1})`)
   }
 
   const regenerate = async () => {
@@ -721,8 +715,8 @@ function SectionEditor({
   let stepNo = 0
   const sectionNum = resolveSectionNumber(section)
   const sectionTitle = displaySectionTitle(section)
-  const isApproved = section.status === "approved"
-  const chromeCollapsed = isApproved && sync === "ok" && confirms === 0
+  // 要確認が消え、フロー同期も問題なければ操作帯を畳んで読み面を優先
+  const chromeCollapsed = confirms === 0 && sync === "ok"
 
   const syncActions =
     sync === "needs_review" || sync === "orphaned" ? (
@@ -784,54 +778,26 @@ function SectionEditor({
         }}
       />
       {isMobile ? (
-        <>
-          <Button
-            variant="outline"
-            size="default"
-            className="h-10 flex-1 gap-1"
-            onClick={regenerate}
-            disabled={regenerating}
-          >
-            <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-            {regenerating ? "再生成中…" : "AI再生成"}
-          </Button>
-          <Button
-            size="default"
-            className="h-10 flex-1 gap-1"
-            disabled={!canApprove}
-            onClick={approve}
-          >
-            <BadgeCheck className="size-4" />
-            {section.status === "approved" ? "承認済み" : "承認する"}
-          </Button>
-        </>
+        <Button
+          variant="outline"
+          size="default"
+          className="h-10 flex-1 gap-1"
+          onClick={regenerate}
+          disabled={regenerating}
+        >
+          <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+          {regenerating ? "再生成中…" : "AI再生成"}
+        </Button>
       ) : (
-        <>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
-                <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-                {regenerating ? "再生成中…" : "AI再生成"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>このセクションのみ再生成します。他セクションには影響しません</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button size="sm" className="gap-1" disabled={!canApprove} onClick={approve}>
-                  <BadgeCheck className="size-4" />
-                  {section.status === "approved" ? "承認済み" : "承認する"}
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              {confirms > 0
-                ? `「要確認」が ${confirms} 件残っているため承認できません`
-                : "内容を確認して承認済みにします"}
-            </TooltipContent>
-          </Tooltip>
-        </>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1" onClick={regenerate} disabled={regenerating}>
+              <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+              {regenerating ? "再生成中…" : "AI再生成"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>このセクションのみ再生成します。他セクションには影響しません</TooltipContent>
+        </Tooltip>
       )}
     </div>
   )
@@ -868,7 +834,7 @@ function SectionEditor({
           </div>
         </div>
 
-        {/* ② アプリUI（メタ・操作）— 承認済みは畳んで読み面を優先 */}
+        {/* ② アプリUI（メタ・操作）— 要確認解消後は畳んで読み面を優先 */}
         {!(isMobile && !embedded) && (
           chromeCollapsed ? (
             <details className={cn("mt-3", APP_CHROME, "open:bg-muted/55")}>
@@ -941,7 +907,7 @@ function SectionEditor({
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>
               <span className="font-medium">アプリからの案内: </span>
-              AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、すべて解消すると承認できます。
+              AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、「内容OK」または本文修正で解消してください。
             </span>
           </div>
         )}
@@ -1013,7 +979,7 @@ function SectionEditor({
           {actionToolbar}
           {confirms > 0 && (
             <p className={cn("mt-2 text-center text-[10px]", WARNING_TEXT)}>
-              要確認をすべて解消すると承認できます
+              要確認をすべて解消してから公開できます
             </p>
           )}
         </div>
@@ -1228,6 +1194,7 @@ function BlockImageSection({
   onSaveCaption: () => void
 }) {
   const image = block.image
+  const hasRealImage = Boolean(image?.url)
 
   const imageOps = (
     <div className={cn("flex flex-wrap items-center gap-1.5", !chromeCollapsed && "px-2.5 py-2", !chromeCollapsed && APP_CHROME)}>
@@ -1241,18 +1208,20 @@ function BlockImageSection({
         disabled={uploading}
       >
         <ImagePlus className="size-3" />
-        {uploading ? "読込中…" : image?.url ? "変更" : "画像を添付"}
+        {uploading ? "読込中…" : hasRealImage ? "変更" : "画像を添付"}
       </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="h-7 gap-1 border bg-background px-2 text-[11px] text-muted-foreground"
-        onClick={onRemoveImage}
-      >
-        <Trash2 className="size-3" />
-        削除
-      </Button>
+      {hasRealImage && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 border bg-background px-2 text-[11px] text-muted-foreground"
+          onClick={onRemoveImage}
+        >
+          <Trash2 className="size-3" />
+          削除
+        </Button>
+      )}
     </div>
   )
 
@@ -1266,7 +1235,7 @@ function BlockImageSection({
         onChange={onFileChange}
       />
 
-      {image ? (
+      {hasRealImage && image ? (
         <>
           {chromeCollapsed ? (
             <details className={cn("mt-2", APP_CHROME)}>
@@ -1281,27 +1250,19 @@ function BlockImageSection({
           ) : (
             <div className="mt-2">{imageOps}</div>
           )}
-          <figure className="manual-figure mt-2 overflow-hidden rounded-lg border">
-            {image.url ? (
-              <img
-                src={image.url}
-                alt={image.caption || "手順の参考画像"}
-                className="manual-figure-img"
-              />
-            ) : (
-              <div
-                className="flex h-40 items-center justify-center px-3 text-center text-xs leading-relaxed text-muted-foreground"
-                style={{ background: image.color ?? "var(--muted)" }}
-              >
-                <span className="max-w-full rounded bg-white/80 px-3 py-2 break-words dark:bg-black/40">
-                  画像未添付（「画像を添付」から追加）
-                </span>
-              </div>
-            )}
-            <figcaption className="border-t bg-muted/30 px-3 py-2">
-              <label className="mb-1 block text-[10px] font-semibold tracking-wide text-muted-foreground">
+          <figure className="manual-figure mt-2 overflow-hidden rounded-lg border border-border bg-card">
+            <img
+              src={image.url}
+              alt={image.caption || "手順の参考画像"}
+              className="manual-figure-img"
+            />
+            <figcaption className="border-t border-border bg-card px-3 py-3">
+              <label className="mb-1 block text-xs font-semibold text-foreground">
                 図の説明
               </label>
+              <p className="mb-2 text-[11px] leading-snug text-muted-foreground">
+                この画面で何をするかを書いてください（例: 右上の「新規申請」を押す）
+              </p>
               <Textarea
                 value={captionDraft}
                 onChange={(e) => setCaptionDraft(e.target.value)}
@@ -1313,12 +1274,12 @@ function BlockImageSection({
                     ;(e.target as HTMLTextAreaElement).blur()
                   }
                 }}
-                placeholder="画面のどこを操作するかを書いてください（ファイル名は使わない）"
+                placeholder="操作内容が分かる一文を入力"
                 rows={2}
-                className="min-h-[2.5rem] resize-y border-0 bg-transparent px-0 py-0 text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
+                className="min-h-[2.75rem] resize-y border border-input bg-background px-2.5 py-2 text-[13px] leading-relaxed text-foreground shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
               {!captionDraft.trim() && (
-                <p className="mt-1 text-[10px] text-[var(--semantic-warning-fg)]">
+                <p className="mt-1.5 text-[11px] text-[var(--semantic-warning-fg)]">
                   未入力のまま公開すると図の意図が伝わりにくくなります
                 </p>
               )}

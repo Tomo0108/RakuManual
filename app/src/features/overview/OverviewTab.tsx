@@ -38,7 +38,6 @@ interface Props {
 export function OverviewTab({ project, setTab, updateProject }: Props) {
   const answered = project.hearingAnswers.filter((a) => a.status === "answered").length
   const deepdiveDone = project.deepdive.filter((d) => d.status === "done").length
-  const approved = project.sections.filter((s) => s.status === "approved").length
   const needsConfirm = project.sections.reduce(
     (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
     0,
@@ -94,14 +93,14 @@ export function OverviewTab({ project, setTab, updateProject }: Props) {
     {
       tab: "manual",
       icon: BookCheck,
-      title: "マニュアル生成・レビュー",
+      title: "マニュアル生成・編集",
       stat:
         project.sections.length > 0
-          ? `${approved} / ${project.sections.length} セクション承認済み` +
-            (needsConfirm > 0 ? ` ・ 要確認 ${needsConfirm} 件` : "") +
+          ? `${project.sections.length} セクション` +
+            (needsConfirm > 0 ? ` ・ 要確認 ${needsConfirm} 件` : " ・ 要確認なし") +
             (syncReview > 0 ? ` ・ フロー見直し ${syncReview} 件` : "")
           : "未生成",
-      done: project.sections.length > 0 && approved === project.sections.length && syncReview === 0,
+      done: project.sections.length > 0 && needsConfirm === 0,
       current: currentTab === "manual",
     },
   ]

@@ -22,7 +22,7 @@ export function ManualDocument({
   showCover = true,
   className,
   emptyTitle = "閲覧できるセクションがありません",
-  emptyDescription = "承認済み、または公開版のセクションが揃うとここに表示されます。",
+  emptyDescription = "マニュアルを生成すると、ここに内容が表示されます。",
 }: ManualDocumentProps) {
   const outline = buildManualOutline(sections, { defaultMajorTitle: coverTitle })
 
@@ -126,24 +126,8 @@ function ManualFigure({
 }: {
   image?: { url?: string; caption?: string; color?: string } | null
 }) {
-  if (!image) return null
+  if (!image?.url) return null
   const caption = image.caption?.trim()
-
-  if (!image.url) {
-    return (
-      <figure className="manual-figure mt-3">
-        <div
-          className="flex min-h-28 items-center justify-center rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground"
-          style={{ background: image.color ?? "var(--muted)" }}
-        >
-          <span className="rounded bg-background/80 px-3 py-2">
-            図{caption ? `: ${caption}` : ""}（画像未添付）
-          </span>
-        </div>
-        {caption && <figcaption className="manual-figcaption">{caption}</figcaption>}
-      </figure>
-    )
-  }
 
   return (
     <figure className="manual-figure mt-3">

@@ -23,11 +23,6 @@ export function validatePublish(project: Project): PublishValidation {
     errors.push("マニュアルセクションが未生成です")
   }
 
-  const unapproved = sections.filter((s) => s.status !== "approved")
-  if (unapproved.length > 0) {
-    errors.push(`未承認セクションが ${unapproved.length} 件あります`)
-  }
-
   const needsConfirm = sections.reduce(
     (acc, s) => acc + (s.blocks?.filter((b) => b.needsConfirm).length ?? 0),
     0,

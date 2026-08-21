@@ -105,7 +105,7 @@ export function ManualRegenWizard({
           {confirmApproved && (
             <div className={cn("mb-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs", WARNING_TEXT)}>
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              承認済みセクションを再生成します。内容が下書きに戻ります。もう一度「適用」で確定してください。
+              既存のセクションを再生成します。内容が下書き扱いに戻ります。もう一度「適用」で確定してください。
             </div>
           )}
 
@@ -190,7 +190,7 @@ export function ManualRegenWizard({
               {confirmApproved ? (
                 <>
                   <Check className="size-4" />
-                  承認済みを含めて適用
+                  保護中のセクションも含めて適用
                 </>
               ) : (
                 <>

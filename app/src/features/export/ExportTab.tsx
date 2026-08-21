@@ -86,15 +86,16 @@ export function ExportTab({ project, updateProject }: Props) {
       })
   }, [])
 
-  const approved = project.sections.filter((s) => s.status === "approved").length
-  const allApproved = project.sections.length > 0 && approved === project.sections.length
   const needsConfirm = project.sections.reduce(
     (acc, s) => acc + s.blocks.filter((b) => b.needsConfirm).length,
     0,
   )
   const captionIssues = findCaptionIssues(project.sections)
   const canPublish =
-    allApproved && needsConfirm === 0 && captionIssues.length === 0 && project.status !== "published"
+    project.sections.length > 0 &&
+    needsConfirm === 0 &&
+    captionIssues.length === 0 &&
+    project.status !== "published"
   // 未設定の既存公開分は組織全体公開（後方互換）、未公開はメンバー限定を既定にする
   const visibility: ProjectVisibility =
     project.visibility ?? (project.status === "published" ? "org" : "members")
@@ -197,7 +198,7 @@ export function ExportTab({ project, updateProject }: Props) {
               マニュアル公開
             </CardTitle>
             <CardDescription>
-              全セクション承認後に公開できます。公開版は QA チャットの検索対象になります。
+              要確認と図の説明を整えたら公開できます。公開版は QA チャットの検索対象になります。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -231,10 +232,8 @@ export function ExportTab({ project, updateProject }: Props) {
               </p>
             ) : (
               <>
-                {!allApproved && (
-                  <p className="text-xs text-muted-foreground">
-                    承認済み {approved} / {project.sections.length} セクション
-                  </p>
+                {project.sections.length === 0 && (
+                  <p className="text-xs text-muted-foreground">先にマニュアルを生成してください</p>
                 )}
                 {needsConfirm > 0 && (
                   <p className={cn("text-xs", WARNING_TEXT)}>要確認ブロックが {needsConfirm} 件残っています</p>

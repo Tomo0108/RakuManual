@@ -228,15 +228,15 @@
 }
 
 @utility manual-figure {
-  @apply overflow-hidden rounded-lg border border-border/70 bg-muted/20;
+  @apply overflow-hidden rounded-lg border border-border bg-card;
 }
 
 @utility manual-figure-img {
-  @apply max-h-[28rem] w-full bg-muted/30 object-contain;
+  @apply max-h-[28rem] w-full bg-muted/40 object-contain;
 }
 
 @utility manual-figcaption {
-  @apply border-t border-border/50 bg-muted/25 px-3 py-2.5 text-center text-[13px] leading-relaxed text-muted-foreground;
+  @apply border-t border-border bg-card px-3 py-2.5 text-center text-[13px] font-medium leading-relaxed text-foreground;
 }
 
 /* ステータスバッジ（プロジェクト進捗） */

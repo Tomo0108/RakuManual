@@ -131,8 +131,8 @@ export type SectionStatus = "draft" | "review" | "approved"
 
 export const SECTION_LABEL: Record<SectionStatus, string> = {
   draft: "下書き",
-  review: "レビュー中",
-  approved: "承認済み",
+  review: "編集中",
+  approved: "確定",
 }
 
 export interface ManualImage {
@@ -144,7 +144,7 @@ export interface ManualImage {
   caption: string
   mimeType?: string
   name?: string
-  /** サンプル用プレースホルダ色 */
+  /** @deprecated サンプル色プレースホルダ。実画像 url が無い場合は表示しない */
   color?: string
 }
 

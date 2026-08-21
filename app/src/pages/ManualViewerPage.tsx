@@ -17,7 +17,7 @@ function viewerSections(project: Project): ManualSection[] {
   if (project.status === "published" && project.publishedSections?.length) {
     return project.publishedSections
   }
-  return project.sections.filter((s) => s.status === "approved")
+  return project.sections
 }
 
 function sectionSearchHaystack(s: ManualSection): string {
@@ -87,7 +87,7 @@ export function ManualViewerPage({ project, sectionId, onBack }: Props) {
               coverTitle={project.name}
               showCover={!query.trim()}
               emptyTitle="閲覧可能なセクションがありません"
-              emptyDescription="承認済みのセクション、または公開版データがありません。"
+              emptyDescription="マニュアルを生成すると、ここに内容が表示されます。"
             />
           )}
         </div>
