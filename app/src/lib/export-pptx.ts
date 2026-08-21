@@ -2,7 +2,7 @@ import type { FlowEdge, FlowNode, FlowState, ManualBlock, ManualSection, Project
 import {
   buildManualOutline,
   displaySectionTitle,
-  resolveSectionNumber,
+  resolveLeafSectionNumber,
 } from "@/lib/manual-outline"
 import { downloadBlob, applyMeiryoFontToPptx, FONT_FACE } from "@/lib/pptx-embed-font"
 import {
@@ -190,7 +190,7 @@ function buildProcedureParts(
     for (const medium of major.mediums) {
       for (const section of medium.sections) {
         const title = displaySectionTitle(section)
-        const num = resolveSectionNumber(section) || medium.number
+        const num = resolveLeafSectionNumber(section, medium.number, medium.sections.indexOf(section))
         const images = includeImages
           ? section.blocks.map((b) => b.image?.url).filter((u): u is string => Boolean(u))
           : []
@@ -1265,9 +1265,7 @@ export async function buildManualPptxArrayBuffer(
         })
         for (const medium of major.mediums) {
           const first = medium.sections[0]
-          const label = first
-            ? `${resolveSectionNumber(first) || medium.number}　${displaySectionTitle(first)}`
-            : `${medium.number}　${medium.title ?? ""}`
+          const label = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
           const target = first ? sectionSlide.get(first.id) ?? majorTarget : majorTarget
           bucket.push({
             text: `  ${label}`,

@@ -3,7 +3,7 @@ import type { ManualBlock, ManualSection, Project } from "@/lib/types"
 import {
   buildManualOutline,
   displaySectionTitle,
-  resolveSectionNumber,
+  resolveLeafSectionNumber,
 } from "@/lib/manual-outline"
 import {
   formatMajorTitle,
@@ -135,7 +135,7 @@ export async function exportManualPdfClient(
 
   for (const major of outline) {
     for (const medium of major.mediums) {
-      for (const section of medium.sections) {
+      medium.sections.forEach((section, si) => {
         if (major.number !== lastMajor) {
           lastMajor = major.number
           lastMedium = ""
@@ -161,8 +161,8 @@ export async function exportManualPdfClient(
           y += 2
         }
 
-        const num = resolveSectionNumber(section)
-        const heading = formatMediumHeading(num || medium.number, displaySectionTitle(section))
+        const num = resolveLeafSectionNumber(section, medium.number, si)
+        const heading = formatMediumHeading(num, displaySectionTitle(section))
         ensureSpace(14)
         addWrapped(heading, 12, "bold")
         y += 1
@@ -215,7 +215,7 @@ export async function exportManualPdfClient(
           }
         }
         y += 4
-      }
+      })
     }
   }
 

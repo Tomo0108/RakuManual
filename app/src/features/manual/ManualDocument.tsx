@@ -1,5 +1,5 @@
 import type { ManualBlock, ManualSection } from "@/lib/types"
-import { buildManualOutline, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
+import { buildManualOutline, displaySectionTitle, resolveLeafSectionNumber } from "@/lib/manual-outline"
 import { EmptyState } from "@/components/EmptyState"
 import { BookOpenText } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -67,8 +67,12 @@ export function ManualDocument({
               <div className="mt-3 mb-6 h-px bg-border/70" />
 
               <div className="flex flex-col gap-10">
-                {medium.sections.map((section) => (
-                  <ManualSectionView key={section.id} section={section} />
+                {medium.sections.map((section, si) => (
+                  <ManualSectionView
+                    key={section.id}
+                    section={section}
+                    leafNumber={resolveLeafSectionNumber(section, medium.number, si)}
+                  />
                 ))}
               </div>
             </div>
@@ -79,14 +83,19 @@ export function ManualDocument({
   )
 }
 
-function ManualSectionView({ section }: { section: ManualSection }) {
-  const num = resolveSectionNumber(section)
+function ManualSectionView({
+  section,
+  leafNumber,
+}: {
+  section: ManualSection
+  leafNumber: string
+}) {
   let stepNo = 0
 
   return (
     <section id={`viewer-section-${section.id}`} className="scroll-mt-20">
       <h4 className="text-base font-bold tracking-tight md:text-[1.05rem]">
-        {num && <span className="mr-2 font-mono text-primary">{num}</span>}
+        {leafNumber && <span className="mr-2 font-mono text-primary">{leafNumber}</span>}
         {displaySectionTitle(section)}
       </h4>
       <div className="mt-4 flex flex-col gap-4">

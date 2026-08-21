@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, Check, Download, FileText, Globe, Presentation } from "lucide-react"
 import type { Project, ProjectVisibility } from "@/lib/types"
 import { VISIBILITY_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { exportManualPdfClient } from "@/lib/export-pdf-client"
-import { compareSectionNumbers, displaySectionTitle, resolveSectionNumber } from "@/lib/manual-outline"
+import {
+  buildLeafSectionNumberMap,
+  compareSectionNumbers,
+  displaySectionTitle,
+  resolveSectionNumber,
+} from "@/lib/manual-outline"
 import { SUCCESS_TEXT, WARNING_BOX, WARNING_TEXT } from "@/lib/semantic-styles"
 import { countManualReviewNeeded, buildUnplacedCandidates } from "@/lib/manual-impact"
 import { publishProject } from "@/lib/api/publish"
@@ -102,6 +107,10 @@ export function ExportTab({ project, updateProject }: Props) {
 
   const sortedSections = [...project.sections].sort((a, b) =>
     compareSectionNumbers(resolveSectionNumber(a), resolveSectionNumber(b)),
+  )
+  const leafNumbers = useMemo(
+    () => buildLeafSectionNumberMap(project.sections),
+    [project.sections],
   )
 
   const targetSections =
@@ -332,7 +341,7 @@ export function ExportTab({ project, updateProject }: Props) {
                 <div className="mt-2 text-xs font-semibold">{t.name}</div>
                 <div className="text-[10px] text-muted-foreground">{t.description}</div>
                 <div className="mt-2 truncate text-[10px] font-medium" style={{ color: t.color }}>
-                  1.1 新規申請の例
+                  1.1.1 新規申請の例
                 </div>
               </button>
             ))}
@@ -355,7 +364,9 @@ export function ExportTab({ project, updateProject }: Props) {
                   <SelectItem value="all">マニュアル全体({project.sections.length}セクション)</SelectItem>
                   {sortedSections.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {resolveSectionNumber(s) ? `${resolveSectionNumber(s)} ` : ""}
+                      {(leafNumbers.get(s.id) ?? resolveSectionNumber(s))
+                        ? `${leafNumbers.get(s.id) ?? resolveSectionNumber(s)} `
+                        : ""}
                       {displaySectionTitle(s)}
                     </SelectItem>
                   ))}

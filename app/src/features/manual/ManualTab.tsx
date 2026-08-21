@@ -21,6 +21,7 @@ import { now, today } from "@/lib/project-utils"
 import {
   buildManualOutline,
   displaySectionTitle,
+  resolveLeafSectionNumber,
   resolveSectionNumber,
 } from "@/lib/manual-outline"
 import {
@@ -383,10 +384,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                         <div className="mt-3 h-px bg-border/70" />
                       </div>
                       <div className="flex flex-col gap-10">
-                        {medium.sections.map((section) => (
+                        {medium.sections.map((section, si) => (
                           <article key={section.id} className="min-w-0">
                             <SectionEditor
                               section={section}
+                              leafNumber={resolveLeafSectionNumber(section, medium.number, si)}
                               project={project}
                               embedded
                               isMobile={isMobile}
@@ -534,10 +536,11 @@ function SectionTocPanel({
                       </div>
                     </button>
                     {medium.sections.length > 1 &&
-                      medium.sections.map((s) => (
+                      medium.sections.map((s, si) => (
                         <TocItem
                           key={s.id}
                           section={s}
+                          leafNumber={resolveLeafSectionNumber(s, medium.number, si)}
                           active={activeSectionId === s.id}
                           onNavigate={() => onNavigateSection(s.id)}
                         />
@@ -615,14 +618,16 @@ function SectionTocBar({
 
 function TocItem({
   section,
+  leafNumber,
   active,
   onNavigate,
 }: {
   section: ManualSection
+  leafNumber?: string
   active: boolean
   onNavigate: () => void
 }) {
-  const num = resolveSectionNumber(section)
+  const num = leafNumber ?? resolveSectionNumber(section)
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
 
   const title = displaySectionTitle(section)
@@ -658,6 +663,7 @@ function TocItem({
 
 function SectionEditor({
   section,
+  leafNumber,
   project,
   onUpdate,
   onReplaceProject,
@@ -666,6 +672,8 @@ function SectionEditor({
   embedded,
 }: {
   section: ManualSection
+  /** 中項目配下の小項目項番（例: 1.1.1）。未指定時は sectionNumber をそのまま使う */
+  leafNumber?: string
   project: Project
   onUpdate: (updater: (s: ManualSection) => ManualSection) => void
   onReplaceProject: (next: Project) => void
@@ -713,7 +721,7 @@ function SectionEditor({
   }
 
   let stepNo = 0
-  const sectionNum = resolveSectionNumber(section)
+  const sectionNum = leafNumber ?? resolveSectionNumber(section)
   const sectionTitle = displaySectionTitle(section)
   // 要確認が消え、フロー同期も問題なければ操作帯を畳んで読み面を優先
   const chromeCollapsed = confirms === 0 && sync === "ok"
@@ -817,7 +825,7 @@ function SectionEditor({
           className={cn("min-w-0", SCROLL_MARGIN_CLASS)}
         >
           <div className="flex items-start gap-2.5">
-            {sectionNum && !embedded && (
+            {sectionNum && (
               <span className="mt-1 shrink-0 font-mono text-sm font-semibold tabular-nums text-muted-foreground">
                 {sectionNum}
               </span>

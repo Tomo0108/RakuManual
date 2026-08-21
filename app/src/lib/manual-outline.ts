@@ -80,6 +80,22 @@ export function toSlideSectionNumber(mediumNumber?: string, index = 0): string |
   return undefined
 }
 
+/**
+ * 中項目配下の小項目（手順セクション）項番。
+ * フロー由来の 1.1 など2段のときは 1.1.1 に伸ばし、中項目番号との重複を避ける。
+ */
+export function resolveLeafSectionNumber(
+  section: ManualSection,
+  mediumNumber: string,
+  indexInMedium: number,
+): string {
+  const raw = resolveSectionNumber(section)
+  if (sectionDepth(raw) >= 3) return raw
+  const slide = toSlideSectionNumber(mediumNumber, indexInMedium)
+  if (slide) return slide
+  return raw || mediumNumber
+}
+
 /** セクション一覧を大項目→中項目→小項目(スライド)の階層に整理 */
 export function buildManualOutline(
   sections: ManualSection[],
@@ -126,6 +142,19 @@ export function buildManualOutline(
   }
 
   return [...majorMap.values()].sort((a, b) => compareSectionNumbers(a.number, b.number))
+}
+
+/** セクション ID → 表示用小項目項番 (1.1.1 …) */
+export function buildLeafSectionNumberMap(sections: ManualSection[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const major of buildManualOutline(sections)) {
+    for (const medium of major.mediums) {
+      medium.sections.forEach((section, i) => {
+        map.set(section.id, resolveLeafSectionNumber(section, medium.number, i))
+      })
+    }
+  }
+  return map
 }
 
 /** パンくず用の項番チェーン (例: ["1", "1.1", "1.1.1"]) */
