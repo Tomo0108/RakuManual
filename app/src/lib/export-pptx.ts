@@ -11,7 +11,17 @@ import {
   resolveExportTheme,
   type ExportTheme,
 } from "@/lib/export-theme"
-import { dimForKind } from "@/features/flow/flow-layout"
+import {
+  COL_WIDTH,
+  FLOW_ORIGIN_X,
+  FLOW_ORIGIN_Y,
+  SYSTEM_ROW_HEIGHT,
+  autoLayout,
+  colFromX,
+  computeLaneRowMetrics,
+  dimForKind,
+  needsInitialLayout,
+} from "@/features/flow/flow-layout"
 import PptxGenJS from "pptxgenjs"
 
 /** 必須要件: 13.333 × 7.5 in */
@@ -216,29 +226,22 @@ function buildProcedureParts(
   return parts
 }
 
-/* ---------- フロー図（スイムレーン風） ---------- */
+/* ---------- フロー図（スイムレーン・エディタ座標と一致） ---------- */
 
-function flowBounds(nodes: FlowNode[]) {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const n of nodes) {
-    const d = dimForKind(n.data.kind ?? "process")
-    minX = Math.min(minX, n.position.x)
-    minY = Math.min(minY, n.position.y)
-    maxX = Math.max(maxX, n.position.x + d.w)
-    maxY = Math.max(maxY, n.position.y + d.h)
-  }
-  if (!Number.isFinite(minX)) {
-    return { minX: 0, minY: 0, maxX: 400, maxY: 200 }
-  }
-  return { minX, minY, maxX, maxY }
+function prepareFlow(flow: FlowState): FlowState {
+  if (!flow.nodes.length) return flow
+  return needsInitialLayout(flow) ? autoLayout(flow) : flow
 }
 
-function nodeFill(kind: string | undefined, theme: ExportTheme): string {
+/** マニュアル項番 1.1 → 参考資料形式 1-1. */
+function formatFlowSectionNo(num?: string): string {
+  if (!num?.trim()) return ""
+  const n = num.trim().replace(/\./g, "-")
+  return n.endsWith(".") ? n : `${n}.`
+}
+
+function nodeFill(kind: string | undefined): string {
   if (kind === "start" || kind === "end") return "C00000"
-  if (kind === "decision") return theme.chipBg
   return "FFFFFF"
 }
 
@@ -248,56 +251,182 @@ function nodeShape(pptx: PptxGenJS, kind: string | undefined) {
   return pptx.ShapeType.roundRect
 }
 
+type Pt = { x: number; y: number }
+
+function addStraightLine(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  a: Pt,
+  b: Pt,
+  opts: { color?: string; width?: number; dash?: boolean; endArrow?: boolean },
+) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  if (Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) return
+
+  const lineOpts = {
+    color: opts.color ?? "000000",
+    width: opts.width ?? 1.5,
+    dashType: opts.dash ? ("dash" as const) : undefined,
+    endArrowType: (opts.endArrow ? "triangle" : "none") as "triangle" | "none",
+  }
+
+  if (Math.abs(dy) < 0.015) {
+    const goingRight = b.x >= a.x
+    slide.addShape(pptx.ShapeType.line, {
+      x: Math.min(a.x, b.x),
+      y: a.y,
+      w: Math.max(Math.abs(dx), 0.02),
+      h: 0,
+      flipH: !goingRight,
+      line: lineOpts,
+    })
+    return
+  }
+
+  if (Math.abs(dx) < 0.015) {
+    const goingDown = b.y >= a.y
+    slide.addShape(pptx.ShapeType.line, {
+      x: a.x,
+      y: Math.min(a.y, b.y),
+      w: 0,
+      h: Math.max(Math.abs(dy), 0.02),
+      flipV: !goingDown,
+      line: lineOpts,
+    })
+    return
+  }
+
+  const mid = { x: (a.x + b.x) / 2, y: a.y }
+  addStraightLine(pptx, slide, a, mid, { ...opts, endArrow: false })
+  addStraightLine(pptx, slide, mid, { x: mid.x, y: b.y }, { ...opts, endArrow: false })
+  addStraightLine(pptx, slide, { x: mid.x, y: b.y }, b, opts)
+}
+
+function addOrthoConnector(
+  pptx: PptxGenJS,
+  slide: PptxGenJS.Slide,
+  from: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
+  to: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
+  backward: boolean,
+) {
+  const color = "000000"
+  const width = 1.5
+  const dash = backward
+
+  if (!backward && Math.abs(from.cy - to.cy) < 0.04) {
+    addStraightLine(pptx, slide, { x: from.right, y: from.cy }, { x: to.left, y: to.cy }, {
+      color,
+      width,
+      endArrow: true,
+    })
+    return
+  }
+
+  if (!backward && to.left >= from.right - 0.02) {
+    const midX = (from.right + to.left) / 2
+    addStraightLine(pptx, slide, { x: from.right, y: from.cy }, { x: midX, y: from.cy }, {
+      color,
+      width,
+    })
+    addStraightLine(pptx, slide, { x: midX, y: from.cy }, { x: midX, y: to.cy }, { color, width })
+    addStraightLine(pptx, slide, { x: midX, y: to.cy }, { x: to.left, y: to.cy }, {
+      color,
+      width,
+      endArrow: true,
+    })
+    return
+  }
+
+  // 差戻し・後退: 下側迂回
+  const detourY = Math.max(from.bottom, to.bottom) + 0.18
+  addStraightLine(pptx, slide, { x: from.cx, y: from.bottom }, { x: from.cx, y: detourY }, {
+    color,
+    width,
+    dash,
+  })
+  addStraightLine(pptx, slide, { x: from.cx, y: detourY }, { x: to.cx, y: detourY }, {
+    color,
+    width,
+    dash,
+  })
+  addStraightLine(pptx, slide, { x: to.cx, y: detourY }, { x: to.cx, y: to.bottom }, {
+    color,
+    width,
+    dash,
+    endArrow: true,
+  })
+}
+
 function drawFlowOnSlide(
   pptx: PptxGenJS,
   slide: PptxGenJS.Slide,
   flow: FlowState,
-  theme: ExportTheme,
+  _theme: ExportTheme,
   nodeFilter?: Set<string>,
 ) {
-  const nodes = nodeFilter
-    ? flow.nodes.filter((n) => nodeFilter.has(n.id))
-    : flow.nodes
+  const nodes = (nodeFilter ? flow.nodes.filter((n) => nodeFilter.has(n.id)) : flow.nodes).filter(
+    (n) => n.data.kind !== undefined || n.data.label,
+  )
   if (nodes.length === 0) return
 
   const nodeIds = new Set(nodes.map((n) => n.id))
   const edges = flow.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
   const lanes = flow.lanes.length > 0 ? flow.lanes : ["担当"]
+  // レーン高さは全フローの metrics（分割スライドでも行位置を揃える）
+  const metrics = computeLaneRowMetrics(flow.nodes, lanes)
 
-  const plotX = 1.35
-  const plotY = 1.4
-  const plotW = 10.6
-  const plotH = 5.1
-  const { minX, minY, maxX, maxY } = flowBounds(nodes)
-  const pxW = Math.max(maxX - minX, 1)
-  const pxH = Math.max(maxY - minY, 1)
-  const scale = Math.min(plotW / pxW, plotH / pxH) * 0.9
+  const cols = nodes.map((n) => colFromX(n.position.x, dimForKind(n.data.kind ?? "process").w))
+  const minCol = Math.min(...cols)
+  const maxCol = Math.max(...cols)
+  const colCount = Math.max(1, maxCol - minCol + 1)
 
-  const toX = (px: number) => plotX + (px - minX) * scale
-  const toY = (px: number) => plotY + (px - minY) * scale
-  const toW = (px: number) => Math.max(px * scale, 0.55)
-  const toH = (px: number) => Math.max(px * scale, 0.35)
+  const contentMinX = FLOW_ORIGIN_X + minCol * COL_WIDTH
+  const contentMaxX = FLOW_ORIGIN_X + (maxCol + 1) * COL_WIDTH
+  const contentMinY = FLOW_ORIGIN_Y
+  const last = metrics[metrics.length - 1]
+  const contentMaxY =
+    (last ? last.top + last.height : FLOW_ORIGIN_Y + 112) + SYSTEM_ROW_HEIGHT + 12
+  const pxW = Math.max(contentMaxX - contentMinX, 1)
+  const pxH = Math.max(contentMaxY - contentMinY, 1)
 
-  // レーン帯
-  const laneH = plotH / lanes.length
+  const areaX = 0.32
+  const areaY = 1.28
+  const areaW = 12.7
+  const areaH = 5.35
+  const labelW = 1.05
+  const plotX = areaX + labelW
+  const plotY = areaY
+  const plotW = areaW - labelW
+  const plotH = areaH
+  const scale = Math.min(plotW / pxW, plotH / pxH)
+
+  const toX = (px: number) => plotX + (px - contentMinX) * scale
+  const toY = (px: number) => plotY + (px - contentMinY) * scale
+  const toS = (px: number) => px * scale
+
+  // レーン帯（可変行高を同じスケールで）
   lanes.forEach((lane, i) => {
-    const y = plotY + i * laneH
+    const m = metrics[i] ?? { top: FLOW_ORIGIN_Y + i * 112, height: 112 }
+    const y = toY(m.top)
+    const h = toS(m.height)
+    const bandFill = i % 2 === 0 ? "F2F2F2" : "FFFFFF"
     slide.addShape(pptx.ShapeType.rect, {
-      x: 0.35,
+      x: areaX,
       y,
-      w: 0.95,
-      h: laneH,
-      fill: { color: i % 2 === 0 ? "F3F4F6" : "E5E7EB" },
-      line: { color: "D1D5DB", width: 0.75 },
+      w: labelW,
+      h,
+      fill: { color: i % 2 === 0 ? "D9E2F3" : "BDD7EE" },
+      line: { color: "000000", width: 1 },
     })
     slide.addText(lane, {
-      x: 0.35,
+      x: areaX,
       y,
-      w: 0.95,
-      h: laneH,
-      fontSize: 9,
+      w: labelW,
+      h,
+      fontSize: Math.min(11, Math.max(8, h * 10)),
       bold: true,
-      color: "002060",
+      color: "000000",
       fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
@@ -305,58 +434,102 @@ function drawFlowOnSlide(
     slide.addShape(pptx.ShapeType.rect, {
       x: plotX,
       y,
-      w: plotW,
-      h: laneH,
-      fill: { color: i % 2 === 0 ? "FAFAFA" : "FFFFFF" },
-      line: { color: "E5E7EB", width: 0.5 },
+      w: toS(pxW),
+      h,
+      fill: { color: bandFill },
+      line: { color: "000000", width: 1 },
     })
   })
 
-  // エッジ（ノードより先に）
-  const centers = new Map<string, { x: number; y: number }>()
+  // 利用システム軸
+  const systems = flow.layoutMeta?.columnSystems ?? []
+  const sysY = toY(last ? last.top + last.height : contentMaxY - SYSTEM_ROW_HEIGHT)
+  const sysH = Math.max(toS(SYSTEM_ROW_HEIGHT), 0.28)
+  for (let c = minCol; c <= maxCol; c++) {
+    const entry = systems[c]
+    const x = toX(FLOW_ORIGIN_X + c * COL_WIDTH)
+    const w = toS(COL_WIDTH)
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y: sysY,
+      w,
+      h: sysH,
+      fill: { color: "FFF2CC" },
+      line: { color: "000000", width: 0.75 },
+    })
+    if (entry?.label && entry.label !== "—") {
+      slide.addText(entry.label, {
+        x,
+        y: sysY,
+        w,
+        h: sysH,
+        fontSize: 8,
+        color: "000000",
+        fontFace: FONT_FACE,
+        align: "center",
+        valign: "middle",
+      })
+    }
+  }
+
+  type Box = {
+    left: number
+    right: number
+    top: number
+    bottom: number
+    cx: number
+    cy: number
+    col: number
+  }
+  const boxes = new Map<string, Box>()
   for (const n of nodes) {
     const d = dimForKind(n.data.kind ?? "process")
-    centers.set(n.id, {
-      x: toX(n.position.x) + toW(d.w) / 2,
-      y: toY(n.position.y) + toH(d.h) / 2,
+    const x = toX(n.position.x)
+    const y = toY(n.position.y)
+    const w = toS(d.w)
+    const h = toS(d.h)
+    boxes.set(n.id, {
+      left: x,
+      right: x + w,
+      top: y,
+      bottom: y + h,
+      cx: x + w / 2,
+      cy: y + h / 2,
+      col: colFromX(n.position.x, d.w),
     })
   }
 
+  // コネクタ（ノードの下）
   for (const e of edges as FlowEdge[]) {
-    const a = centers.get(e.source)
-    const b = centers.get(e.target)
+    const a = boxes.get(e.source)
+    const b = boxes.get(e.target)
     if (!a || !b) continue
-    const w = Math.abs(b.x - a.x) || 0.01
-    const h = Math.abs(b.y - a.y) || 0.01
-    const flipH = b.x < a.x
-    const flipV = b.y < a.y
-    slide.addShape(pptx.ShapeType.line, {
-      x: flipH ? b.x : a.x,
-      y: flipV ? b.y : a.y,
-      w,
-      h,
-      flipH,
-      flipV,
-      line: {
-        color: "262626",
-        width: 1.25,
-        endArrowType: "triangle",
-      },
-    })
+
+    const sameCol = Math.abs(a.cx - b.cx) < 0.22
+    const backward = b.col < a.col
+
+    if (sameCol && b.cy >= a.cy) {
+      addStraightLine(
+        pptx,
+        slide,
+        { x: a.cx, y: a.bottom },
+        { x: b.cx, y: b.top },
+        { color: "000000", width: 1.5, endArrow: true },
+      )
+    } else {
+      addOrthoConnector(pptx, slide, a, b, backward)
+    }
+
     const label =
-      typeof e.label === "string"
-        ? e.label
-        : e.label != null
-          ? String(e.label)
-          : ""
+      typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
       slide.addText(label, {
-        x: (a.x + b.x) / 2 - 0.6,
-        y: (a.y + b.y) / 2 - 0.15,
-        w: 1.2,
-        h: 0.28,
+        x: (a.cx + b.cx) / 2 - 0.55,
+        y: (a.cy + b.cy) / 2 - 0.14,
+        w: 1.1,
+        h: 0.26,
         fontSize: 8,
-        color: "374151",
+        color: "000000",
         fontFace: FONT_FACE,
         align: "center",
       })
@@ -369,84 +542,83 @@ function drawFlowOnSlide(
     const d = dimForKind(kind ?? "process")
     const x = toX(n.position.x)
     const y = toY(n.position.y)
-    const w = toW(d.w)
-    const h = toH(d.h)
-    const fill = nodeFill(kind, theme)
-    const textColor = kind === "start" || kind === "end" ? "FFFFFF" : "111827"
+    const w = toS(d.w)
+    const h = toS(d.h)
+    const fill = nodeFill(kind)
+    const textColor = kind === "start" || kind === "end" ? "FFFFFF" : "000000"
     const shape = nodeShape(pptx, kind)
-    const num = n.data.sectionNumber ? `${n.data.sectionNumber} ` : ""
-    const label = `${num}${n.data.label}`
+    const num = formatFlowSectionNo(n.data.sectionNumber)
+    const label = num ? `${num}\n${n.data.label}` : n.data.label
+    const fontSize = Math.min(10, Math.max(7, Math.min(w, h) * 9))
 
-    slide.addShape(shape, {
+    const shapeOpts: {
+      x: number
+      y: number
+      w: number
+      h: number
+      fill: { color: string }
+      line: { color: string; width: number }
+      rectRadius?: number
+    } = {
       x,
       y,
       w,
       h,
       fill: { color: fill },
-      line: { color: "262626", width: 1.25 },
-      rectRadius: kind === "process" || !kind ? 0.06 : undefined,
-    })
+      line: { color: "000000", width: 1.5 },
+    }
+    if (shape === pptx.ShapeType.roundRect) shapeOpts.rectRadius = 0.08
+    slide.addShape(shape, shapeOpts)
     slide.addText(label, {
-      x,
-      y,
-      w,
-      h,
-      fontSize: Math.min(10, Math.max(7, h * 14)),
+      x: x + 0.04,
+      y: y + 0.02,
+      w: w - 0.08,
+      h: h - 0.04,
+      fontSize,
       color: textColor,
       fontFace: FONT_FACE,
       align: "center",
       valign: "middle",
-      bold: kind === "start" || kind === "end",
+      bold: true,
     })
   }
 
-  // 凡例
-  slide.addShape(pptx.ShapeType.roundRect, {
-    x: 11.15,
-    y: 1.35,
-    w: 1.85,
-    h: 1.55,
-    fill: { color: "FFFFFF" },
-    line: { color: "D1D5DB", width: 1 },
-    rectRadius: 0.06,
+  // 凡例（枠外フッター付近・重なり回避）
+  slide.addText("凡例　赤丸:開始/終了　ひし形:分岐　四角:処理", {
+    x: 0.35,
+    y: 6.75,
+    w: 10,
+    h: 0.28,
+    fontSize: 9,
+    color: "444444",
+    fontFace: FONT_FACE,
   })
-  slide.addText(
-    [
-      { text: "凡例", options: { bold: true, fontSize: 9, breakLine: true } },
-      { text: "赤丸: 開始/終了", options: { fontSize: 8, breakLine: true } },
-      { text: "ひし形: 分岐", options: { fontSize: 8, breakLine: true } },
-      { text: "四角: 処理", options: { fontSize: 8, breakLine: true } },
-    ],
-    {
-      x: 11.25,
-      y: 1.42,
-      w: 1.65,
-      h: 1.4,
-      fontFace: FONT_FACE,
-      color: "374151",
-      valign: "top",
-    },
-  )
 }
 
-/** 列が多いフローは複数スライドに分割 */
-function partitionFlowByColumns(flow: FlowState, maxColsPerSlide = 5): FlowNode[][] {
+/** 列が多いフローは複数スライドに分割（可読なノードサイズを確保） */
+function partitionFlowByColumns(flow: FlowState, maxColsPerSlide = 4): FlowNode[][] {
   const nodes = [...flow.nodes]
   if (nodes.length === 0) return []
-  if (nodes.length <= 8) return [nodes]
 
   const cols = new Map<number, FlowNode[]>()
   for (const n of nodes) {
-    const col = Math.round(n.position.x / 240)
+    const col = colFromX(n.position.x, dimForKind(n.data.kind ?? "process").w)
     const list = cols.get(col) ?? []
     list.push(n)
     cols.set(col, list)
   }
   const sortedCols = [...cols.keys()].sort((a, b) => a - b)
+  if (sortedCols.length <= maxColsPerSlide) return [nodes]
+
+  // 1列オーバーラップさせて、分割境界のコネクタが切れないようにする
   const chunks: FlowNode[][] = []
-  for (let i = 0; i < sortedCols.length; i += maxColsPerSlide) {
+  let i = 0
+  while (i < sortedCols.length) {
     const slice = sortedCols.slice(i, i + maxColsPerSlide)
-    chunks.push(slice.flatMap((c) => cols.get(c) ?? []))
+    const chunkNodes = slice.flatMap((c) => cols.get(c) ?? [])
+    if (chunkNodes.length) chunks.push(chunkNodes)
+    if (i + maxColsPerSlide >= sortedCols.length) break
+    i += maxColsPerSlide - 1
   }
   return chunks.length > 0 ? chunks : [nodes]
 }
@@ -472,7 +644,8 @@ function planPresentation(
   const planned: Planned[] = [{ kind: "cover" }]
 
   if (options.includeFlow && project.flow?.nodes?.length) {
-    const chunks = partitionFlowByColumns(project.flow)
+    const flow = prepareFlow(project.flow)
+    const chunks = partitionFlowByColumns(flow)
     chunks.forEach((nodes, i) => {
       planned.push({ kind: "flow", nodes, part: i + 1, total: chunks.length })
     })
@@ -508,11 +681,11 @@ function planPresentation(
 }
 
 /** マニュアルを PowerPoint 出力（フロー図・ハイパーリンク目次付き） */
-export async function exportManualPptx(
+export async function buildManualPptxArrayBuffer(
   project: Project,
   sections: ManualSection[],
   options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
-): Promise<void> {
+): Promise<ArrayBuffer> {
   const includeImages = options?.includeImages ?? true
   const includeFlow = options?.includeFlow ?? true
   const theme = resolveExportTheme(options?.template)
@@ -523,7 +696,9 @@ export async function exportManualPptx(
   pptx.layout = "LAYOUT_WIDE"
 
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
-  const { planned, sectionSlide, majorSlide } = planPresentation(project, sections, {
+  const preparedFlow = project.flow?.nodes?.length ? prepareFlow(project.flow) : project.flow
+  const projectForExport = { ...project, flow: preparedFlow }
+  const { planned, sectionSlide, majorSlide } = planPresentation(projectForExport, sections, {
     includeImages,
     includeFlow,
   })
@@ -569,7 +744,9 @@ export async function exportManualPptx(
       const title =
         item.total > 1 ? `業務フロー図（${item.part}/${item.total}）` : "業務フロー図"
       addChrome(pptx, slide, theme, { title, pageNum })
-      drawFlowOnSlide(pptx, slide, project.flow, theme, new Set(item.nodes.map((n) => n.id)))
+      if (preparedFlow) {
+        drawFlowOnSlide(pptx, slide, preparedFlow, theme, new Set(item.nodes.map((n) => n.id)))
+      }
       return
     }
 
@@ -700,7 +877,15 @@ export async function exportManualPptx(
     }
   })
 
-  const raw = (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
+  return (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
+}
+
+export async function exportManualPptx(
+  project: Project,
+  sections: ManualSection[],
+  options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
+): Promise<void> {
+  const raw = await buildManualPptxArrayBuffer(project, sections, options)
   const withFont = await applyMeiryoFontToPptx(raw)
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
   downloadBlob(withFont, `${safeName}.pptx`)
