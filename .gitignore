@@ -11,3 +11,11 @@ dev-dist/
 .vercel
 server/data/
 backups/
+
+# 非公開（ドキュメント・参考資料・フォント）
+docs/
+**/参考資料/
+assets/fonts/
+app/public/fonts/Meiryo*.ttf
+app/public/fonts/meiryo*.ttf
+*.ttc

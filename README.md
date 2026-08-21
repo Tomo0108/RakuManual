@@ -8,14 +8,12 @@
 rakumanual/
 ├── app/                  # フロントエンド（Vite + React）
 ├── server/               # API（Fastify + SQLite）
-├── docs/
-│   ├── 要件定義書.md
-│   ├── 開発計画書.md
-│   └── visualization/    # 要件定義書ビューア
-├── assets/
+├── assets/               # アイコン等（fonts はローカル専用・非公開）
 ├── package.json
 └── vercel.json
 ```
+
+`docs/`・参考資料・メイリオ等のフォントは非公開のため Git 管理外です。
 
 ## 起動方法
 
@@ -29,25 +27,15 @@ npm run dev
 
 初回ログイン後、サンプルプロジェクトがサーバーに保存されます。フロントのみ起動する場合は `npm run dev:app`（API が無いとメモリ動作にフォールバックします）。
 
-### 要件定義書ビューア
-
-```bash
-npm run dev:docs
-```
+PDF でメイリオを使う場合は `assets/fonts/Meiryo.ttf` と `Meiryo-Bold.ttf` を配置してください（`dev` / `build` 時に `app/public/fonts/` へ同期されます）。
 
 ## ビルド
 
 ```bash
 npm run build
-npm run build:docs
 ```
 
-## Vercel デプロイ
+## デプロイ
 
-フロントのみデプロイします。API が無い環境では従来どおりブラウザ内メモリで動作します。
-
-| 項目 | 値 |
-|------|-----|
-| Build Command | `npm run build` |
-| Output Directory | `app/dist` |
-| Install Command | `npm install` |
+- フロント: Vercel（ルートの `vercel.json`）
+- API: `server/` を Node ホストへ。環境変数は `.env.example` を参照
