@@ -8,10 +8,23 @@ export interface AuthUser {
   name: string
   email: string
   role: UserRole
+  /** data URL または外部 URL。未設定時はイニシャル表示 */
+  avatarUrl?: string | null
 }
 
 export async function fetchMe(): Promise<AuthUser> {
   const data = await apiFetch<{ user: AuthUser }>("/auth/me")
+  return data.user
+}
+
+export async function updateMyProfile(body: {
+  name?: string
+  avatarUrl?: string | null
+}): Promise<AuthUser> {
+  const data = await apiFetch<{ user: AuthUser }>("/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
   return data.user
 }
 

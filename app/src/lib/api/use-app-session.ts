@@ -4,7 +4,7 @@ import { INITIAL_PROJECTS } from "@/lib/mock-data"
 import { today } from "@/lib/project-utils"
 import { ApiError } from "@/lib/api/client"
 import { apiUrl } from "@/lib/api/base"
-import { fetchMe, login as apiLogin, loginWithOidcCode, logout as apiLogout, type AuthUser } from "@/lib/api/auth"
+import { fetchMe, login as apiLogin, loginWithOidcCode, logout as apiLogout, updateMyProfile, type AuthUser } from "@/lib/api/auth"
 import {
   createProject,
   deleteProjectApi,
@@ -12,6 +12,7 @@ import {
   fetchProjects,
   updateProjectApi,
 } from "@/lib/api/projects"
+import { mergeStoredProfile, saveStoredProfile } from "@/lib/profile-storage"
 
 const PERSIST_MS = 500
 const CONFLICT_MESSAGE = "他で更新されました。再読み込みしてください"
@@ -101,7 +102,7 @@ export function useAppSession() {
     setApiAvailable(false)
     setApiOffline(false)
     setUiPreview(true)
-    setUser(PREVIEW_USER)
+    setUser(mergeStoredProfile(PREVIEW_USER))
     setProjects(loadPreviewProjects())
     setSaveError(null)
     setBooting(false)
@@ -338,6 +339,26 @@ export function useAppSession() {
     setProjects([])
   }, [])
 
+  const updateProfile = useCallback(
+    async (patch: { name: string; avatarUrl: string | null }) => {
+      if (!user) throw new Error("未ログインです")
+      if (uiPreviewRef.current || !apiAvailable) {
+        const next = { ...user, name: patch.name, avatarUrl: patch.avatarUrl }
+        saveStoredProfile(user.id, { name: patch.name, avatarUrl: patch.avatarUrl })
+        setUser(next)
+        return next
+      }
+      const updated = await updateMyProfile(patch)
+      saveStoredProfile(updated.id, {
+        name: updated.name,
+        avatarUrl: updated.avatarUrl ?? null,
+      })
+      setUser(updated)
+      return updated
+    },
+    [user, apiAvailable],
+  )
+
   const retrySave = useCallback(() => {
     const ids = [...persistQueue.current.keys()]
     if (ids.length === 0) {
@@ -362,6 +383,7 @@ export function useAppSession() {
     seeding,
     login,
     logout,
+    updateProfile,
     updateProject,
     updateProjectLocal,
     addProject,

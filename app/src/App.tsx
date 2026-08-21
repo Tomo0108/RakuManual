@@ -102,10 +102,8 @@ export default function App() {
           view={view}
           setView={setView}
           projects={projects}
-          accent={accent}
-          setAccent={setAccent}
-          userName={session.user?.name ?? "山田 太郎"}
-          userRole={session.user?.role}
+          user={session.user}
+          onUpdateProfile={(patch) => session.updateProfile(patch).then(() => undefined)}
           onLogout={session.apiAvailable ? () => void session.logout() : undefined}
         />
 
@@ -172,7 +170,11 @@ export default function App() {
             )}
             {view.name === "dashboard" && <DashboardPage projects={projects} />}
             {view.name === "admin" && (
-              <AdminSettingsPage isAdmin={session.user?.role === "admin"} />
+              <AdminSettingsPage
+                isAdmin={session.user?.role === "admin"}
+                accent={accent}
+                setAccent={setAccent}
+              />
             )}
             {view.name === "viewer" && currentProject && (
               <ManualViewerPage
@@ -218,10 +220,8 @@ export default function App() {
             view={view}
             setView={setView}
             projects={projects}
-            accent={accent}
-            setAccent={setAccent}
-            userName={session.user?.name ?? "山田 太郎"}
-            userRole={session.user?.role}
+            user={session.user}
+            onUpdateProfile={(patch) => session.updateProfile(patch).then(() => undefined)}
             onLogout={session.apiAvailable ? () => void session.logout() : undefined}
             onNavigate={() => setMobileMenuOpen(false)}
             className="h-full"

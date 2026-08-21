@@ -1,38 +1,37 @@
+import { useState } from "react"
 import {
   BookOpenText,
   FolderKanban,
   LayoutDashboard,
   MessageCircleQuestion,
   LogOut,
-  Palette,
   Settings,
   Settings2,
+  UserRound,
 } from "lucide-react"
 import logo from "@/assets/logo.png"
 import type { Project, View } from "@/lib/types"
-import { ACCENT_OPTIONS, type AccentId } from "@/lib/mock-data"
+import type { AuthUser } from "@/lib/api/auth"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { NotificationBell } from "@/components/NotificationBell"
+import { ProfileEditDialog } from "@/components/ProfileEditDialog"
 
 export interface SidebarContentProps {
   view: View
   setView: (v: View) => void
   projects: Project[]
-  accent: AccentId
-  setAccent: (a: AccentId) => void
-  userName?: string
-  userRole?: string
+  user?: AuthUser | null
+  onUpdateProfile?: (patch: { name: string; avatarUrl: string | null }) => Promise<void>
   onLogout?: () => void
   onNavigate?: () => void
   className?: string
@@ -42,14 +41,17 @@ export function SidebarContent({
   view,
   setView,
   projects,
-  accent,
-  setAccent,
-  userName = "山田 太郎",
-  userRole,
+  user,
+  onUpdateProfile,
   onLogout,
   onNavigate,
   className,
 }: SidebarContentProps) {
+  const [profileOpen, setProfileOpen] = useState(false)
+  const userName = user?.name ?? "ユーザー"
+  const userRole = user?.role
+  const avatarUrl = user?.avatarUrl
+
   const primaryNav = [
     {
       id: "projects" as const,
@@ -160,7 +162,7 @@ export function SidebarContent({
           )}
         >
           <Settings className="size-3.5 shrink-0" />
-          管理設定
+          設定
         </button>
 
         <DropdownMenu>
@@ -170,6 +172,7 @@ export function SidebarContent({
               className="mt-1 h-auto w-full justify-start gap-2.5 px-2 py-2 text-sidebar-foreground/70"
             >
               <Avatar className="size-7">
+                {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
                 <AvatarFallback className="bg-primary-subtle text-[11px] font-semibold text-primary">
                   {userName.slice(0, 1)}
                 </AvatarFallback>
@@ -184,18 +187,14 @@ export function SidebarContent({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel className="flex items-center gap-2 font-normal">
-              <Palette className="size-3.5 text-muted-foreground" />
-              アクセントカラー
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {ACCENT_OPTIONS.map((opt) => (
-              <DropdownMenuItem key={opt.id} onClick={() => setAccent(opt.id)} className="gap-2.5">
-                <span className="size-3.5 rounded-full border" style={{ background: opt.swatch }} />
-                {opt.label}
-                {accent === opt.id && <span className="ml-auto text-xs text-primary">✓</span>}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuItem
+              className="gap-2.5"
+              onClick={() => setProfileOpen(true)}
+              disabled={!user || !onUpdateProfile}
+            >
+              <UserRound className="size-3.5" />
+              プロフィールを編集
+            </DropdownMenuItem>
             {onLogout && (
               <>
                 <DropdownMenuSeparator />
@@ -208,6 +207,15 @@ export function SidebarContent({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {user && onUpdateProfile && (
+        <ProfileEditDialog
+          open={profileOpen}
+          onOpenChange={setProfileOpen}
+          user={user}
+          onSave={onUpdateProfile}
+        />
+      )}
     </div>
   )
 }

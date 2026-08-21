@@ -182,6 +182,10 @@ function migrate(database: DatabaseSync) {
   if (!userCols.some((c) => c.name === "role")) {
     database.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'creator'")
   }
+  const userColsAfterRole = database.prepare("PRAGMA table_info(users)").all() as { name: string }[]
+  if (!userColsAfterRole.some((c) => c.name === "avatar_url")) {
+    database.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+  }
   database.prepare("UPDATE users SET role = 'creator' WHERE id = 'user-yamada'").run()
   database.prepare("UPDATE users SET role = 'viewer' WHERE id = 'user-sato'").run()
   database.prepare("UPDATE users SET role = 'admin' WHERE id = 'user-admin'").run()
@@ -249,15 +253,52 @@ export interface DesignTemplate {
   updatedAt: number
 }
 
+function mapUserRow(row: {
+  id: string
+  name: string
+  email: string
+  role?: AuthUser["role"] | null
+  avatar_url?: string | null
+}): AuthUser {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role ?? "creator",
+    avatarUrl: row.avatar_url ?? null,
+  }
+}
+
 export function listUsers(): AuthUser[] {
   const rows = getDb()
-    .prepare(`SELECT id, name, email, role FROM users ORDER BY name`)
-    .all() as unknown as AuthUser[]
-  return rows.map((r) => ({ ...r, role: r.role ?? "creator" }))
+    .prepare(`SELECT id, name, email, role, avatar_url FROM users ORDER BY name`)
+    .all() as Array<{
+    id: string
+    name: string
+    email: string
+    role?: AuthUser["role"] | null
+    avatar_url?: string | null
+  }>
+  return rows.map(mapUserRow)
 }
 
 export function updateUserRole(userId: string, role: AuthUser["role"]): AuthUser | null {
   getDb().prepare(`UPDATE users SET role = ? WHERE id = ?`).run(role, userId)
+  return getUserById(userId)
+}
+
+export function updateUserProfile(
+  userId: string,
+  patch: { name?: string; avatarUrl?: string | null },
+): AuthUser | null {
+  const current = getUserById(userId)
+  if (!current) return null
+  const name = patch.name?.trim() || current.name
+  const avatarUrl = patch.avatarUrl === undefined ? current.avatarUrl ?? null : patch.avatarUrl
+  if (!name) return null
+  getDb()
+    .prepare(`UPDATE users SET name = ?, avatar_url = ? WHERE id = ?`)
+    .run(name, avatarUrl, userId)
   return getUserById(userId)
 }
 
@@ -328,22 +369,38 @@ export function averageCsat(userId?: string): number | null {
 
 export function getUserById(id: string): AuthUser | null {
   const row = getDb()
-    .prepare("SELECT id, name, email, role FROM users WHERE id = ?")
-    .get(id) as AuthUser | undefined
+    .prepare("SELECT id, name, email, role, avatar_url FROM users WHERE id = ?")
+    .get(id) as
+    | {
+        id: string
+        name: string
+        email: string
+        role?: AuthUser["role"] | null
+        avatar_url?: string | null
+      }
+    | undefined
   if (!row) return null
-  return { ...row, role: row.role ?? "creator" }
+  return mapUserRow(row)
 }
 
 export function getSessionUser(token: string): AuthUser | null {
   const row = getDb()
     .prepare(
-      `SELECT u.id, u.name, u.email, u.role FROM sessions s
+      `SELECT u.id, u.name, u.email, u.role, u.avatar_url FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at > ?`,
     )
-    .get(token, Date.now()) as AuthUser | undefined
+    .get(token, Date.now()) as
+    | {
+        id: string
+        name: string
+        email: string
+        role?: AuthUser["role"] | null
+        avatar_url?: string | null
+      }
+    | undefined
   if (!row) return null
-  return { ...row, role: row.role ?? "creator" }
+  return mapUserRow(row)
 }
 
 export function createSession(userId: string): string {

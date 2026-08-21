@@ -1,15 +1,13 @@
 import type { Project, View } from "@/lib/types"
-import type { AccentId } from "@/lib/mock-data"
+import type { AuthUser } from "@/lib/api/auth"
 import { SidebarContent } from "@/components/layout/SidebarContent"
 
 interface SidebarProps {
   view: View
   setView: (v: View) => void
   projects: Project[]
-  accent: AccentId
-  setAccent: (a: AccentId) => void
-  userName?: string
-  userRole?: string
+  user?: AuthUser | null
+  onUpdateProfile?: (patch: { name: string; avatarUrl: string | null }) => Promise<void>
   onLogout?: () => void
 }
 

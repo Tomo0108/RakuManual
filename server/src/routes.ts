@@ -22,6 +22,7 @@ import {
   transferProjectOwnership,
   updateProject as dbUpdateProject,
   updateUserRole,
+  updateUserProfile,
   upsertDesignTemplate,
   upsertProjectMember,
 } from "./db.js"
@@ -309,6 +310,24 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const user = getSessionUser(token)
     if (!user) return reply.status(401).send({ error: "Session expired" })
     return { user }
+  })
+
+  app.patch("/api/auth/me", async (request, reply) => {
+    const sessionUser = await requireAuth(request, reply)
+    if (!sessionUser) return
+    const body = (request.body ?? {}) as { name?: string; avatarUrl?: string | null }
+    if (body.name !== undefined && !String(body.name).trim()) {
+      return reply.status(400).send({ error: "表示名を入力してください" })
+    }
+    if (body.avatarUrl != null && typeof body.avatarUrl === "string" && body.avatarUrl.length > 900_000) {
+      return reply.status(400).send({ error: "アイコン画像が大きすぎます" })
+    }
+    const updated = updateUserProfile(sessionUser.id, {
+      name: body.name,
+      avatarUrl: body.avatarUrl,
+    })
+    if (!updated) return reply.status(404).send({ error: "User not found" })
+    return { user: updated }
   })
 
   app.get("/api/users", async (request, reply) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Bell, Settings } from "lucide-react"
+import { Bell, Palette, Settings } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { ACCENT_OPTIONS, type AccentId } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 import {
   deleteTemplate,
   fetchAdminSettings,
@@ -27,9 +29,11 @@ import type { UserRole } from "@/lib/api/auth"
 
 interface Props {
   isAdmin: boolean
+  accent: AccentId
+  setAccent: (a: AccentId) => void
 }
 
-export function AdminSettingsPage({ isAdmin }: Props) {
+export function AdminSettingsPage({ isAdmin, accent, setAccent }: Props) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [templates, setTemplates] = useState<DesignTemplate[]>([])
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([])
@@ -76,14 +80,56 @@ export function AdminSettingsPage({ isAdmin }: Props) {
   return (
     <div className="scroll-touch h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
-        <PageHeader title="管理設定" icon={<Settings className="size-5" />} />
+        <PageHeader title="設定" icon={<Settings className="size-5" />} />
         <p className="mt-2 text-sm text-muted-foreground">
-          テンプレート・通知・ユーザー権限・LLM予算を設定します（SCR-012）。
+          見た目・通知・テンプレート{isAdmin ? "・ユーザー権限・LLM予算" : ""}を設定します。
         </p>
         {message && <p className="mt-3 text-sm text-[var(--semantic-success-fg)]">{message}</p>}
         {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
 
         <Card className="mt-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Palette className="size-4" />
+              アクセントカラー
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-[11px] leading-snug text-muted-foreground">
+              アプリ全体のアクセントカラーを切り替えます。この端末に保存されます。
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {ACCENT_OPTIONS.map((opt) => {
+                const selected = accent === opt.id
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setAccent(opt.id)
+                      setMessage("アクセントカラーを変更しました")
+                    }}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                      selected
+                        ? "border-primary bg-primary-subtle/60 ring-1 ring-primary/30"
+                        : "hover:bg-muted/50",
+                    )}
+                  >
+                    <span
+                      className="size-5 shrink-0 rounded-full border shadow-xs"
+                      style={{ background: opt.swatch }}
+                    />
+                    <span className="min-w-0 flex-1 font-medium">{opt.label}</span>
+                    {selected && <span className="text-xs font-medium text-primary">選択中</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Bell className="size-4" />
