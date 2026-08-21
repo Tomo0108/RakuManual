@@ -65,27 +65,17 @@ export default function App() {
           </div>
           <h1 className="mt-4 text-lg font-bold">APIサーバーに接続できません</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Vercel はフロントのみ配信します。マニュアルの読み込み・保存には別途 API（Fastify）が必要です。
+            UIプレビューが無効のため起動できません。環境変数{" "}
+            <code className="rounded bg-muted px-1">VITE_UI_PREVIEW</code> を外すか{" "}
+            <code className="rounded bg-muted px-1">true</code> にしてください。
           </p>
           <ul className="mt-3 space-y-1.5 text-left text-xs leading-relaxed text-muted-foreground">
-            <li>・ローカル: リポジトリで <code className="rounded bg-muted px-1">npm run dev</code></li>
+            <li>・ローカル: <code className="rounded bg-muted px-1">npm run dev</code></li>
             <li>
-              ・本番: API を別ホストにデプロイし、Vercel の環境変数{" "}
-              <code className="rounded bg-muted px-1">VITE_API_BASE_URL</code> に API の{" "}
-              <code className="rounded bg-muted px-1">/api</code> URL を設定
+              ・API 接続: <code className="rounded bg-muted px-1">VITE_API_BASE_URL</code>
+              {apiBase ? ` = ${apiBase}` : "（未設定）"}
             </li>
-            {apiBase ? (
-              <li>
-                ・現在の向き先: <code className="break-all rounded bg-muted px-1">{apiBase}</code>
-              </li>
-            ) : (
-              <li>
-                ・現在の向き先: 同一オリジンの <code className="rounded bg-muted px-1">/api</code>
-                （未設定）
-              </li>
-            )}
           </ul>
-          <p className="mt-3 text-xs text-muted-foreground">手順の詳細は docs/デプロイ.md を参照してください。</p>
           <Button className="mt-5 gap-1.5" onClick={() => session.retryConnection()}>
             <RefreshCw className="size-4" />
             再試行
@@ -125,6 +115,21 @@ export default function App() {
             projects={projects}
             onMenuOpen={() => setMobileMenuOpen(true)}
           />
+          {session.uiPreview && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2 text-sm text-amber-950 dark:text-amber-100">
+              <span className="min-w-0 flex-1">
+                UIプレビューモード（API未接続）。編集はブラウザ内のみ保存されます。AI生成・公開・QAなどAPI依存機能は使えません。
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0"
+                onClick={() => session.resetPreviewData()}
+              >
+                サンプルをリセット
+              </Button>
+            </div>
+          )}
           {session.saveError && (
             <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
               <span className="min-w-0 flex-1">保存に失敗しました: {session.saveError}</span>
