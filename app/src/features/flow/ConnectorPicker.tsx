@@ -122,6 +122,38 @@ function ConnectorSection({ title, children }: { title: string; children: React.
   )
 }
 
+function ConnectorShapePreview({ connector }: { connector: FlowConnector }) {
+  const Icon = connector.icon
+  if (connector.kind === "decision") {
+    return (
+      <span className="relative flex size-8 shrink-0 items-center justify-center">
+        <span className="absolute size-5 rotate-45 rounded-[2px] border-2 border-amber-500 bg-amber-50" />
+        <Icon className="relative z-10 size-3 text-amber-800" />
+      </span>
+    )
+  }
+  if (connector.kind === "end" || connector.kind === "start") {
+    return (
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-rose-400 bg-rose-50 text-rose-700">
+        <Icon className="size-3.5" />
+      </span>
+    )
+  }
+  const tone =
+    connector.tone === "indigo"
+      ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+      : connector.tone === "sky"
+        ? "border-sky-300 bg-sky-50 text-sky-700"
+        : connector.tone === "violet"
+          ? "border-violet-300 bg-violet-50 text-violet-700"
+          : "border-slate-300 bg-slate-50 text-slate-700"
+  return (
+    <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md border-2", tone)}>
+      <Icon className="size-3.5" />
+    </span>
+  )
+}
+
 function ConnectorTile({
   connector,
   onSelect,
@@ -135,7 +167,6 @@ function ConnectorTile({
   draggable?: boolean
   onDragStart?: (e: React.DragEvent, connector: FlowConnector) => void
 }) {
-  const Icon = connector.icon
   return (
     <button
       type="button"
@@ -148,9 +179,7 @@ function ConnectorTile({
         compact ? "py-2.5" : "py-2",
       )}
     >
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-        <Icon className="size-4" />
-      </span>
+      <ConnectorShapePreview connector={connector} />
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-medium leading-tight">{connector.label}</span>
         {!compact && (

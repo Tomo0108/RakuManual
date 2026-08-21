@@ -64,6 +64,8 @@ export interface StepData extends Record<string, unknown> {
   /** 担当チーム(横スイムレーンの行) */
   lane: string
   kind: StepKind
+  /** パレット上のコネクタ種別（承認・通知など）。process の見た目差別化に使う */
+  connectorId?: string
   /** 利用システム(下部軸に表示) */
   system?: string
   /** 手動修正フラグ(再生成時に保護される) */

@@ -543,16 +543,23 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               target.targetId,
               connector.kind,
               connector.defaultLabel,
+              connector.id,
             ),
           )
         }
         if (target.mode === "after" && target.nodeId) {
           return polishFlow(
-            insertConnectorAfter(s, target.nodeId, connector.kind, connector.defaultLabel),
+            insertConnectorAfter(
+              s,
+              target.nodeId,
+              connector.kind,
+              connector.defaultLabel,
+              connector.id,
+            ),
           )
         }
         return polishFlow(
-          appendConnector(s, connector.kind, connector.defaultLabel, target.nodeId),
+          appendConnector(s, connector.kind, connector.defaultLabel, target.nodeId, connector.id),
         )
       })
       setInsertTarget(null)
@@ -601,17 +608,26 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       const position = rfRef.current.screenToFlowPosition({ x: e.clientX, y: e.clientY })
       commit((s) => {
         const laneCount = s.lanes.length || 1
-        const dims = dimForKind(connector.kind === "decision" ? "decision" : "process")
+        const dims = dimForKind(
+          connector.kind === "decision"
+            ? "decision"
+            : connector.kind === "end" || connector.kind === "start"
+              ? connector.kind
+              : "process",
+        )
         const li = nearestLaneIndex(position.y, dims.h, laneCount)
         const lane = s.lanes[li] ?? s.lanes[0] ?? "担当者"
-        const node = makeNode(connector.defaultLabel, lane, connector.kind, position)
+        const node = makeNode(connector.defaultLabel, lane, connector.kind, position, {
+          connectorId: connector.id,
+          manual: true,
+        })
         const snapped = snapNodePosition(node, laneCount, s.lanes.length > 0 ? s.lanes : [lane], s.nodes)
         const withNode = [
           ...s.nodes,
           {
             ...node,
             position: snapped.position,
-            data: { ...node.data, lane: snapped.lane, manual: true },
+            data: { ...node.data, lane: snapped.lane, manual: true, connectorId: connector.id },
           },
         ]
         return polishFlow({
@@ -1194,6 +1210,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               onSelect={handlePanelConnectorSelect}
               onDragStart={onConnectorDragStart}
               disabled={isEditingDisabled}
+              mode={selectedNodes[0] ? "after" : "append"}
+              targetKind={selectedNodes[0]?.data.kind}
             />
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">

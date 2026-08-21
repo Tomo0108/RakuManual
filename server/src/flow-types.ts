@@ -7,6 +7,7 @@ export interface StepData extends Record<string, unknown> {
   sectionNumber?: string
   lane: string
   kind: StepKind
+  connectorId?: string
   system?: string
   manual?: boolean
   source?: string

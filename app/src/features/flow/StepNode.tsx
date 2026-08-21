@@ -4,6 +4,7 @@ import { CircleDot, Flag, Hand, Info, Plus } from "lucide-react"
 import type { FlowNode, StepKind } from "@/lib/types"
 import { NODE_DIMS } from "./flow-layout"
 import { getFlowInteractionContext } from "./flow-interaction-context"
+import { processConnectorVisual } from "./flow-connectors"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -86,6 +87,7 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const kind = data.kind
   const dims = NODE_DIMS[kind === "start" || kind === "end" || kind === "decision" ? kind : "process"]
+  const visual = processConnectorVisual(data.connectorId)
 
   useEffect(() => {
     if (editing) {
@@ -289,7 +291,8 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
       {addAfterButton}
       <div
         className={cn(
-          "rounded-md border-2 border-slate-300 bg-card px-2.5 py-1.5 shadow-sm",
+          "rounded-md border-2 px-2.5 py-1.5 shadow-sm",
+          visual.frameClass,
           selected && "border-primary shadow-md ring-2 ring-primary/20",
           diffClass,
           validationClass,
@@ -302,7 +305,15 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
               {data.sectionNumber}
             </span>
           )}
-          <KindBadge kind={kind} />
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded px-1 py-px text-[8px] font-bold tracking-wide",
+              visual.badgeClass,
+            )}
+          >
+            <visual.Icon className="size-2.5" />
+            {visual.badge}
+          </span>
           {data.manual && <ManualBadge />}
         </div>
         {labelBlock}

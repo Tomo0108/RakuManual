@@ -21,6 +21,10 @@ export interface FlowConnector {
   category: ConnectorCategory
   /** よく使うセクションに表示 */
   frequent?: boolean
+  /** キャンバス上のバッジ文言（省略時は KIND ラベル） */
+  badge?: string
+  /** 処理系の枠・背景トーン */
+  tone?: "slate" | "indigo" | "sky" | "violet"
 }
 
 export const CONNECTOR_CATEGORIES: { id: ConnectorCategory; label: string }[] = [
@@ -33,64 +37,78 @@ export const FLOW_CONNECTORS: FlowConnector[] = [
   {
     id: "process",
     label: "処理ステップ",
-    description: "通常の作業・手続きを表すステップ",
+    description: "通常の作業・手続き（角丸四角）",
     kind: "process",
     defaultLabel: "新しいステップ",
     icon: Square,
     category: "process",
     frequent: true,
+    badge: "処理",
+    tone: "slate",
   },
   {
     id: "approval",
     label: "承認",
-    description: "上長・担当者による承認作業",
+    description: "上長・担当者による承認（角丸四角＋承認バッジ）",
     kind: "process",
     defaultLabel: "承認作業",
     icon: UserCheck,
     category: "process",
     frequent: true,
+    badge: "承認",
+    tone: "indigo",
   },
   {
     id: "system-input",
     label: "システム入力",
-    description: "業務システムへのデータ入力",
+    description: "業務システムへの入力（角丸四角＋システムバッジ）",
     kind: "process",
     defaultLabel: "システムに入力",
     icon: FileInput,
     category: "process",
+    badge: "システム",
+    tone: "sky",
   },
   {
     id: "notification",
     label: "通知・連絡",
-    description: "メールやチャットでの連絡作業",
+    description: "メールやチャットでの連絡（角丸四角＋通知バッジ）",
     kind: "process",
     defaultLabel: "関係者へ連絡",
     icon: Mail,
     category: "process",
+    badge: "通知",
+    tone: "violet",
   },
   {
     id: "decision",
     label: "条件分岐",
-    description: "はい/いいえなどの判断ポイント",
+    description: "はい/いいえなどの判断（ひし形）",
     kind: "decision",
     defaultLabel: "条件分岐?",
     icon: Diamond,
     category: "branch",
     frequent: true,
+    badge: "分岐",
   },
   {
     id: "end",
     label: "終了",
-    description: "フローの完了・終了ポイント",
+    description: "フローの完了（丸）",
     kind: "end",
     defaultLabel: "完了",
     icon: CircleDot,
     category: "terminal",
     frequent: true,
+    badge: "終了",
   },
 ]
 
 export const FREQUENT_CONNECTORS = FLOW_CONNECTORS.filter((c) => c.frequent)
+
+export function connectorById(id: string): FlowConnector | undefined {
+  return FLOW_CONNECTORS.find((c) => c.id === id)
+}
 
 export function filterConnectors(
   connectors: FlowConnector[],
@@ -120,6 +138,29 @@ export function connectorsForInsert(
   })
 }
 
-export function connectorById(id: string): FlowConnector | undefined {
-  return FLOW_CONNECTORS.find((c) => c.id === id)
+const TONE_CLASS: Record<NonNullable<FlowConnector["tone"]>, string> = {
+  slate: "border-slate-300 bg-card",
+  indigo: "border-indigo-300 bg-indigo-50/80",
+  sky: "border-sky-300 bg-sky-50/80",
+  violet: "border-violet-300 bg-violet-50/80",
+}
+
+const TONE_BADGE: Record<NonNullable<FlowConnector["tone"]>, string> = {
+  slate: "text-slate-600 bg-slate-100/80",
+  indigo: "text-indigo-800 bg-indigo-100/90",
+  sky: "text-sky-800 bg-sky-100/90",
+  violet: "text-violet-800 bg-violet-100/90",
+}
+
+/** キャンバス上の処理ノード見た目 */
+export function processConnectorVisual(connectorId?: string) {
+  const c = connectorId ? connectorById(connectorId) : undefined
+  const tone = c?.tone ?? "slate"
+  return {
+    id: c?.id ?? "process",
+    badge: c?.badge ?? "処理",
+    Icon: c?.icon ?? Square,
+    frameClass: TONE_CLASS[tone],
+    badgeClass: TONE_BADGE[tone],
+  }
 }

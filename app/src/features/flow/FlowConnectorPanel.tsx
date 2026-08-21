@@ -2,6 +2,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import type { FlowConnector } from "./flow-connectors"
 import { ConnectorPicker } from "./ConnectorPicker"
 import type { ConnectorInsertMode } from "./flow-interaction-context"
+import type { StepKind } from "@/lib/types"
 import { AXIS_HEADER_HEIGHT } from "./flow-layout"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -12,6 +13,8 @@ interface Props {
   onSelect: (connector: FlowConnector) => void
   onDragStart: (e: React.DragEvent, connector: FlowConnector) => void
   disabled?: boolean
+  mode?: ConnectorInsertMode
+  targetKind?: StepKind
 }
 
 export function FlowConnectorPanel({
@@ -20,6 +23,8 @@ export function FlowConnectorPanel({
   onSelect,
   onDragStart,
   disabled,
+  mode = "append",
+  targetKind,
 }: Props) {
   if (collapsed) {
     return (
@@ -65,7 +70,8 @@ export function FlowConnectorPanel({
         </Button>
       </div>
       <ConnectorPicker
-        mode={"append" satisfies ConnectorInsertMode}
+        mode={mode}
+        targetKind={targetKind}
         onSelect={onSelect}
         onDragStart={onDragStart}
         className="min-h-0 flex-1"
