@@ -1,5 +1,6 @@
 import {
   interpretInstruction,
+  mergePreservingManual,
   regeneratePreservingManual,
 } from "../flow-logic.js"
 import type { FlowState } from "../flow-types.js"
@@ -15,4 +16,8 @@ export function proposeNlEdit(instruction: string, flow: FlowState) {
 
 export function regenerateFlowPreservingManual(flow: FlowState, projectName: string): FlowState {
   return regeneratePreservingManual(flow, projectName)
+}
+
+export function mergeFlowPreservingManual(current: FlowState, generated: FlowState): FlowState {
+  return mergePreservingManual(current, generated)
 }

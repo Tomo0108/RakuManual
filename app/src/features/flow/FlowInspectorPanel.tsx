@@ -51,7 +51,6 @@ export function FlowInspectorPanel({
 }: Props) {
   const [label, setLabel] = useState(node?.data.label ?? "")
   const [system, setSystem] = useState(node?.data.system ?? "")
-  const [sectionNumber, setSectionNumber] = useState(node?.data.sectionNumber ?? "")
   const [edgeLabel, setEdgeLabel] = useState(
     edge && typeof edge.label === "string" ? edge.label : "",
   )
@@ -59,8 +58,7 @@ export function FlowInspectorPanel({
   useEffect(() => {
     setLabel(node?.data.label ?? "")
     setSystem(node?.data.system ?? "")
-    setSectionNumber(node?.data.sectionNumber ?? "")
-  }, [node?.id, node?.data.label, node?.data.system, node?.data.sectionNumber])
+  }, [node?.id, node?.data.label, node?.data.system])
 
   useEffect(() => {
     setEdgeLabel(edge && typeof edge.label === "string" ? edge.label : "")
@@ -156,20 +154,15 @@ export function FlowInspectorPanel({
             </Field>
 
             {(node.data.kind === "process" || node.data.kind === "decision") && (
-              <Field label="項番">
+              <Field label="項番（自動）">
                 <Input
-                  value={sectionNumber}
-                  disabled={locked}
-                  placeholder="例: 1.1"
+                  value={node.data.sectionNumber ?? "（未採番）"}
+                  disabled
                   className="h-8 text-xs"
-                  onChange={(e) => setSectionNumber(e.target.value)}
-                  onBlur={() => {
-                    const next = sectionNumber.trim() || undefined
-                    if (next !== node.data.sectionNumber) {
-                      onUpdateNode(node.id, { sectionNumber: next })
-                    }
-                  }}
                 />
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                  レイアウト確定時に自動採番されます。手動では変更できません。
+                </p>
               </Field>
             )}
 

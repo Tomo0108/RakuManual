@@ -136,7 +136,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [genProgress, setGenProgress] = useState(0)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
-  const [isLocked, setIsLocked] = useState(true)
+  const [isLocked, setIsLocked] = useState(false)
   const [connectorPanelOpen, setConnectorPanelOpen] = useState(false)
   const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
   const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
@@ -152,6 +152,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [errorsPanelOpen, setErrorsPanelOpen] = useState(true)
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [confirmBlockedOpen, setConfirmBlockedOpen] = useState(false)
+  const [confirmPending, setConfirmPending] = useState<{
+    discarded: number
+    manualReview: number
+  } | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
 
   const zoomBy = useCallback((factor: number) => {
@@ -295,7 +299,6 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setRedoStack([])
     setProposal(null)
     setInstruction("")
-    setIsLocked(true)
     didFitRef.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps -- プロジェクト切替時のみ
   }, [project.id])
@@ -847,9 +850,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     }
   }
 
-  /* 自然言語修正: 提案の生成 → 差分プレビュー → 承認/却下 */
+  /* 自然言語修正: 提案の生成 → 差分プレビュー → 反映/やめる */
   const askAi = async () => {
-    if (!instruction.trim()) return
+    if (!instruction.trim() || isLocked || !!proposal || aiThinking) return
     setAiThinking(true)
     setAiError(null)
     try {
@@ -871,13 +874,18 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     }
   }
 
-  const approveProposal = () => {
+  const applyProposal = () => {
     if (!proposal) return
     commit((s) => polishFlow(proposal.apply(s)))
     updateProject(project.id, (p) => ({
       ...p,
       history: [
-        { id: `h-${Date.now()}`, date: now(), user: "山田 太郎", action: `自然言語修正を適用: ${proposal.description.slice(0, 40)}…` },
+        {
+          id: `h-${Date.now()}`,
+          date: now(),
+          user: "山田 太郎",
+          action: `自然言語修正を適用: ${proposal.description.slice(0, 40)}…`,
+        },
         ...p.history,
       ],
     }))
@@ -892,7 +900,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       setErrorsPanelOpen(true)
       return
     }
-    confirmFlow()
+    const finalized = polishFlow(flow)
+    const discarded = countDiscardedDeepdive(finalized)
+    const impact =
+      project.sections.length === 0 ? null : computeManualImpact(finalized, project.sections)
+    setConfirmPending({
+      discarded,
+      manualReview: impact?.reviewCount ?? 0,
+    })
   }
 
   /** 確定時にフローから消えたステップの深掘り回答は失われる */
@@ -907,16 +922,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   const confirmFlow = () => {
     setConfirmBlockedOpen(false)
+    setConfirmPending(null)
     const finalized = polishFlow(flow)
-    const discarded = countDiscardedDeepdive(finalized)
-    if (
-      discarded > 0 &&
-      !window.confirm(
-        `フローから削除されたステップの深掘り回答 ${discarded} 件が破棄されます。確定しますか?`,
-      )
-    ) {
-      return
-    }
     setFlow(finalized)
     persist(finalized)
     updateProject(project.id, (p) => {
@@ -1276,7 +1283,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   nodesDraggable={!isEditingDisabled}
                   nodesConnectable={!isEditingDisabled}
                   elementsSelectable={!proposal}
-                  selectionOnDrag={false}
+                  selectionOnDrag={!isEditingDisabled}
                   panOnDrag
                   multiSelectionKeyCode="Shift"
                   selectionKeyCode="Shift"
@@ -1376,16 +1383,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                     <AlertDescription>
                       <p className="text-[13px] leading-relaxed">{proposal.description}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        緑=追加 / 赤=削除 / 黄=変更。承認するまでフロー図は変更されません。
+                        緑=追加 / 赤=削除 / 黄=変更。反映するまでフロー図は変わりません。
                       </p>
                       <div className="mt-3 flex gap-2">
-                        <Button size="sm" className="gap-1" onClick={approveProposal}>
+                        <Button size="sm" className="gap-1" onClick={applyProposal}>
                           <Check className="size-3.5" />
-                          承認して反映
+                          この案を反映
                         </Button>
                         <Button size="sm" variant="outline" className="gap-1" onClick={() => setProposal(null)}>
                           <X className="size-3.5" />
-                          却下
+                          やめる
                         </Button>
                       </div>
                     </AlertDescription>
@@ -1491,10 +1498,53 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             <Button variant="outline" onClick={() => setRegenConfirmOpen(false)}>
               キャンセル
             </Button>
-            <Button onClick={regenerate} className="gap-1.5">
+            <Button onClick={() => void regenerate()} className="gap-1.5">
               <Sparkles className="size-4" />
               再生成する
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 確定前の影響サマリー */}
+      <Dialog
+        open={confirmPending != null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmPending(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>フロー図を確定しますか?</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>確定すると深掘りヒアリングへ進みます。</p>
+                <ul className="list-disc space-y-1 pl-4">
+                  {confirmPending && confirmPending.discarded > 0 ? (
+                    <li className="text-foreground">
+                      削除されたステップの深掘り回答{" "}
+                      <span className="font-medium">{confirmPending.discarded} 件</span> が破棄されます
+                    </li>
+                  ) : (
+                    <li>深掘り回答の破棄はありません</li>
+                  )}
+                  {confirmPending && confirmPending.manualReview > 0 ? (
+                    <li className="text-foreground">
+                      既存マニュアルに見直し候補が{" "}
+                      <span className="font-medium">{confirmPending.manualReview} 件</span> 付きます（本文は保護）
+                    </li>
+                  ) : project.sections.length > 0 ? (
+                    <li>マニュアル本文への影響はありません</li>
+                  ) : null}
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmPending(null)}>
+              戻る
+            </Button>
+            <Button onClick={confirmFlow}>確定して深掘りへ</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1569,16 +1619,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   onChange={(e) => setInstruction(e.target.value)}
                   placeholder="修正内容を入力…"
                   className="h-10 flex-1 text-sm"
-                  disabled={!!proposal || aiThinking}
+                  disabled={!!proposal || aiThinking || isLocked}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.nativeEvent.isComposing) askAi()
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) void askAi()
                   }}
                 />
                 <Button
                   size="icon"
                   className="size-10 shrink-0"
-                  onClick={askAi}
-                  disabled={!instruction.trim() || !!proposal || aiThinking}
+                  onClick={() => void askAi()}
+                  disabled={!instruction.trim() || !!proposal || aiThinking || isLocked}
                   aria-label={aiThinking ? "解析中" : "修正案を作成"}
                 >
                   <Sparkles className="size-4" />
@@ -1608,15 +1658,21 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               onChange={(e) => setInstruction(e.target.value)}
               placeholder="修正内容を入力…"
               className="h-9 flex-1"
-              disabled={!!proposal || aiThinking}
+              disabled={!!proposal || aiThinking || isLocked}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) askAi()
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) void askAi()
               }}
             />
             <ToolButton
-              label={aiThinking ? "解析中…" : "修正案を作成"}
-              onClick={askAi}
-              disabled={!instruction.trim() || !!proposal || aiThinking}
+              label={
+                isLocked
+                  ? "ロック中は編集できません"
+                  : aiThinking
+                    ? "解析中…"
+                    : "修正案を作成"
+              }
+              onClick={() => void askAi()}
+              disabled={!instruction.trim() || !!proposal || aiThinking || isLocked}
               variant="default"
             >
               <Sparkles className="size-4" />

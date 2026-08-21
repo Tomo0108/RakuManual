@@ -31,10 +31,10 @@ import { buildManualPdf } from "./export/manual-pdf.js"
 import { getDashboardMetrics } from "./metrics.js"
 import { applyPublish, validatePublish } from "./publish.js"
 import { answerQuestion } from "./qa.js"
-import { proposeNlEdit, regenerateFlowPreservingManual } from "./ai/flow.js"
+import { proposeNlEdit, mergeFlowPreservingManual } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
 import { generateDeepdiveQuestions, nextHearingQuestion } from "./ai/hearing.js"
-import { extractJson, regenerateSectionFromLlm } from "./ai/structured.js"
+import { extractJson, generateFlowFromLlm, regenerateSectionFromLlm } from "./ai/structured.js"
 import {
   enqueueFlowGenerate,
   enqueueManualGenerate,
@@ -976,19 +976,36 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const body = (request.body ?? {}) as { flow?: Project["flow"] }
     if (!body.flow) return reply.status(400).send({ error: "flow is required" })
 
-    recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_regenerate", tokens: 150 })
+    const generated = await generateFlowFromLlm(existing, user.id)
+    const flow = mergeFlowPreservingManual(
+      body.flow as unknown as Parameters<typeof mergeFlowPreservingManual>[0],
+      generated.flow,
+    )
+    recordLlmUsage({
+      userId: user.id,
+      projectId: existing.id,
+      action: "flow_regenerate",
+      tokens: generated.tokens,
+    })
     recordOperationLog({
       userId: user.id,
       actionType: "generate",
       projectId: existing.id,
-      payload: { kind: "flow_regenerate" },
+      payload: {
+        kind: "flow_regenerate",
+        provider: generated.provider,
+        usedLlmStructure: generated.usedLlmStructure,
+      },
     })
 
-    const flow = regenerateFlowPreservingManual(
-      body.flow as unknown as Parameters<typeof regenerateFlowPreservingManual>[0],
-      existing.name,
-    )
-    return { flow }
+    return {
+      flow,
+      meta: {
+        provider: generated.provider,
+        tokens: generated.tokens,
+        usedLlmStructure: generated.usedLlmStructure,
+      },
+    }
   })
 
   app.post<{ Params: { id: string; sectionId: string } }>(

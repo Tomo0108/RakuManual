@@ -2,7 +2,6 @@ import {
   CircleDot,
   Diamond,
   FileInput,
-  GitBranch,
   Mail,
   Square,
   UserCheck,
@@ -80,15 +79,6 @@ export const FLOW_CONNECTORS: FlowConnector[] = [
     frequent: true,
   },
   {
-    id: "parallel",
-    label: "並列分岐",
-    description: "複数経路への分岐ポイント",
-    kind: "decision",
-    defaultLabel: "分岐条件?",
-    icon: GitBranch,
-    category: "branch",
-  },
-  {
     id: "end",
     label: "終了",
     description: "フローの完了・終了ポイント",
@@ -96,6 +86,7 @@ export const FLOW_CONNECTORS: FlowConnector[] = [
     defaultLabel: "完了",
     icon: CircleDot,
     category: "terminal",
+    frequent: true,
   },
 ]
 

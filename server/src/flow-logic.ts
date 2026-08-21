@@ -322,11 +322,9 @@ export function removeNodeAndReconnect(s: FlowState, nodeId: string): FlowState 
 }
 
 /**
- * フロー図の再生成(F-2)。
- * 手動修正フラグ(manual)が付いたノードと、その結線は保護して残す。
+ * 生成済みフローに、現行フローの手動修正ノード（と結線）をマージして保護する。
  */
-export function regeneratePreservingManual(current: FlowState, projectName: string): FlowState {
-  const generated = generateFlowFromHearing(projectName)
+export function mergePreservingManual(current: FlowState, generated: FlowState): FlowState {
   const manualNodes = current.nodes.filter((n) => n.data.manual)
   const manualIds = new Set(manualNodes.map((n) => n.id))
   const survivingIds = new Set([...generated.nodes.map((n) => n.id), ...manualIds])
@@ -341,6 +339,15 @@ export function regeneratePreservingManual(current: FlowState, projectName: stri
     nodes: [...generated.nodes, ...manualNodes],
     edges: [...generated.edges, ...keptManualEdges],
   })
+}
+
+/**
+ * フロー図の再生成(F-2)。
+ * 手動修正フラグ(manual)が付いたノードと、その結線は保護して残す。
+ * （テンプレ生成フォールバック用。本番再生成は LLM 結果を mergePreservingManual に渡す）
+ */
+export function regeneratePreservingManual(current: FlowState, projectName: string): FlowState {
+  return mergePreservingManual(current, generateFlowFromHearing(projectName))
 }
 
 /** ヒアリング回答からフロー図をモック生成する(F-2) — 横軸スイムレーン */
