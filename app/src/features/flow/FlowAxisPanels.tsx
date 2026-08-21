@@ -309,9 +309,11 @@ export function SystemAxisPanel({
 export function MobileSystemAxisPanel({
   columnSystems,
   viewport,
+  onUpdateColumn,
 }: {
   columnSystems: ColumnSystemEntry[]
   viewport: FlowViewport
+  onUpdateColumn?: (col: number, entry: ColumnSystemEntry) => void
 }) {
   const columnCount = columnSystems.length
   if (columnCount === 0) return null
@@ -328,7 +330,14 @@ export function MobileSystemAxisPanel({
           const screen = flowToScreen(colLeft, 0, viewport)
           const colW = COL_WIDTH * viewport.zoom
           return (
-            <MobileSystemCell key={col} col={col} entry={entry} left={screen.x} width={colW} />
+            <MobileSystemCell
+              key={col}
+              col={col}
+              entry={entry}
+              left={screen.x}
+              width={colW}
+              onSave={onUpdateColumn ? (next) => onUpdateColumn(col, next) : undefined}
+            />
           )
         })}
       </div>
@@ -380,39 +389,85 @@ function ColumnBoundaryOverlay({
 }
 
 function MobileSystemCell({
+  col,
   entry,
   left,
   width,
+  onSave,
 }: {
   col: number
   entry: ColumnSystemEntry
   left: number
   width: number
+  onSave?: (entry: ColumnSystemEntry) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const [draftLabel, setDraftLabel] = useState(entry.label)
+  const [draftUrl, setDraftUrl] = useState(entry.url ?? "")
   const href = entry.url?.trim()
   const display = entry.label || "—"
+
+  const openEdit = () => {
+    if (!onSave) return
+    setDraftLabel(entry.label)
+    setDraftUrl(entry.url ?? "")
+    setOpen(true)
+  }
+
+  const save = () => {
+    onSave?.({
+      label: draftLabel.trim() || "—",
+      url: draftUrl.trim() || undefined,
+    })
+    setOpen(false)
+  }
 
   return (
     <div
       className="absolute top-0 flex items-center justify-center px-1 text-center text-[10px] leading-snug"
       style={{ left, width, height: SYSTEM_ROW_HEIGHT }}
     >
-      {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex max-w-full items-center gap-0.5 text-primary underline-offset-2 hover:underline"
-          title={href}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ExternalLink className="size-2.5 shrink-0" />
-          <span className="line-clamp-2">{display}</span>
-        </a>
-      ) : (
-        <span className="line-clamp-2 text-foreground" title={display}>
-          {display}
-        </span>
+      <button
+        type="button"
+        className="inline-flex max-w-full flex-col items-center gap-0.5 rounded px-0.5 py-0.5 text-center"
+        onClick={openEdit}
+        disabled={!onSave}
+        aria-label={`列${col + 1}の利用システム${onSave ? "を編集" : ""}`}
+      >
+        {href ? (
+          <span className="inline-flex max-w-full items-center gap-0.5 text-primary">
+            <ExternalLink className="size-2.5 shrink-0" />
+            <span className="line-clamp-2">{display}</span>
+          </span>
+        ) : (
+          <span className="line-clamp-2 text-foreground" title={display}>
+            {display}
+          </span>
+        )}
+      </button>
+      {onSave && (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-sm">利用システム(列 {col + 1})</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-2">
+              <Input
+                value={draftLabel}
+                onChange={(e) => setDraftLabel(e.target.value)}
+                placeholder="システム名"
+              />
+              <Input
+                value={draftUrl}
+                onChange={(e) => setDraftUrl(e.target.value)}
+                placeholder="https://… (リンクURL・任意)"
+              />
+              <Button type="button" onClick={save}>
+                保存
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )
@@ -506,13 +561,22 @@ function SystemCell({
 
   return (
     <div
-      className="group absolute top-0 flex items-center justify-center border-r bg-muted/25 px-1.5 text-center text-[10px] leading-snug"
+      className="group absolute top-0 flex cursor-pointer items-center justify-center border-r bg-muted/25 px-1.5 text-center text-[10px] leading-snug"
       style={{
         left,
         width,
         height: SYSTEM_ROW_HEIGHT,
         marginTop: (SYSTEM_ROW_HEIGHT + AXIS_HEADER_HEIGHT - SYSTEM_ROW_HEIGHT) / 2,
       }}
+      onClick={openEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          openEdit()
+        }
+      }}
+      role={readOnly ? undefined : "button"}
+      tabIndex={readOnly ? undefined : 0}
     >
       {href ? (
         <a

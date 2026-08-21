@@ -141,7 +141,7 @@ const project = {
   },
 } as unknown as Project
 
-const buf = await buildManualPptxArrayBuffer(project, [], {
+const { buffer: buf } = await buildManualPptxArrayBuffer(project, [], {
   template: "corporate",
   includeFlow: true,
 })

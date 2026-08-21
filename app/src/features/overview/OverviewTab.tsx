@@ -344,7 +344,20 @@ export function OverviewTab({ project, setTab, updateProject }: Props) {
                     ))}
                 </select>
               </div>
-              <Button variant="destructive" className="sm:mt-7" onClick={() => void doTransfer()}>
+              <Button
+                variant="destructive"
+                className="sm:mt-7"
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `オーナーを変更します。変更後、現在のアカウントの編集権限が失われる場合があります。よろしいですか？`,
+                    )
+                  ) {
+                    return
+                  }
+                  void doTransfer()
+                }}
+              >
                 オーナー変更
               </Button>
             </div>

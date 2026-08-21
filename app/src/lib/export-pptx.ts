@@ -27,6 +27,7 @@ import type { GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
 import { createPptxSlideGfx } from "@/lib/pptx-slide-gfx"
 import { createPdfSlideGfx } from "@/lib/pdf-slide-gfx"
 import { jsPDF } from "jspdf"
+import { resolveImageDataUrl } from "@/lib/resolve-export-image"
 
 /** 必須要件: 13.333 × 7.5 in */
 const SLIDE_W = 13.333
@@ -302,39 +303,113 @@ function buildProcedureParts(
       for (const section of medium.sections) {
         const title = displaySectionTitle(section)
         const num = resolveLeafSectionNumber(section, medium.number, medium.sections.indexOf(section))
-        const images = includeImages
-          ? section.blocks.map((b) => b.image?.url).filter((u): u is string => Boolean(u))
+        const imageEntries: { url: string; caption?: string }[] = includeImages
+          ? section.blocks.flatMap((b) => {
+              const url = b.image?.url
+              if (!url) return []
+              const caption = b.image?.caption?.trim() || undefined
+              return [{ url, caption }]
+            })
           : []
-        const total = Math.max(1, images.length)
+        const total = Math.max(1, imageEntries.length)
         const chip = major.title ? `【${major.title}】` : undefined
 
-        if (images.length === 0) {
-          parts.push({
-            section,
-            majorTitle: major.title ?? project.name,
-            majorNumber: major.number,
-            mediumHeading: formatMediumHeading(num, title),
-            blocks: section.blocks,
-            chip,
+        if (imageEntries.length === 0) {
+          const chunks = chunkBlocksByHeight(
+            section.blocks,
+            formatMediumHeading(num, title),
+            5.0,
+          )
+          chunks.forEach((chunk, i) => {
+            parts.push({
+              section,
+              majorTitle: major.title ?? project.name,
+              majorNumber: major.number,
+              mediumHeading:
+                chunks.length > 1
+                  ? formatMediumHeading(num, title, { index: i + 1, total: chunks.length })
+                  : formatMediumHeading(num, title),
+              blocks: chunk,
+              chip,
+            })
           })
           continue
         }
 
-        images.forEach((url, i) => {
-          parts.push({
-            section,
-            majorTitle: major.title ?? project.name,
-            majorNumber: major.number,
-            mediumHeading: formatMediumHeading(num, title, { index: i + 1, total }),
-            blocks: i === 0 ? section.blocks : [],
-            imageUrl: url,
-            chip,
+        imageEntries.forEach((entry, i) => {
+          const baseBlocks = i === 0 ? section.blocks : []
+          const withCaption =
+            entry.caption && i === 0
+              ? [
+                  ...baseBlocks,
+                  {
+                    id: `cap-${section.id}-${i}`,
+                    type: "paragraph" as const,
+                    text: `（図の説明）${entry.caption}`,
+                  },
+                ]
+              : entry.caption && i > 0
+                ? [
+                    {
+                      id: `cap-${section.id}-${i}`,
+                      type: "paragraph" as const,
+                      text: `（図の説明）${entry.caption}`,
+                    },
+                  ]
+                : baseBlocks
+
+          const maxH = 2.55
+          const chunks = chunkBlocksByHeight(
+            withCaption,
+            formatMediumHeading(num, title, { index: i + 1, total }),
+            maxH,
+          )
+          chunks.forEach((chunk, ci) => {
+            parts.push({
+              section,
+              majorTitle: major.title ?? project.name,
+              majorNumber: major.number,
+              mediumHeading:
+                chunks.length > 1
+                  ? formatMediumHeading(num, title, {
+                      index: i + 1,
+                      total,
+                    }) + `（続き${ci + 1}/${chunks.length}）`
+                  : formatMediumHeading(num, title, { index: i + 1, total }),
+              blocks: chunk,
+              // 画像は最初のテキストチャンクの下に置く
+              imageUrl: ci === 0 ? entry.url : undefined,
+              chip,
+            })
           })
         })
       }
     }
   }
   return parts
+}
+
+/** 本文高さ見積もりに基づきブロックをスライド単位に分割 */
+function chunkBlocksByHeight(
+  blocks: ManualBlock[],
+  mediumHeading: string,
+  maxTextH: number,
+): ManualBlock[][] {
+  if (blocks.length === 0) return [[]]
+  const chunks: ManualBlock[][] = []
+  let current: ManualBlock[] = []
+  for (const block of blocks) {
+    const trial = [...current, block]
+    const h = estimateBodyHeightInches(buildBodyItems(trial, mediumHeading))
+    if (current.length > 0 && h > maxTextH) {
+      chunks.push(current)
+      current = [block]
+    } else {
+      current = trial
+    }
+  }
+  if (current.length) chunks.push(current)
+  return chunks.length ? chunks : [[]]
 }
 
 /* ---------- フロー図（スイムレーン・エディタ座標と一致） ---------- */
@@ -1251,7 +1326,7 @@ async function renderManualDeck(
   sections: ManualSection[],
   options: { includeImages: boolean; includeFlow: boolean; template?: string },
   createSlide: () => SlideGfx,
-): Promise<void> {
+): Promise<{ imageFailures: number }> {
   const theme = resolveExportTheme(options.template)
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const preparedFlow = project.flow?.nodes?.length ? prepareFlow(project.flow) : project.flow
@@ -1266,6 +1341,8 @@ async function renderManualDeck(
   )
 
   const imageNaturalSize = new Map<string, { w: number; h: number } | null>()
+  const resolvedImages = new Map<string, string>()
+  let imageFailures = 0
   if (options.includeImages) {
     const urls = [
       ...new Set(
@@ -1277,7 +1354,14 @@ async function renderManualDeck(
     ]
     await Promise.all(
       urls.map(async (url) => {
-        imageNaturalSize.set(url, await probeImageNaturalSize(url))
+        const data = await resolveImageDataUrl(url)
+        if (data) {
+          resolvedImages.set(url, data)
+          imageNaturalSize.set(data, await probeImageNaturalSize(data))
+        } else {
+          imageFailures += 1
+          imageNaturalSize.set(url, null)
+        }
       }),
     )
   }
@@ -1414,9 +1498,10 @@ async function renderManualDeck(
 
     const bodyItems = buildBodyItems(part.blocks, part.mediumHeading)
     const runs = bodyToGfxRuns(bodyItems)
-    const hasImage = Boolean(part.imageUrl)
+    const resolvedUrl = part.imageUrl ? resolvedImages.get(part.imageUrl) : undefined
+    const hasImage = Boolean(resolvedUrl)
     const imageOnly = hasImage && part.blocks.length === 0
-    const natural = part.imageUrl ? imageNaturalSize.get(part.imageUrl) : null
+    const natural = resolvedUrl ? imageNaturalSize.get(resolvedUrl) : null
     const layout = hasImage
       ? layoutProcedureImage({
           hasBody: part.blocks.length > 0,
@@ -1438,9 +1523,9 @@ async function renderManualDeck(
       },
     )
 
-    if (part.imageUrl && layout && layout.image.w > 0 && layout.image.h > 0) {
+    if (resolvedUrl && layout && layout.image.w > 0 && layout.image.h > 0) {
       gfx.addImage({
-        data: part.imageUrl,
+        data: resolvedUrl,
         x: layout.image.x,
         y: layout.image.y,
         w: layout.image.w,
@@ -1448,6 +1533,12 @@ async function renderManualDeck(
       })
     }
   })
+
+  return { imageFailures }
+}
+
+export type ManualExportResult = {
+  imageFailures: number
 }
 
 /** マニュアルを PowerPoint 出力（フロー図・目次付き） */
@@ -1455,7 +1546,7 @@ export async function buildManualPptxArrayBuffer(
   project: Project,
   sections: ManualSection[],
   options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
-): Promise<ArrayBuffer> {
+): Promise<{ buffer: ArrayBuffer; imageFailures: number }> {
   const includeImages = options?.includeImages ?? true
   const includeFlow = options?.includeFlow ?? true
   const pptx = new PptxGenJS()
@@ -1464,14 +1555,15 @@ export async function buildManualPptxArrayBuffer(
   pptx.defineLayout({ name: "LAYOUT_WIDE", width: SLIDE_W, height: SLIDE_H })
   pptx.layout = "LAYOUT_WIDE"
 
-  await renderManualDeck(
+  const { imageFailures } = await renderManualDeck(
     project,
     sections,
     { includeImages, includeFlow, template: options?.template },
     () => createPptxSlideGfx(pptx, pptx.addSlide()),
   )
 
-  return (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
+  const buffer = (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
+  return { buffer, imageFailures }
 }
 
 const BUNDLED_CJK_FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Regular.ttf`
@@ -1498,7 +1590,7 @@ export async function buildManualPdfBlob(
   project: Project,
   sections: ManualSection[],
   options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
-): Promise<Blob> {
+): Promise<{ blob: Blob; imageFailures: number }> {
   const includeImages = options?.includeImages ?? true
   const includeFlow = options?.includeFlow ?? true
   const fontB64 = await loadPdfFontBase64()
@@ -1514,7 +1606,7 @@ export async function buildManualPdfBlob(
   doc.setFont(PDF_FONT_NAME, "normal")
 
   let first = true
-  await renderManualDeck(
+  const { imageFailures } = await renderManualDeck(
     project,
     sections,
     { includeImages, includeFlow, template: options?.template },
@@ -1525,26 +1617,28 @@ export async function buildManualPdfBlob(
     },
   )
 
-  return doc.output("blob")
+  return { blob: doc.output("blob"), imageFailures }
 }
 
 export async function exportManualPptx(
   project: Project,
   sections: ManualSection[],
   options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
-): Promise<void> {
-  const raw = await buildManualPptxArrayBuffer(project, sections, options)
-  const withFont = await applyMeiryoFontToPptx(raw)
+): Promise<ManualExportResult> {
+  const { buffer, imageFailures } = await buildManualPptxArrayBuffer(project, sections, options)
+  const withFont = await applyMeiryoFontToPptx(buffer)
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
   downloadBlob(withFont, `${safeName}.pptx`)
+  return { imageFailures }
 }
 
 export async function exportManualPdfSlides(
   project: Project,
   sections: ManualSection[],
   options?: { includeImages?: boolean; includeFlow?: boolean; template?: string },
-): Promise<void> {
-  const blob = await buildManualPdfBlob(project, sections, options)
+): Promise<ManualExportResult> {
+  const { blob, imageFailures } = await buildManualPdfBlob(project, sections, options)
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
   downloadBlob(blob, `${safeName}.pdf`)
+  return { imageFailures }
 }

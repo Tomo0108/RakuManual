@@ -158,24 +158,41 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
           ? [{ text, bold: opts.bold, fontSize, color, highlight: opts.highlight, hyperlink: opts.hyperlink }]
           : text.map((r) => ({ ...r, hyperlink: r.hyperlink ?? opts.hyperlink }))
 
-      const lines: GfxTextRun[][] = [[]]
+      // breakLine で段落分割したうえで、各 run を幅で折り返す
+      type Seg = { text: string; bold?: boolean; fontSize: number; color: string; highlight?: string; hyperlink?: GfxHyperlink }
+      const paragraphs: Seg[][] = [[]]
       for (const run of runs) {
-        lines[lines.length - 1]!.push(run)
-        if (run.breakLine) lines.push([])
+        const fs = run.fontSize ?? fontSize
+        doc.setFont(fontName, (run.bold ?? opts.bold) ? "bold" : "normal")
+        doc.setFontSize(fs)
+        const wrapped = doc.splitTextToSize(run.text || " ", Math.max(opts.w, 0.2)) as string[]
+        wrapped.forEach((line, i) => {
+          paragraphs[paragraphs.length - 1]!.push({
+            text: line,
+            bold: run.bold ?? opts.bold,
+            fontSize: fs,
+            color: run.color ?? color,
+            highlight: run.highlight,
+            hyperlink: run.hyperlink,
+          })
+          if (i < wrapped.length - 1) paragraphs.push([])
+        })
+        if (run.breakLine) paragraphs.push([])
       }
-      while (lines.length && lines[lines.length - 1]!.length === 0) lines.pop()
+      while (paragraphs.length && paragraphs[paragraphs.length - 1]!.length === 0) paragraphs.pop()
 
-      const lineHeights = lines.map((lineRuns) => {
-        const fs = Math.max(...lineRuns.map((r) => r.fontSize ?? fontSize), fontSize)
-        return (fs / 72) * 1.15
+      const lineHeights = paragraphs.map((segs) => {
+        const fs = Math.max(...segs.map((s) => s.fontSize), fontSize)
+        return (fs / 72) * 1.2
       })
       const totalH = lineHeights.reduce((a, b) => a + b, 0)
       let cursorY =
         valign === "middle"
-          ? opts.y + (opts.h - totalH) / 2
+          ? opts.y + Math.max(0, (opts.h - totalH) / 2)
           : valign === "bottom"
-            ? opts.y + opts.h - totalH
+            ? opts.y + Math.max(0, opts.h - totalH)
             : opts.y
+      const bottom = opts.y + opts.h
 
       if (
         typeof text === "string" &&
@@ -185,10 +202,11 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
         applyPdfLink(doc, opts.x, opts.y, opts.w, opts.h, opts.hyperlink)
       }
 
-      for (let li = 0; li < lines.length; li++) {
-        const lineRuns = lines[li]!
+      for (let li = 0; li < paragraphs.length; li++) {
+        if (cursorY + lineHeights[li]! > bottom + 0.01) break
+        const segs = paragraphs[li]!
         const lh = lineHeights[li]!
-        const approxW = lineRuns.reduce((sum, r) => sum + textWidthIn(r.text, r.fontSize ?? fontSize), 0)
+        const approxW = segs.reduce((sum, s) => sum + textWidthIn(s.text, s.fontSize), 0)
         let cursorX =
           align === "center"
             ? opts.x + (opts.w - approxW) / 2
@@ -196,21 +214,19 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
               ? opts.x + opts.w - approxW
               : opts.x
 
-        for (const run of lineRuns) {
-          const fs = run.fontSize ?? fontSize
-          const bold = run.bold ?? opts.bold ?? false
-          const tw = textWidthIn(run.text, fs)
-          doc.setFont(fontName, bold ? "bold" : "normal")
-          doc.setFontSize(fs)
-          doc.setTextColor(hex(run.color ?? color))
-          if (run.highlight) {
-            doc.setFillColor(hex(run.highlight))
+        for (const seg of segs) {
+          const tw = textWidthIn(seg.text, seg.fontSize)
+          doc.setFont(fontName, seg.bold ? "bold" : "normal")
+          doc.setFontSize(seg.fontSize)
+          doc.setTextColor(hex(seg.color))
+          if (seg.highlight) {
+            doc.setFillColor(hex(seg.highlight))
             doc.rect(cursorX, cursorY, tw, lh, "F")
-            doc.setTextColor(hex(run.color ?? color))
+            doc.setTextColor(hex(seg.color))
           }
-          doc.text(run.text, cursorX, cursorY + lh * 0.78, { baseline: "alphabetic" })
-          if (run.hyperlink && !(typeof text === "string" && opts.hyperlink)) {
-            applyPdfLink(doc, cursorX, cursorY, Math.max(tw, 0.2), lh, run.hyperlink)
+          doc.text(seg.text, cursorX, cursorY + lh * 0.78, { baseline: "alphabetic" })
+          if (seg.hyperlink && !(typeof text === "string" && opts.hyperlink)) {
+            applyPdfLink(doc, cursorX, cursorY, Math.max(tw, 0.2), lh, seg.hyperlink)
           }
           cursorX += tw
         }

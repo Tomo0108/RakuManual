@@ -144,6 +144,7 @@ export function ProjectList({
             className="pl-9"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="プロジェクトを検索"
           />
         </div>
 
@@ -224,7 +225,7 @@ export function ProjectList({
                   : "最初のマニュアルを作成して、AIヒアリングを始めましょう。"
               }
               action={
-                !query
+                !query && !readOnly
                   ? { label: "新規プロジェクトを作成", onClick: () => setDialogOpen(true) }
                   : undefined
               }

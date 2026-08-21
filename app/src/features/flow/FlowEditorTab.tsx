@@ -936,7 +936,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     return project.deepdive.filter((d) => !keptIds.has(d.stepId) && d.answers.length > 0).length
   }
 
-  const confirmFlow = () => {
+  const confirmFlow = (nextTab: ProjectTab = "deepdive") => {
     setConfirmBlockedOpen(false)
     setConfirmPending(null)
     const finalized = polishFlow(flow)
@@ -1014,7 +1014,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         ],
       }
     })
-    setTab("deepdive")
+    setTab(nextTab)
   }
 
   const columnSystems = normalizeColumnSystems(
@@ -1429,7 +1429,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               </div>
             </div>
             {isMobile ? (
-              <MobileSystemAxisPanel columnSystems={columnSystems} viewport={viewport} />
+              <MobileSystemAxisPanel
+                columnSystems={columnSystems}
+                viewport={viewport}
+                onUpdateColumn={isEditingDisabled ? undefined : updateColumnSystem}
+              />
             ) : (
               <SystemAxisPanel
                 columnSystems={columnSystems}
@@ -1536,7 +1540,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             <DialogTitle>フロー図を確定しますか?</DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <p>確定すると深掘りヒアリングへ進みます。</p>
+                <p>
+                  {project.sections.length > 0
+                    ? "確定後の行き先を選べます。マニュアルがある場合はマニュアルへ戻ることもできます。"
+                    : "確定すると深掘りヒアリングへ進みます。"}
+                </p>
                 <ul className="list-disc space-y-1 pl-4">
                   {confirmPending && confirmPending.discarded > 0 ? (
                     <li className="text-foreground">
@@ -1558,11 +1566,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               </div>
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setConfirmPending(null)}>
               戻る
             </Button>
-            <Button onClick={confirmFlow}>確定して深掘りへ</Button>
+            {project.sections.length > 0 && (
+              <Button variant="secondary" onClick={() => confirmFlow("manual")}>
+                確定してマニュアルへ
+              </Button>
+            )}
+            <Button onClick={() => confirmFlow("deepdive")}>確定して深掘りへ</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1607,6 +1620,9 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           }}
         >
           <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md" showCloseButton={false}>
+            <DialogHeader className="sr-only">
+              <DialogTitle>ステップの詳細</DialogTitle>
+            </DialogHeader>
             <FlowInspectorPanel
               node={inspectorNode}
               edge={inspectorEdge}

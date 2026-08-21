@@ -96,10 +96,7 @@ export function ExportTab({ project, updateProject }: Props) {
   )
   const captionIssues = findCaptionIssues(project.sections)
   const canPublish =
-    project.sections.length > 0 &&
-    needsConfirm === 0 &&
-    captionIssues.length === 0 &&
-    project.status !== "published"
+    project.sections.length > 0 && needsConfirm === 0 && captionIssues.length === 0
   // 未設定の既存公開分は組織全体公開（後方互換）、未公開はメンバー限定を既定にする
   const visibility: ProjectVisibility =
     project.visibility ?? (project.status === "published" ? "org" : "members")
@@ -124,19 +121,19 @@ export function ExportTab({ project, updateProject }: Props) {
     setExported(false)
     setExportError(null)
     try {
-      if (format === "pptx") {
-        await exportManualPptx(project, targetSections, {
-          includeImages: imageMode !== "none",
-          includeFlow,
-          template,
-        })
-      } else {
-        // PowerPoint と同じスライドデザインの PDF（クライアント生成）
-        await exportManualPdfClient(project, targetSections, {
-          includeImages: imageMode !== "none",
-          includeFlow,
-          template,
-        })
+      const opts = {
+        includeImages: imageMode !== "none",
+        includeFlow,
+        template,
+      }
+      const result =
+        format === "pptx"
+          ? await exportManualPptx(project, targetSections, opts)
+          : await exportManualPdfClient(project, targetSections, opts)
+      if (result.imageFailures > 0) {
+        setExportError(
+          `出力は完了しましたが、画像 ${result.imageFailures} 件を埋め込めませんでした（権限切れ・破損の可能性）`,
+        )
       }
       setExported(true)
     } catch (err) {
@@ -202,9 +199,20 @@ export function ExportTab({ project, updateProject }: Props) {
               <Label className="text-[13px]">公開範囲</Label>
               <Select
                 value={visibility}
-                onValueChange={(v) =>
-                  updateProject(project.id, (p) => ({ ...p, visibility: v as ProjectVisibility }))
-                }
+                onValueChange={(v) => {
+                  const next = v as ProjectVisibility
+                  if (
+                    project.status === "published" &&
+                    visibility === "members" &&
+                    next === "org" &&
+                    !window.confirm(
+                      "公開範囲を「社内全体」に広げます。確定して保存してよいですか？",
+                    )
+                  ) {
+                    return
+                  }
+                  updateProject(project.id, (p) => ({ ...p, visibility: next }))
+                }}
               >
                 <SelectTrigger size="sm" className="w-full text-xs sm:w-72">
                   <SelectValue />
@@ -222,10 +230,29 @@ export function ExportTab({ project, updateProject }: Props) {
             </div>
 
             {project.status === "published" ? (
-              <p className={cn("text-sm", SUCCESS_TEXT)}>
-                <Check className="mr-1 inline size-4" />
-                公開済み（{project.publishedAt?.slice(0, 10) ?? project.updatedAt}）
-              </p>
+              <div className="flex flex-col gap-2">
+                <p className={cn("text-sm", SUCCESS_TEXT)}>
+                  <Check className="mr-1 inline size-4" />
+                  公開済み（{project.publishedAt?.slice(0, 10) ?? project.updatedAt}）
+                </p>
+                {needsConfirm > 0 && (
+                  <p className={cn("text-xs", WARNING_TEXT)}>要確認ブロックが {needsConfirm} 件残っています</p>
+                )}
+                {captionIssues.length > 0 && (
+                  <p className={cn("text-xs", WARNING_TEXT)}>
+                    図の説明の不備が {captionIssues.length} 件あります（再公開前に修正してください）
+                  </p>
+                )}
+                <Button
+                  className="w-fit gap-1.5"
+                  disabled={!canPublish || publishing}
+                  onClick={() => void doPublish()}
+                >
+                  <Globe className="size-4" />
+                  {publishing ? "再公開中…" : "修正を再公開する"}
+                </Button>
+                {publishError && <p className="text-sm text-destructive">{publishError}</p>}
+              </div>
             ) : (
               <>
                 {project.sections.length === 0 && (
@@ -294,7 +321,20 @@ export function ExportTab({ project, updateProject }: Props) {
                 "cursor-pointer py-4 transition-colors",
                 format === f.id ? "border-primary ring-2 ring-primary/15" : "hover:border-primary/40",
               )}
-              onClick={() => setFormat(f.id)}
+              onClick={() => {
+                  setFormat(f.id)
+                  setImageMode((m) => (m === "appendix" ? "expand" : m))
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    setFormat(f.id)
+                    setImageMode((m) => (m === "appendix" ? "expand" : m))
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-pressed={format === f.id}
             >
               <CardContent className="flex items-center gap-3">
                 <f.icon className={cn("size-6", format === f.id ? "text-primary" : "text-muted-foreground")} />
@@ -360,42 +400,23 @@ export function ExportTab({ project, updateProject }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            {format === "pptx" && (
-              <div className="flex items-center justify-between gap-4">
-                <Label className="text-[13px]">画像の扱い</Label>
-                <Select value={imageMode} onValueChange={setImageMode}>
-                  <SelectTrigger size="sm" className="w-64 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="expand">スライド内に画像を含める</SelectItem>
-                    <SelectItem value="none">画像なし</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {format === "pdf" && (
-              <div className="flex items-center justify-between gap-4">
-                <Label className="text-[13px]">画像の扱い</Label>
-                <Select value={imageMode} onValueChange={setImageMode}>
-                  <SelectTrigger size="sm" className="w-64 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="expand">全画像を展開して出力</SelectItem>
-                    <SelectItem value="appendix">画像は巻末にまとめる</SelectItem>
-                    <SelectItem value="none">画像なし</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="flex items-center justify-between gap-4">
+              <Label className="text-[13px]">画像の扱い</Label>
+              <Select value={imageMode === "appendix" ? "expand" : imageMode} onValueChange={setImageMode}>
+                <SelectTrigger size="sm" className="w-64 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="expand">スライド内に画像を含める</SelectItem>
+                  <SelectItem value="none">画像なし</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label className="text-[13px]">業務フロー図を含める</Label>
                 <p className="text-[11px] text-muted-foreground">
-                  {format === "pptx"
-                    ? "表紙の次にスイムレーン形式のフロー図スライドを挿入します"
-                    : "冒頭ページに全体フロー図を挿入します"}
+                  表紙の次にスイムレーン形式のフロー図スライドを挿入します（PDF / PowerPoint 共通）
                 </p>
               </div>
               <Switch checked={includeFlow} onCheckedChange={setIncludeFlow} />
@@ -404,6 +425,13 @@ export function ExportTab({ project, updateProject }: Props) {
         </Card>
 
         <div className="mt-8 flex flex-col items-center gap-2 text-center">
+          {(needsConfirm > 0 || captionIssues.length > 0) && project.sections.length > 0 && (
+            <div className={cn("w-full max-w-md rounded-md px-3 py-2 text-left text-xs", WARNING_BOX)}>
+              公開前チェック未完了のまま出力できますが、配布前に直すことを推奨します
+              {needsConfirm > 0 ? `（要確認 ${needsConfirm}）` : ""}
+              {captionIssues.length > 0 ? `（図の説明 ${captionIssues.length}）` : ""}
+            </div>
+          )}
           <Button
             size="lg"
             className="min-w-[14rem] gap-1.5"

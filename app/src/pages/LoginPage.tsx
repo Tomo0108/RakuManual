@@ -26,7 +26,7 @@ export function LoginPage({ busy, error, onLogin }: Props) {
     <div className="canvas-surface flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-2xl border bg-card/95 p-8 shadow-sm backdrop-blur-sm">
         <div className="flex flex-col items-center text-center">
-          <img src={logo} alt="" className="size-16 rounded-2xl" />
+          <img src={logo} alt="Rakumanual" className="size-16 rounded-2xl" />
           <h1 className="mt-5 text-2xl font-bold tracking-tight">Rakumanual</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             業務マニュアルを、ヒアリングから公開まで一気通貫で整える
@@ -44,7 +44,7 @@ export function LoginPage({ busy, error, onLogin }: Props) {
             onClick={() => onLogin(primary.id)}
           >
             <BookOpenText className="size-4" />
-            {busy ? "ログイン中…" : "はじめる"}
+            {busy ? "ログイン中…" : "デモで試す（山田・作成者）"}
           </Button>
           <Button
             type="button"
