@@ -8,11 +8,13 @@ import type { ExportOptions } from "./manual-html.js"
 
 function resolveJapaneseFont(): string | null {
   const candidates = [
+    // リポジトリ同梱（環境差で化けるのを防ぐ）
     path.resolve(import.meta.dirname, "../../../app/public/fonts/NotoSansJP-Regular.ttf"),
     path.resolve(process.cwd(), "app/public/fonts/NotoSansJP-Regular.ttf"),
     path.resolve(process.cwd(), "../app/public/fonts/NotoSansJP-Regular.ttf"),
     path.resolve(process.cwd(), "public/fonts/NotoSansJP-Regular.ttf"),
-    "/Library/Fonts/Arial Unicode.ttf",
+    // システム（メイリオが入っている環境）
+    "/Library/Fonts/Microsoft/Meiryo.ttf",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
   ]
   for (const p of candidates) {

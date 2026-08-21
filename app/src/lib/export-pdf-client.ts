@@ -11,28 +11,27 @@ import {
   resolveExportTheme,
 } from "@/lib/export-theme"
 
-const FONT_URL = "/fonts/NotoSansJP-Regular.ttf"
-const FONT_NAME = "NotoSansJP"
+/** public/fonts に配置。Vite の BASE_URL 経由で確実に取得（失敗時はエラーにして Helvetica 化けを防ぐ） */
+const BUNDLED_CJK_FONT_URL = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Regular.ttf`
+
+/** PDF 内の論理フォント名 */
+const FONT_NAME = "Meiryo"
 
 let fontBase64Cache: string | null = null
 
-async function loadFontBase64(): Promise<string | null> {
+async function loadFontBase64(): Promise<string> {
   if (fontBase64Cache) return fontBase64Cache
-  try {
-    const res = await fetch(FONT_URL)
-    if (!res.ok) return null
-    const buf = await res.arrayBuffer()
-    const bytes = new Uint8Array(buf)
-    let binary = ""
-    const chunk = 0x8000
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-    }
-    fontBase64Cache = btoa(binary)
-    return fontBase64Cache
-  } catch {
-    return null
+  const res = await fetch(BUNDLED_CJK_FONT_URL)
+  if (!res.ok) throw new Error("日本語フォントの読み込みに失敗しました")
+  const buf = await res.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ""
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
   }
+  fontBase64Cache = btoa(binary)
+  return fontBase64Cache
 }
 
 function downloadPdfBlob(blob: Blob, filename: string) {
@@ -46,7 +45,7 @@ function downloadPdfBlob(blob: Blob, filename: string) {
 
 /**
  * ブラウザだけで PDF を生成（UIプレビュー / API 不通時も動作）
- * 階層・16pt 本文・※注意・画像大判の必須要件に寄せる
+ * 日本語は必ずバンドル済みフォントを埋め込み（読み込み失敗で化けるのを防止）
  */
 export async function exportManualPdfClient(
   project: Project,
@@ -67,16 +66,13 @@ export async function exportManualPdfClient(
   const margin = 18
   const contentW = pageW - margin * 2
 
-  if (fontB64) {
-    doc.addFileToVFS(`${FONT_NAME}.ttf`, fontB64)
-    doc.addFont(`${FONT_NAME}.ttf`, FONT_NAME, "normal")
-    doc.addFont(`${FONT_NAME}.ttf`, FONT_NAME, "bold")
-    doc.setFont(FONT_NAME, "normal")
-  }
+  doc.addFileToVFS(`${FONT_NAME}.ttf`, fontB64)
+  doc.addFont(`${FONT_NAME}.ttf`, FONT_NAME, "normal")
+  doc.addFont(`${FONT_NAME}.ttf`, FONT_NAME, "bold")
+  doc.setFont(FONT_NAME, "normal")
 
   const setFont = (style: "normal" | "bold", size: number) => {
-    if (fontB64) doc.setFont(FONT_NAME, style)
-    else doc.setFont("helvetica", style)
+    doc.setFont(FONT_NAME, style)
     doc.setFontSize(size)
   }
 
@@ -107,7 +103,6 @@ export async function exportManualPdfClient(
     }
   }
 
-  // 表紙
   drawHeaderBar()
   doc.setFillColor(`#${theme.coverBg}`)
   doc.rect(0, 40, pageW, 80, "F")
@@ -122,7 +117,6 @@ export async function exportManualPdfClient(
   setFont("normal", 12)
   doc.text("業務マニュアル", pageW / 2, ty + 8, { align: "center" })
 
-  // フロー概要
   if (options?.includeFlow !== false && project.flow?.nodes?.length) {
     doc.addPage()
     drawHeaderBar()
@@ -177,7 +171,6 @@ export async function exportManualPdfClient(
         for (const block of section.blocks as ManualBlock[]) {
           if (block.type === "note") {
             const t = block.text.trim().startsWith("※") ? block.text.trim() : `※${block.text.trim()}`
-            // 黄マーカー相当: 背景帯
             const lines = (() => {
               setFont("bold", 11)
               return doc.splitTextToSize(t, contentW - 4) as string[]
@@ -217,7 +210,7 @@ export async function exportManualPdfClient(
               doc.addImage(block.image.url, props.fileType || "PNG", margin, y, iw, ih)
               y += ih + 6
             } catch {
-              // data URL 形式非対応などはスキップ
+              /* skip */
             }
           }
         }
@@ -226,7 +219,6 @@ export async function exportManualPdfClient(
     }
   }
 
-  // ページ番号
   const total = doc.getNumberOfPages()
   for (let i = 1; i <= total; i++) {
     doc.setPage(i)

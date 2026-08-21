@@ -1,24 +1,13 @@
 import JSZip from "jszip"
 
-const FONT_FACE = "Noto Sans JP"
-const FONT_PATH_IN_PPTX = "ppt/fonts/NotoSansJP-Regular.ttf"
-const FONT_PUBLIC_URL = "/fonts/NotoSansJP-Regular.ttf"
+/**
+ * マニュアル出力フォントは「メイリオ」固定。
+ * 参考資料（ROS発注マニュアル）と同じくシステムフォント参照とし、
+ * 不完全な TTF 埋め込みは行わない（開くたびに化ける／直る症状の主因だったため）。
+ */
+export const FONT_FACE = "メイリオ"
 
-let fontBytesCache: ArrayBuffer | null = null
-
-async function loadFontBytes(): Promise<ArrayBuffer | null> {
-  if (fontBytesCache) return fontBytesCache
-  try {
-    const res = await fetch(FONT_PUBLIC_URL)
-    if (!res.ok) return null
-    fontBytesCache = await res.arrayBuffer()
-    return fontBytesCache
-  } catch {
-    return null
-  }
-}
-
-/** theme / slide XML の typeface を Noto Sans JP に揃える */
+/** theme / slide XML の typeface をメイリオに揃える（埋め込みファイルは追加しない） */
 function rewriteTypefaces(xml: string): string {
   return xml
     .replace(/typeface="[^"]*"/g, `typeface="${FONT_FACE}"`)
@@ -26,11 +15,10 @@ function rewriteTypefaces(xml: string): string {
 }
 
 /**
- * pptxgenjs 出力に Noto Sans JP を埋め込み、東アジア用 typeface を置換する。
- * PowerPoint は埋め込みフォントを認識し、未インストール環境でも日本語が欠けにくくなる。
+ * pptxgenjs 出力のフォント指定をメイリオに統一する。
+ * フォントバイナリの同梱はしない（PowerPoint が正しく解釈できない不完全埋め込みを避ける）。
  */
-export async function embedJapaneseFontInPptx(pptxBinary: ArrayBuffer): Promise<Blob> {
-  const fontBytes = await loadFontBytes()
+export async function applyMeiryoFontToPptx(pptxBinary: ArrayBuffer): Promise<Blob> {
   const zip = await JSZip.loadAsync(pptxBinary)
 
   for (const [name, entry] of Object.entries(zip.files)) {
@@ -50,27 +38,14 @@ export async function embedJapaneseFontInPptx(pptxBinary: ArrayBuffer): Promise<
     zip.file(name, rewriteTypefaces(text))
   }
 
-  if (fontBytes) {
-    zip.file(FONT_PATH_IN_PPTX, fontBytes)
-    const ctPath = "[Content_Types].xml"
-    const ctEntry = zip.file(ctPath)
-    if (ctEntry) {
-      let ct = await ctEntry.async("string")
-      if (!ct.includes(FONT_PATH_IN_PPTX)) {
-        ct = ct.replace(
-          "</Types>",
-          `  <Override PartName="/${FONT_PATH_IN_PPTX}" ContentType="application/x-font-ttf"/>\n</Types>`,
-        )
-        zip.file(ctPath, ct)
-      }
-    }
-  }
-
   return zip.generateAsync({
     type: "blob",
     mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   })
 }
+
+/** @deprecated 互換エイリアス — applyMeiryoFontToPptx を使用 */
+export const embedJapaneseFontInPptx = applyMeiryoFontToPptx
 
 export function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
@@ -80,5 +55,3 @@ export function downloadBlob(blob: Blob, fileName: string) {
   a.click()
   URL.revokeObjectURL(url)
 }
-
-export { FONT_FACE }

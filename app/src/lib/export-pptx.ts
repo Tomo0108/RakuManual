@@ -4,7 +4,7 @@ import {
   displaySectionTitle,
   resolveSectionNumber,
 } from "@/lib/manual-outline"
-import { downloadBlob, embedJapaneseFontInPptx, FONT_FACE } from "@/lib/pptx-embed-font"
+import { downloadBlob, applyMeiryoFontToPptx, FONT_FACE } from "@/lib/pptx-embed-font"
 import {
   formatMajorTitle,
   formatMediumHeading,
@@ -221,7 +221,7 @@ function buildProcedureParts(
   return parts
 }
 
-/** マニュアルを PowerPoint 出力（必須要件準拠・LAYOUT_WIDE・Noto Sans JP 埋め込み） */
+/** マニュアルを PowerPoint 出力（必須要件準拠・LAYOUT_WIDE・メイリオ固定） */
 export async function exportManualPptx(
   project: Project,
   sections: ManualSection[],
@@ -380,7 +380,7 @@ export async function exportManualPptx(
   }
 
   const raw = (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer
-  const withFont = await embedJapaneseFontInPptx(raw)
+  const withFont = await applyMeiryoFontToPptx(raw)
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, "_")
   downloadBlob(withFont, `${safeName}.pptx`)
 }
