@@ -123,7 +123,6 @@ export function ExportTab({ project, updateProject }: Props) {
       } else {
         // まず API（サーバーPDF）。不通・失敗時はクライアント生成にフォールバック
         // （UIプレビューでは API が無いため、ここで PDF が必ず出せるようにする）
-        let usedClient = false
         try {
           const result = await exportProjectPdf(project.id, {
             template,
@@ -134,15 +133,11 @@ export function ExportTab({ project, updateProject }: Props) {
           if (!result.pdfBase64) throw new Error("PDFデータがありません")
           downloadPdfBase64(result.pdfBase64, result.filename)
         } catch {
-          usedClient = true
           await exportManualPdfClient(project, targetSections, {
             includeImages: imageMode !== "none",
             includeFlow,
             template,
           })
-        }
-        if (usedClient) {
-          /* クライアント出力で成功扱い */
         }
       }
       setExported(true)
