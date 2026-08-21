@@ -198,15 +198,14 @@ export async function exportManualPdfClient(
           if (includeImages && block.image?.url) {
             try {
               const props = doc.getImageProperties(block.image.url)
-              // A4 本文幅いっぱい・高さは最大約 110mm。横長スクショを大きく見せる
+              // 枠内上限に収め、縦横比維持、96dpi 原寸を超えて拡大しない
               const maxW = contentW
               const maxH = 110
-              let iw = maxW
-              let ih = (props.height / props.width) * iw
-              if (ih > maxH) {
-                ih = maxH
-                iw = (props.width / props.height) * ih
-              }
+              const natW = (props.width / 96) * 25.4
+              const natH = (props.height / 96) * 25.4
+              const scale = Math.min(1, maxW / natW, maxH / natH)
+              const iw = natW * scale
+              const ih = natH * scale
               ensureSpace(ih + 8)
               const ix = margin + (contentW - iw) / 2
               doc.addImage(block.image.url, props.fileType || "PNG", ix, y, iw, ih)

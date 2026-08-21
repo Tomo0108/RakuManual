@@ -92,10 +92,18 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
     if (!buffer) return false
     try {
       const pageInner = doc.page.width - doc.page.margins.left - doc.page.margins.right
-      doc.image(buffer, {
-        fit: [Math.min(460, pageInner), 320],
-        align: "center",
-      })
+      const opened = doc.openImage(buffer)
+      const maxW = Math.min(460, pageInner)
+      const maxH = 320
+      // pdfkit は 1px ≈ 1pt（72dpi）。画面原寸（96dpi）相当へ換算し拡大しない
+      const natW = opened.width * (72 / 96)
+      const natH = opened.height * (72 / 96)
+      const scale = Math.min(1, maxW / natW, maxH / natH)
+      const w = natW * scale
+      const h = natH * scale
+      const x = doc.page.margins.left + (pageInner - w) / 2
+      doc.image(buffer, x, doc.y, { width: w, height: h })
+      doc.y += h
       // 手順出力ではキャプションは出さない（説明は本文側）
       doc.moveDown(0.45)
       return true

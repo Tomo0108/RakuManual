@@ -113,7 +113,7 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
     figure { margin: 1.25rem 0; text-align: center; }
     figure img {
       display: block;
-      width: 100%;
+      width: auto;
       max-width: 100%;
       max-height: 70vh;
       height: auto;

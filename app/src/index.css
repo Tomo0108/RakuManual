@@ -232,7 +232,7 @@
 }
 
 @utility manual-figure-img {
-  @apply max-h-[28rem] w-full bg-muted/40 object-contain;
+  @apply mx-auto block h-auto max-h-[28rem] w-auto max-w-full bg-muted/40 object-contain;
 }
 
 @utility manual-figcaption {

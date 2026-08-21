@@ -176,46 +176,114 @@ function estimateBodyHeightInches(items: TextItem[]): number {
       continue
     }
     const len = item.text.length
-    // 16pt・幅約12.5in でおおよそ全角 36〜40 字/行
-    units += Math.max(1, Math.ceil(len / 38))
+    // 16pt・幅約12.5in。見積もり不足で画像と被らないようやや保守的に
+    units += Math.max(1, Math.ceil(len / 36))
   }
-  // 行あたり約 0.28in（16pt + 空段落）
-  return Math.min(2.55, Math.max(0.75, units * 0.28))
+  // 行あたり約 0.32in（16pt + 空段落）＋余白
+  return Math.min(3.0, Math.max(0.85, units * 0.32 + 0.12))
 }
 
-/** コンテンツ枠内に本文＋大判スクショを配置（参考資料: 本文下・横長・フッター非接触） */
+/** 画面キャプチャの表示 DPI（原寸＝拡大しない） */
+const SCREEN_DPI = 96
+
+/**
+ * 枠内の最大領域に収め、縦横比を保ち、原寸を超えて拡大しない。
+ * 余白は左右中央・上寄せ（本文直下）。
+ */
+function fitImageInBox(opts: {
+  boxX: number
+  boxY: number
+  boxW: number
+  boxH: number
+  naturalPxW?: number | null
+  naturalPxH?: number | null
+}): { x: number; y: number; w: number; h: number } {
+  const { boxX, boxY, boxW, boxH } = opts
+  if (boxW <= 0 || boxH <= 0) {
+    return { x: boxX, y: boxY, w: 0, h: 0 }
+  }
+
+  let natW: number
+  let natH: number
+  if (
+    opts.naturalPxW &&
+    opts.naturalPxH &&
+    opts.naturalPxW > 0 &&
+    opts.naturalPxH > 0
+  ) {
+    natW = opts.naturalPxW / SCREEN_DPI
+    natH = opts.naturalPxH / SCREEN_DPI
+  } else {
+    // 寸法不明時は 16:9 で枠に収める（拡大扱いではなく上限として）
+    natW = boxW
+    natH = (boxW * 9) / 16
+  }
+
+  const scale = Math.min(1, boxW / natW, boxH / natH)
+  const w = natW * scale
+  const h = natH * scale
+  return {
+    x: boxX + (boxW - w) / 2,
+    y: boxY,
+    w,
+    h,
+  }
+}
+
+function probeImageNaturalSize(
+  src: string,
+): Promise<{ w: number; h: number } | null> {
+  if (typeof Image === "undefined") return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      resolve(w > 0 && h > 0 ? { w, h } : null)
+    }
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+}
+
+/** コンテンツ枠内: 本文の下に画像。枠からはみ出さず、文字と被らず、原寸超拡大しない */
 function layoutProcedureImage(opts: {
   hasBody: boolean
   bodyItems: TextItem[]
   imageOnly: boolean
+  naturalPxW?: number | null
+  naturalPxH?: number | null
 }): { text: { x: number; y: number; w: number; h: number }; image: { x: number; y: number; w: number; h: number } } {
-  // addChrome の枠: y=1.125〜6.753。余白を少し内側に取る
+  // addChrome の枠: x=0.194 y=1.125 w=12.901 h=5.628 → 下端 6.753。内側に余白
   const contentLeft = 0.4
   const contentWidth = 12.5
   const textY = 1.28
   const frameBottom = 6.55
-  const gap = 0.18
+  const gap = 0.16
+  const boxInsetX = 0.35
+  const boxW = contentWidth - boxInsetX * 2
+  const boxX = contentLeft + boxInsetX
 
-  if (opts.imageOnly) {
-    // 分冊2枚目以降: 見出しのみ短く、残りを画像に
-    const textH = 0.7
-    const imgTop = textY + textH + gap
-    const imgH = Math.max(2.8, frameBottom - imgTop)
-    const imgW = 11.2
-    return {
-      text: { x: contentLeft, y: textY, w: contentWidth, h: textH },
-      image: { x: (SLIDE_W - imgW) / 2, y: imgTop, w: imgW, h: imgH },
-    }
-  }
+  const textH = opts.imageOnly
+    ? 0.7
+    : opts.hasBody
+      ? estimateBodyHeightInches(opts.bodyItems)
+      : 0.85
+  const imgTop = Math.min(textY + textH + gap, frameBottom - 0.5)
+  const boxH = Math.max(0.4, frameBottom - imgTop)
 
-  const textH = opts.hasBody ? estimateBodyHeightInches(opts.bodyItems) : 0.85
-  const imgTop = textY + textH + gap
-  const imgH = Math.max(2.6, frameBottom - imgTop)
-  // 参考実測は幅 7.3〜10.5in。枠内で最大化しつつ左右に余白を残す
-  const imgW = Math.min(11.6, contentWidth - 0.2)
+  const image = fitImageInBox({
+    boxX,
+    boxY: imgTop,
+    boxW,
+    boxH,
+    naturalPxW: opts.naturalPxW,
+    naturalPxH: opts.naturalPxH,
+  })
+
   return {
     text: { x: contentLeft, y: textY, w: contentWidth, h: textH },
-    image: { x: (SLIDE_W - imgW) / 2, y: imgTop, w: imgW, h: imgH },
+    image,
   }
 }
 
@@ -1230,6 +1298,23 @@ export async function buildManualPptxArrayBuffer(
     },
   )
 
+  const imageNaturalSize = new Map<string, { w: number; h: number } | null>()
+  if (includeImages) {
+    const urls = [
+      ...new Set(
+        planned
+          .filter((p): p is Extract<typeof p, { kind: "procedure" }> => p.kind === "procedure")
+          .map((p) => p.part.imageUrl)
+          .filter((u): u is string => Boolean(u)),
+      ),
+    ]
+    await Promise.all(
+      urls.map(async (url) => {
+        imageNaturalSize.set(url, await probeImageNaturalSize(url))
+      }),
+    )
+  }
+
   planned.forEach((item, idx) => {
     const pageNum = idx + 1
     const slide = pptx.addSlide()
@@ -1389,8 +1474,15 @@ export async function buildManualPptxArrayBuffer(
     const runs = bodyToPptxRuns(items)
     const hasImage = Boolean(part.imageUrl)
     const imageOnly = hasImage && part.blocks.length === 0
+    const natural = part.imageUrl ? imageNaturalSize.get(part.imageUrl) : null
     const layout = hasImage
-      ? layoutProcedureImage({ hasBody: part.blocks.length > 0, bodyItems: items, imageOnly })
+      ? layoutProcedureImage({
+          hasBody: part.blocks.length > 0,
+          bodyItems: items,
+          imageOnly,
+          naturalPxW: natural?.w,
+          naturalPxH: natural?.h,
+        })
       : null
 
     slide.addText(
@@ -1405,14 +1497,14 @@ export async function buildManualPptxArrayBuffer(
       },
     )
 
-    if (part.imageUrl && layout) {
+    if (part.imageUrl && layout && layout.image.w > 0 && layout.image.h > 0) {
+      // w/h は原寸キャップ済みの最終寸法（縦横比維持）。contain での再拡大はしない
       slide.addImage({
         data: part.imageUrl,
         x: layout.image.x,
         y: layout.image.y,
         w: layout.image.w,
         h: layout.image.h,
-        sizing: { type: "contain", w: layout.image.w, h: layout.image.h },
         shadow: {
           type: "outer",
           color: "000000",
