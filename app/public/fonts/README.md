@@ -6,12 +6,14 @@ PDF 出力は埋め込みフォントを使います（閲覧端末にメイリ�
 
 1. **推奨（メイリオ）**  
    ライセンスを確認のうえ、次をこのディレクトリに置いてください。
-   - `Meiryo.ttf`（または `meiryo.ttf`）
+   - `Meiryo.ttf`（または `meiryo.ttf`）※ `.ttc` は不可
    - `Meiryo-Bold.ttf`（または `meiryob.ttf`）任意。無い場合は Regular を太字にも使います。
 
 2. **既定フォールバック**  
-   `NotoSansJP-Regular.ttf` / `NotoSansJP-Bold.ttf`（SIL OFL）を `Meiryo` 名で VFS 登録して埋め込みます。  
+   `NotoSansJP-Regular.ttf` / `NotoSansJP-Bold.ttf`（SIL OFL）を埋め込みます。  
    出典: https://fontsource.org/fonts/noto-sans-jp
+
+存在しないフォント URL を取りに行くと SPA の `index.html` が返ることがあるため、TTF マジックバイトと Content-Type で検証しています。
 
 ## PPTX
 

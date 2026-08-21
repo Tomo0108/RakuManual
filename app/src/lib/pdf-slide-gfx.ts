@@ -148,6 +148,18 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
       const color = opts.color ?? "000000"
       const fontSize = opts.fontSize ?? 12
 
+      const setPdfFont = (bold?: boolean) => {
+        try {
+          doc.setFont(fontName, bold ? "bold" : "normal")
+        } catch {
+          try {
+            doc.setFont(fontName, "normal")
+          } catch {
+            /* keep previous font */
+          }
+        }
+      }
+
       if (opts.fill) {
         doc.setFillColor(hex(opts.fill))
         doc.rect(opts.x, opts.y, opts.w, opts.h, "F")
@@ -163,7 +175,7 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
       const paragraphs: Seg[][] = [[]]
       for (const run of runs) {
         const fs = run.fontSize ?? fontSize
-        doc.setFont(fontName, (run.bold ?? opts.bold) ? "bold" : "normal")
+        setPdfFont(run.bold ?? opts.bold)
         doc.setFontSize(fs)
         const wrapped = doc.splitTextToSize(run.text || " ", Math.max(opts.w, 0.2)) as string[]
         wrapped.forEach((line, i) => {
@@ -216,7 +228,7 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
 
         for (const seg of segs) {
           const tw = textWidthIn(seg.text, seg.fontSize)
-          doc.setFont(fontName, seg.bold ? "bold" : "normal")
+          setPdfFont(seg.bold)
           doc.setFontSize(seg.fontSize)
           doc.setTextColor(hex(seg.color))
           if (seg.highlight) {

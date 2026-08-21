@@ -1634,10 +1634,10 @@ export async function buildManualPptxArrayBuffer(
 
 const BUNDLED_CJK_REGULAR = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Regular.ttf`
 const BUNDLED_CJK_BOLD = `${import.meta.env.BASE_URL}fonts/NotoSansJP-Bold.ttf`
+/** 実ファイルがある場合のみ使う（無い URL は SPA の index.html が返ることがある） */
 const MEIRYO_REGULAR_CANDIDATES = [
   `${import.meta.env.BASE_URL}fonts/Meiryo.ttf`,
   `${import.meta.env.BASE_URL}fonts/meiryo.ttf`,
-  `${import.meta.env.BASE_URL}fonts/Meiryo.ttc`,
 ]
 const MEIRYO_BOLD_CANDIDATES = [
   `${import.meta.env.BASE_URL}fonts/Meiryo-Bold.ttf`,
@@ -1649,19 +1649,39 @@ const PDF_FONT_NAME = "Meiryo"
 type PdfFontBundle = { regular: string; bold: string; source: "meiryo" | "noto" }
 let pdfFontCache: PdfFontBundle | null = null
 
+/** jsPDF が扱える TrueType / OpenType か（SPA の HTML 誤認を防ぐ） */
+function isValidFontBinary(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false
+  // TTF: 0x00010000 / OTTO (CFF) / true / typ1
+  const ttf =
+    bytes[0] === 0x00 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00
+  const otto =
+    bytes[0] === 0x4f && bytes[1] === 0x54 && bytes[2] === 0x54 && bytes[3] === 0x4f
+  const trueTag =
+    bytes[0] === 0x74 && bytes[1] === 0x72 && bytes[2] === 0x75 && bytes[3] === 0x65
+  // TTC は jsPDF 非対応のため除外
+  return ttf || otto || trueTag
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ""
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
 async function fetchFontBase64(url: string): Promise<string | null> {
   try {
     const res = await fetch(url)
     if (!res.ok) return null
+    const contentType = res.headers.get("content-type") ?? ""
+    if (contentType.includes("text/html")) return null
     const buf = await res.arrayBuffer()
-    if (buf.byteLength < 1000) return null
     const bytes = new Uint8Array(buf)
-    let binary = ""
-    const chunk = 0x8000
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
-    }
-    return btoa(binary)
+    if (!isValidFontBinary(bytes)) return null
+    return bytesToBase64(bytes)
   } catch {
     return null
   }
@@ -1691,6 +1711,18 @@ async function loadPdfFontBundle(): Promise<PdfFontBundle> {
   return pdfFontCache
 }
 
+function registerPdfFonts(doc: jsPDF, fonts: PdfFontBundle) {
+  doc.addFileToVFS(`${PDF_FONT_NAME}-Regular.ttf`, fonts.regular)
+  doc.addFileToVFS(`${PDF_FONT_NAME}-Bold.ttf`, fonts.bold)
+  doc.addFont(`${PDF_FONT_NAME}-Regular.ttf`, PDF_FONT_NAME, "normal")
+  doc.addFont(`${PDF_FONT_NAME}-Bold.ttf`, PDF_FONT_NAME, "bold")
+  doc.setFont(PDF_FONT_NAME, "normal")
+  // 壊れたフォントだと setFont 後の描画で Unicode 参照エラーになるため、ここで検証する
+  doc.getFont()
+  const probe = doc.splitTextToSize("あ", 2)
+  if (!probe?.length) throw new Error("font probe failed")
+}
+
 /** PowerPoint と同じワイドスライドデザインの PDF を生成 */
 export async function buildManualPdfBlob(
   project: Project,
@@ -1699,18 +1731,29 @@ export async function buildManualPdfBlob(
 ): Promise<{ blob: Blob; imageFailures: number }> {
   const includeImages = options?.includeImages ?? true
   const includeFlow = options?.includeFlow ?? true
-  const fonts = await loadPdfFontBundle()
+  let fonts = await loadPdfFontBundle()
 
-  const doc = new jsPDF({
-    orientation: "landscape",
-    unit: "in",
-    format: [SLIDE_W, SLIDE_H],
-  })
-  doc.addFileToVFS(`${PDF_FONT_NAME}-Regular.ttf`, fonts.regular)
-  doc.addFileToVFS(`${PDF_FONT_NAME}-Bold.ttf`, fonts.bold)
-  doc.addFont(`${PDF_FONT_NAME}-Regular.ttf`, PDF_FONT_NAME, "normal")
-  doc.addFont(`${PDF_FONT_NAME}-Bold.ttf`, PDF_FONT_NAME, "bold")
-  doc.setFont(PDF_FONT_NAME, "normal")
+  const makeDoc = () =>
+    new jsPDF({
+      orientation: "landscape",
+      unit: "in",
+      format: [SLIDE_W, SLIDE_H],
+    })
+
+  let doc = makeDoc()
+  try {
+    registerPdfFonts(doc, fonts)
+  } catch {
+    // 壊れた Meiryo 等を掴んだ場合はキャッシュ破棄 → Noto → 新しい doc で再登録
+    pdfFontCache = null
+    const regular = await fetchFontBase64(BUNDLED_CJK_REGULAR)
+    if (!regular) throw new Error("日本語フォントの読み込みに失敗しました")
+    const bold = (await fetchFontBase64(BUNDLED_CJK_BOLD)) ?? regular
+    fonts = { regular, bold, source: "noto" }
+    pdfFontCache = fonts
+    doc = makeDoc()
+    registerPdfFonts(doc, fonts)
+  }
 
   let first = true
   const { imageFailures } = await renderManualDeck(
