@@ -168,6 +168,57 @@ function addChrome(
   })
 }
 
+function estimateBodyHeightInches(items: TextItem[]): number {
+  let units = 0
+  for (const item of items) {
+    if (item.kind === "blank") {
+      units += 0.55
+      continue
+    }
+    const len = item.text.length
+    // 16pt・幅約12.5in でおおよそ全角 36〜40 字/行
+    units += Math.max(1, Math.ceil(len / 38))
+  }
+  // 行あたり約 0.28in（16pt + 空段落）
+  return Math.min(2.55, Math.max(0.75, units * 0.28))
+}
+
+/** コンテンツ枠内に本文＋大判スクショを配置（参考資料: 本文下・横長・フッター非接触） */
+function layoutProcedureImage(opts: {
+  hasBody: boolean
+  bodyItems: TextItem[]
+  imageOnly: boolean
+}): { text: { x: number; y: number; w: number; h: number }; image: { x: number; y: number; w: number; h: number } } {
+  // addChrome の枠: y=1.125〜6.753。余白を少し内側に取る
+  const contentLeft = 0.4
+  const contentWidth = 12.5
+  const textY = 1.28
+  const frameBottom = 6.55
+  const gap = 0.18
+
+  if (opts.imageOnly) {
+    // 分冊2枚目以降: 見出しのみ短く、残りを画像に
+    const textH = 0.7
+    const imgTop = textY + textH + gap
+    const imgH = Math.max(2.8, frameBottom - imgTop)
+    const imgW = 11.2
+    return {
+      text: { x: contentLeft, y: textY, w: contentWidth, h: textH },
+      image: { x: (SLIDE_W - imgW) / 2, y: imgTop, w: imgW, h: imgH },
+    }
+  }
+
+  const textH = opts.hasBody ? estimateBodyHeightInches(opts.bodyItems) : 0.85
+  const imgTop = textY + textH + gap
+  const imgH = Math.max(2.6, frameBottom - imgTop)
+  // 参考実測は幅 7.3〜10.5in。枠内で最大化しつつ左右に余白を残す
+  const imgW = Math.min(11.6, contentWidth - 0.2)
+  return {
+    text: { x: contentLeft, y: textY, w: contentWidth, h: textH },
+    image: { x: (SLIDE_W - imgW) / 2, y: imgTop, w: imgW, h: imgH },
+  }
+}
+
 type ProcedurePart = {
   section: ManualSection
   majorTitle: string
@@ -1337,33 +1388,37 @@ export async function buildManualPptxArrayBuffer(
     const items = buildBodyItems(part.blocks, part.mediumHeading)
     const runs = bodyToPptxRuns(items)
     const hasImage = Boolean(part.imageUrl)
+    const imageOnly = hasImage && part.blocks.length === 0
+    const layout = hasImage
+      ? layoutProcedureImage({ hasBody: part.blocks.length > 0, bodyItems: items, imageOnly })
+      : null
 
     slide.addText(
       runs.length ? runs : [{ text: part.mediumHeading, options: { bold: true, fontSize: 16 } }],
       {
-        x: 0.4,
-        y: 1.28,
-        w: 12.5,
-        h: hasImage ? 1.7 : 5.2,
+        x: layout?.text.x ?? 0.4,
+        y: layout?.text.y ?? 1.28,
+        w: layout?.text.w ?? 12.5,
+        h: layout?.text.h ?? 5.2,
         fontFace: FONT_FACE,
         valign: "top",
       },
     )
 
-    if (part.imageUrl) {
+    if (part.imageUrl && layout) {
       slide.addImage({
         data: part.imageUrl,
-        x: 0.55,
-        y: 3.15,
-        w: 12.2,
-        h: 3.35,
-        sizing: { type: "contain", w: 12.2, h: 3.35 },
+        x: layout.image.x,
+        y: layout.image.y,
+        w: layout.image.w,
+        h: layout.image.h,
+        sizing: { type: "contain", w: layout.image.w, h: layout.image.h },
         shadow: {
           type: "outer",
           color: "000000",
-          blur: 6,
-          opacity: 0.25,
-          offset: 2,
+          blur: 5,
+          opacity: 0.18,
+          offset: 1.5,
         },
       })
     }

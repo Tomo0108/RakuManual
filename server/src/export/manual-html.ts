@@ -102,16 +102,27 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
   <title>${escapeHtml(project.name)}</title>
   <style>
     @page { margin: 20mm; }
-    body { font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: #1a1a1a; line-height: 1.7; max-width: 800px; margin: 0 auto; padding: 24px; }
+    body { font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: #1a1a1a; line-height: 1.7; max-width: 960px; margin: 0 auto; padding: 24px; }
     h1.major { color: ${accent}; font-size: 1.5rem; border-bottom: 2px solid ${accent}; padding-bottom: 0.25rem; }
     h2.medium { font-size: 1.15rem; margin-top: 1.5rem; color: #444; }
     h3.section { font-size: 1rem; margin-top: 1.25rem; }
     p.step { padding-left: 0.25rem; }
     p.step .step-no { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4em; margin-right: 0.35rem; font-weight: 700; color: ${accent}; }
     aside.note { background: #f5f5f5; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9rem; }
-    figure { margin: 1rem 0; }
-    figure img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
-    figcaption { font-size: 0.8rem; color: #666; margin-top: 0.25rem; text-align: center; }
+    figure { margin: 1.25rem 0; text-align: center; }
+    figure img {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      max-height: 70vh;
+      height: auto;
+      margin: 0 auto;
+      object-fit: contain;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    figcaption { display: none; }
     .flow ol { padding-left: 1.25rem; }
     .meta { font-size: 0.85rem; color: #666; margin-bottom: 2rem; }
   </style>

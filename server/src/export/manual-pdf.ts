@@ -91,13 +91,13 @@ export async function buildManualPdf(project: Project, options: ExportOptions = 
     const buffer = loadImageBuffer(image)
     if (!buffer) return false
     try {
-      doc.image(buffer, { fit: [420, 260], align: "center" })
-      doc.moveDown(0.2)
-      if (image.caption) {
-        doc.fontSize(9).fillColor("#555555").text(image.caption, { align: "center" })
-        doc.fillColor("#000000").fontSize(11)
-      }
-      doc.moveDown(0.3)
+      const pageInner = doc.page.width - doc.page.margins.left - doc.page.margins.right
+      doc.image(buffer, {
+        fit: [Math.min(460, pageInner), 320],
+        align: "center",
+      })
+      // 手順出力ではキャプションは出さない（説明は本文側）
+      doc.moveDown(0.45)
       return true
     } catch {
       return false
