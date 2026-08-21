@@ -379,7 +379,6 @@ function drawFlowOnSlide(
   const cols = nodes.map((n) => colFromX(n.position.x, dimForKind(n.data.kind ?? "process").w))
   const minCol = Math.min(...cols)
   const maxCol = Math.max(...cols)
-  const colCount = Math.max(1, maxCol - minCol + 1)
 
   const contentMinX = FLOW_ORIGIN_X + minCol * COL_WIDTH
   const contentMaxX = FLOW_ORIGIN_X + (maxCol + 1) * COL_WIDTH
