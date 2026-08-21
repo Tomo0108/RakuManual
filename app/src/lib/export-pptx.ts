@@ -822,14 +822,17 @@ function drawFlowOnSlide(
   const systemEntries = Array.from({ length: maxCol - minCol + 1 }, (_, i) => {
     const c = minCol + i
     const entry = systems[c]
-    return entry?.label && entry.label !== "—" ? { c, label: entry.label } : null
-  }).filter(Boolean) as { c: number; label: string }[]
+    return entry?.label && entry.label !== "—"
+      ? { c, label: entry.label, url: entry.url?.trim() || undefined }
+      : null
+  }).filter(Boolean) as { c: number; label: string; url?: string }[]
 
-  type SysSpan = { from: number; to: number; label: string }
+  type SysSpan = { from: number; to: number; label: string; url?: string }
   const systemSpans: SysSpan[] = []
   for (let i = 0; i < systemEntries.length; ) {
     const start = systemEntries[i]!
     let end = start.c
+    let url = start.url
     let j = i + 1
     while (
       j < systemEntries.length &&
@@ -837,9 +840,10 @@ function drawFlowOnSlide(
       systemEntries[j]!.c === end + 1
     ) {
       end = systemEntries[j]!.c
+      url = url || systemEntries[j]!.url
       j += 1
     }
-    systemSpans.push({ from: start.c, to: end, label: start.label })
+    systemSpans.push({ from: start.c, to: end, label: start.label, url })
     i = j
   }
 
@@ -861,13 +865,14 @@ function drawFlowOnSlide(
       const pad = toS(COL_WIDTH) * 0.08
       const x = x0 + pad
       const w = Math.max(x1 - x0 - pad * 2, 0.4)
+      const hasLink = Boolean(span.url)
       gfx.addCylinder({
         x,
         y: sysY + 0.02,
         w,
         h: sysH - 0.04,
         fill: "FFFFFF",
-        line: { color: "595959", width: 0.75 },
+        line: { color: hasLink ? "0563C1" : "595959", width: 0.75 },
       })
       gfx.addText(span.label, {
         x,
@@ -875,9 +880,10 @@ function drawFlowOnSlide(
         w,
         h: sysH - 0.04,
         fontSize: 9,
-        color: "000000",
+        color: hasLink ? "0563C1" : "000000",
         align: "center",
         valign: "middle",
+        hyperlink: span.url ? { url: span.url, tooltip: span.url } : undefined,
       })
     }
   }
@@ -1250,7 +1256,7 @@ async function renderManualDeck(
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const preparedFlow = project.flow?.nodes?.length ? prepareFlow(project.flow) : project.flow
   const projectForExport = { ...project, flow: preparedFlow }
-  const { planned, flowSlide } = planPresentation(
+  const { planned, sectionSlide, majorSlide, flowSlide } = planPresentation(
     projectForExport,
     sections,
     {
@@ -1332,23 +1338,39 @@ async function renderManualDeck(
       const mid = Math.ceil(outline.length / 2)
 
       if (flowSlide != null) {
-        left.push({ text: "業務フロー図", bold: true, fontSize: 13, color: "0563C1", breakLine: true })
+        left.push({
+          text: "業務フロー図",
+          bold: true,
+          fontSize: 13,
+          color: "0563C1",
+          breakLine: true,
+          hyperlink: { slide: flowSlide, tooltip: "業務フロー図へ" },
+        })
         left.push({ text: " ", fontSize: 6, breakLine: true })
       }
 
       outline.forEach((major, mi) => {
         const bucket = mi < mid ? left : right
+        const majorTarget = majorSlide.get(major.number) ?? pageNum
         bucket.push({
           text: formatMajorTitle(major.number, major.title),
           bold: true,
           fontSize: 13,
           color: theme.navy,
           breakLine: true,
+          hyperlink: { slide: majorTarget, tooltip: "この章へ" },
         })
         for (const medium of major.mediums) {
           const first = medium.sections[0]
           const label = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
-          bucket.push({ text: `  ${label}`, fontSize: 11, color: "0563C1", breakLine: true })
+          const target = first ? sectionSlide.get(first.id) ?? majorTarget : majorTarget
+          bucket.push({
+            text: `  ${label}`,
+            fontSize: 11,
+            color: "0563C1",
+            breakLine: true,
+            hyperlink: { slide: target, tooltip: label },
+          })
         }
         bucket.push({ text: " ", fontSize: 6, breakLine: true })
       })

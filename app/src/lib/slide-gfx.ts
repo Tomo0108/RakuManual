@@ -8,6 +8,11 @@ export type GfxLine = {
   endArrow?: boolean
 }
 
+/** 内部スライド（1始まり）または外部 URL */
+export type GfxHyperlink =
+  | { slide: number; tooltip?: string }
+  | { url: string; tooltip?: string }
+
 export type GfxTextRun = {
   text: string
   bold?: boolean
@@ -15,6 +20,7 @@ export type GfxTextRun = {
   color?: string
   highlight?: string
   breakLine?: boolean
+  hyperlink?: GfxHyperlink
 }
 
 export type GfxTextOpts = {
@@ -30,6 +36,8 @@ export type GfxTextOpts = {
   fill?: string
   highlight?: string
   margin?: number
+  /** テキスト全体に付与するリンク（run 側があれば run 優先） */
+  hyperlink?: GfxHyperlink
 }
 
 export type SlideGfx = {

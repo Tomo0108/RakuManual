@@ -1,5 +1,5 @@
 import type { jsPDF } from "jspdf"
-import type { GfxLine, GfxTextOpts, GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
+import type { GfxHyperlink, GfxLine, GfxTextOpts, GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
 
 function hex(c: string) {
   return c.startsWith("#") ? c : `#${c}`
@@ -44,6 +44,23 @@ function drawArrowHead(
   const py = ux * size * 0.45
   doc.setFillColor(hex(color))
   doc.triangle(tipX, tipY, bx + px, by + py, bx - px, by - py, "F")
+}
+
+function applyPdfLink(doc: jsPDF, x: number, y: number, w: number, h: number, link?: GfxHyperlink) {
+  if (!link || w <= 0 || h <= 0) return
+  try {
+    if ("url" in link) {
+      doc.link(x, y, w, h, { url: link.url })
+    } else {
+      doc.link(x, y, w, h, { pageNumber: link.slide })
+    }
+  } catch {
+    /* ignore invalid link targets */
+  }
+}
+
+function textWidthIn(text: string, fontSize: number) {
+  return [...text].reduce((s, ch) => s + (ch.charCodeAt(0) > 255 ? fontSize : fontSize * 0.55), 0) / 72
 }
 
 export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
@@ -101,7 +118,6 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
       )
     },
     addCylinder({ x, y, w, h, fill, line }) {
-      // 簡易シリンダー: 角丸矩形で近似
       const r = Math.min(0.08, w / 2, h / 4)
       const hasFill = applyFill(doc, fill)
       const hasStroke = applyStroke(doc, line)
@@ -139,10 +155,9 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
 
       const runs: GfxTextRun[] =
         typeof text === "string"
-          ? [{ text, bold: opts.bold, fontSize, color, highlight: opts.highlight }]
-          : text
+          ? [{ text, bold: opts.bold, fontSize, color, highlight: opts.highlight, hyperlink: opts.hyperlink }]
+          : text.map((r) => ({ ...r, hyperlink: r.hyperlink ?? opts.hyperlink }))
 
-      // 行に分割（breakLine）
       const lines: GfxTextRun[][] = [[]]
       for (const run of runs) {
         lines[lines.length - 1]!.push(run)
@@ -162,14 +177,18 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
             ? opts.y + opts.h - totalH
             : opts.y
 
+      if (
+        typeof text === "string" &&
+        opts.hyperlink &&
+        (align === "center" || align === "right" || valign === "middle")
+      ) {
+        applyPdfLink(doc, opts.x, opts.y, opts.w, opts.h, opts.hyperlink)
+      }
+
       for (let li = 0; li < lines.length; li++) {
         const lineRuns = lines[li]!
         const lh = lineHeights[li]!
-        // 行幅概算（全角相当）
-        const approxW = lineRuns.reduce((sum, r) => {
-          const fs = r.fontSize ?? fontSize
-          return sum + [...r.text].reduce((s, ch) => s + (ch.charCodeAt(0) > 255 ? fs : fs * 0.55), 0) / 72
-        }, 0)
+        const approxW = lineRuns.reduce((sum, r) => sum + textWidthIn(r.text, r.fontSize ?? fontSize), 0)
         let cursorX =
           align === "center"
             ? opts.x + (opts.w - approxW) / 2
@@ -180,20 +199,20 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
         for (const run of lineRuns) {
           const fs = run.fontSize ?? fontSize
           const bold = run.bold ?? opts.bold ?? false
+          const tw = textWidthIn(run.text, fs)
           doc.setFont(fontName, bold ? "bold" : "normal")
           doc.setFontSize(fs)
           doc.setTextColor(hex(run.color ?? color))
           if (run.highlight) {
-            const tw =
-              [...run.text].reduce((s, ch) => s + (ch.charCodeAt(0) > 255 ? fs : fs * 0.55), 0) / 72
             doc.setFillColor(hex(run.highlight))
             doc.rect(cursorX, cursorY, tw, lh, "F")
             doc.setTextColor(hex(run.color ?? color))
           }
-          // jsPDF text baseline はおおよそ中央寄りなので少し下げる
           doc.text(run.text, cursorX, cursorY + lh * 0.78, { baseline: "alphabetic" })
-          cursorX +=
-            [...run.text].reduce((s, ch) => s + (ch.charCodeAt(0) > 255 ? fs : fs * 0.55), 0) / 72
+          if (run.hyperlink && !(typeof text === "string" && opts.hyperlink)) {
+            applyPdfLink(doc, cursorX, cursorY, Math.max(tw, 0.2), lh, run.hyperlink)
+          }
+          cursorX += tw
         }
         cursorY += lh
       }

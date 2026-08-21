@@ -1,6 +1,6 @@
 import type PptxGenJS from "pptxgenjs"
 import { FONT_FACE } from "@/lib/pptx-embed-font"
-import type { GfxLine, GfxTextOpts, GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
+import type { GfxHyperlink, GfxLine, GfxTextOpts, GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
 
 function toPptxLine(line: GfxLine | null | undefined) {
   if (!line) return { color: "FFFFFF", width: 0 }
@@ -16,6 +16,14 @@ function toPptxLine(line: GfxLine | null | undefined) {
 function fillOpt(fill?: string | null) {
   if (fill == null || fill === "") return { type: "none" as const }
   return { color: fill }
+}
+
+function toPptxHyperlink(link?: GfxHyperlink) {
+  if (!link) return undefined
+  if ("url" in link) {
+    return { url: link.url, tooltip: link.tooltip }
+  }
+  return { slide: link.slide, tooltip: link.tooltip }
 }
 
 export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): SlideGfx {
@@ -97,6 +105,7 @@ export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): Sli
         fill: opts.fill ? { color: opts.fill } : undefined,
         highlight: opts.highlight,
         margin: opts.margin,
+        hyperlink: toPptxHyperlink(opts.hyperlink),
       }
       if (typeof text === "string") {
         slide.addText(text, base)
@@ -110,6 +119,7 @@ export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): Sli
           color: r.color,
           highlight: r.highlight,
           breakLine: r.breakLine,
+          hyperlink: toPptxHyperlink(r.hyperlink ?? opts.hyperlink),
         },
       }))
       slide.addText(runs, base)
