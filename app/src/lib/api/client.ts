@@ -13,11 +13,18 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase()
+  const hasBody = init?.body !== undefined && init?.body !== null
+  // Fastify は Content-Type: application/json かつ空ボディを 400 にする
+  const needsEmptyJsonBody =
+    !hasBody && (method === "POST" || method === "PUT" || method === "PATCH")
+
   const res = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
+    body: needsEmptyJsonBody ? "{}" : init?.body,
     headers: {
-      "Content-Type": "application/json",
+      ...(needsEmptyJsonBody || hasBody ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
   })
@@ -25,8 +32,9 @@ export async function apiFetch<T>(
   if (!res.ok) {
     let message = res.statusText
     try {
-      const body = (await res.json()) as { error?: string }
+      const body = (await res.json()) as { error?: string; message?: string }
       if (body.error) message = body.error
+      else if (body.message) message = body.message
     } catch {
       /* ignore */
     }
