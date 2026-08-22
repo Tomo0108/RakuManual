@@ -13,6 +13,7 @@
     "security:check": "node scripts/security-check.mjs",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
     "uat:run": "node scripts/uat-run.mjs",
+    "prompt:validate": "npm run test:prompts -w server",
     "pilot:uat": "node scripts/pilot-uat.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "backup": "node scripts/backup.mjs",

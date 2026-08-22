@@ -81,7 +81,7 @@ class MockLlmAdapter implements LlmAdapter {
 }
 
 function buildMockStructuredResponse(system: string, user: string): string {
-  if (system.includes("スイムレーンフロー") || system.includes('"lanes"')) {
+  if (system.includes("スイムレーン") || system.includes('"lanes"') || system.includes("フロー設計ルール")) {
     let name = "業務"
     try {
       const parsed = JSON.parse(user) as {
@@ -116,7 +116,7 @@ function buildMockStructuredResponse(system: string, user: string): string {
           { id: "e0", source: "n0", target: "n1" },
           { id: "e1", source: "n1", target: "n2" },
           { id: "e2", source: "n2", target: "n3" },
-          { id: "e3", source: "n3", target: "n4" },
+          { id: "e3", source: "n3", target: "n4", label: "はい" },
         ],
       })
     } catch {
@@ -142,10 +142,19 @@ function buildMockStructuredResponse(system: string, user: string): string {
           blocks: [
             {
               type: "paragraph",
-              text: `${parsed.section.title ?? ""}の手順を更新しました。`,
+              text: parsed.section.title ?? "再生成セクション",
+              needsConfirm: false,
+            },
+            {
+              type: "note",
+              text: "※入力内容を保存前に確認すること。",
               needsConfirm: true,
             },
-            { type: "step", text: "作業を実施し結果を記録する。", needsConfirm: false },
+            {
+              type: "step",
+              text: "・「保存」ボタンをクリックし、ステータスが「保存済み」になっていることを確認すること",
+              needsConfirm: false,
+            },
           ],
         })
       }
@@ -153,21 +162,34 @@ function buildMockStructuredResponse(system: string, user: string): string {
       const sections =
         deepdive.length > 0
           ? deepdive.map((d, i) => {
+              const num = d.sectionNumber ?? `${i + 1}`
+              const label = d.stepLabel ?? `ステップ${i + 1}`
               const answerText = (d.answers ?? [])
                 .map((a) => a.answer ?? a.value ?? "")
                 .filter(Boolean)
                 .join(" / ")
               return {
-                title: d.stepLabel ?? `ステップ${i + 1}`,
-                sectionNumber: d.sectionNumber ?? `${i + 1}`,
+                title: `${num}　${label}`,
+                sectionNumber: num,
                 stepId: d.stepId,
                 blocks: [
                   {
                     type: "paragraph",
-                    text: answerText || `「${d.stepLabel ?? ""}」の手順です。`,
-                    needsConfirm: true,
+                    text: `${num}　${label}`,
+                    needsConfirm: false,
                   },
-                  { type: "step", text: "手順に沿って作業を実施する。", needsConfirm: false },
+                  {
+                    type: "note",
+                    text: answerText
+                      ? `※${answerText}`
+                      : "※操作前に入力内容を確認すること。",
+                    needsConfirm: !answerText,
+                  },
+                  {
+                    type: "step",
+                    text: "・画面の指示に従い、必要項目を入力して「保存」ボタンをクリックすること",
+                    needsConfirm: false,
+                  },
                 ],
               }
             })

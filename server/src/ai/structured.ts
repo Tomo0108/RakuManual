@@ -6,7 +6,13 @@
 import { getLlmAdapter } from "../llm/adapter.js"
 import type { FlowState, StepKind } from "../flow-types.js"
 import type { Project } from "../types.js"
-import { hearingQuestionText } from "./hearing.js"
+import {
+  buildFlowGenerationMessages,
+  buildManualGenerationMessages,
+  buildSectionRegenerationMessages,
+  buildHearingContext,
+  postProcessBlock,
+} from "./prompts/index.js"
 
 function uid(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
@@ -156,29 +162,8 @@ export async function generateFlowFromLlm(
   userId: string,
 ): Promise<{ flow: FlowState; provider: string; tokens: number; usedLlmStructure: boolean }> {
   const adapter = getLlmAdapter()
-  const llm = await adapter.complete(
-    [
-      {
-        role: "system",
-        content: `業務マニュアル用スイムレーンフローを JSON のみで返せ。形式:
-{"lanes":["担当者","確認者"],"nodes":[{"id":"n1","data":{"label":"...","lane":"担当者","kind":"start|process|decision|end","system":"...","source":"..."}}],"edges":[{"id":"e1","source":"n1","target":"n2"}]}
-start と end を各1つ含め、ヒアリング回答を反映せよ。`,
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          name: project.name,
-          // 質問文を添えて回答の意味が伝わるようにする
-          hearingAnswers: project.hearingAnswers.map((a) => ({
-            id: a.questionId,
-            question: a.questionText ?? hearingQuestionText(a.questionId) ?? a.questionId,
-            value: a.value,
-            status: a.status,
-          })),
-        }).slice(0, 3500),
-      },
-    ],
-    {
+  const messages = buildFlowGenerationMessages(project.name, buildHearingContext(project))
+  const llm = await adapter.complete(messages, {
       maxTokens: 2048,
       context: { userId, projectId: project.id, action: "flow_generate" },
     },
@@ -294,14 +279,13 @@ function normalizeSections(raw: unknown, project: Project): Project["sections"] 
   return sections.map((s, i) => {
     const sec = (s ?? {}) as Record<string, unknown>
     const blocksRaw = Array.isArray(sec.blocks) ? sec.blocks : []
-    const blocks = blocksRaw.map((b, j) => {
-      const block = (b ?? {}) as Record<string, unknown>
-      const type = String(block.type ?? "paragraph")
+    const blocks = blocksRaw.map((b) => {
+      const normalized = postProcessBlock(b as { type?: string; text?: string; needsConfirm?: boolean })
       return {
         id: uid("b"),
-        type: type === "step" || type === "warning" || type === "paragraph" ? type : "paragraph",
-        text: String(block.text ?? ""),
-        needsConfirm: block.needsConfirm === true || block.needsConfirm === "true",
+        type: normalized.type,
+        text: normalized.text,
+        needsConfirm: normalized.needsConfirm,
       }
     })
     if (blocks.length === 0) {
@@ -339,24 +323,7 @@ export async function generateManualFromLlm(
   usedLlmStructure: boolean
 }> {
   const adapter = getLlmAdapter()
-  const llm = await adapter.complete(
-    [
-      {
-        role: "system",
-        content: `業務マニュアルのセクション配列を JSON のみで返せ。形式:
-{"sections":[{"title":"...","sectionNumber":"1.1","majorTitle":"業務名","mediumTitle":"中項目","stepId":"...","blocks":[{"type":"paragraph|step|warning","text":"...","needsConfirm":true}]}]}
-推測箇所は needsConfirm:true。深掘り回答を反映し、具体的な手順文にせよ。`,
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          name: project.name,
-          deepdive: project.deepdive,
-          hearingAnswers: project.hearingAnswers,
-        }).slice(0, 4000),
-      },
-    ],
-    {
+  const llm = await adapter.complete(buildManualGenerationMessages(project), {
       maxTokens: 3000,
       context: { userId, projectId: project.id, action: "manual_generate" },
     },
@@ -411,23 +378,14 @@ export async function regenerateSectionFromLlm(
 
   const adapter = getLlmAdapter()
   const llm = await adapter.complete(
-    [
-      {
-        role: "system",
-        content:
-          'セクション本文を JSON のみで返せ: {"title":"...","blocks":[{"type":"paragraph|step|warning","text":"...","needsConfirm":true}]}',
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          section,
-          deepdive: project.deepdive.find((d) => d.stepId === (section as { stepId?: string }).stepId),
-          flowNode: (project.flow as unknown as FlowState | undefined)?.nodes?.find(
-            (n) => n.id === (section as { stepId?: string }).stepId,
-          ),
-        }).slice(0, 3000),
-      },
-    ],
+    buildSectionRegenerationMessages({
+      projectName: project.name,
+      section,
+      deepdiveItem: project.deepdive.find((d) => d.stepId === (section as { stepId?: string }).stepId),
+      flowNode: (project.flow as unknown as FlowState | undefined)?.nodes?.find(
+        (n) => n.id === (section as { stepId?: string }).stepId,
+      ),
+    }),
     {
       maxTokens: 1500,
       context: { userId, projectId: project.id, action: "section_regenerate" },
@@ -448,12 +406,15 @@ export async function regenerateSectionFromLlm(
           status: "draft",
           version: prevVersion + 1,
           updatedAt: new Date().toISOString().slice(0, 10),
-          blocks: parsed.blocks.map((b) => ({
-            id: uid("b"),
-            type: b.type === "step" || b.type === "warning" ? b.type : "paragraph",
-            text: String(b.text ?? ""),
-            needsConfirm: !!b.needsConfirm,
-          })),
+          blocks: parsed.blocks.map((b) => {
+            const normalized = postProcessBlock(b)
+            return {
+              id: uid("b"),
+              type: normalized.type,
+              text: normalized.text,
+              needsConfirm: normalized.needsConfirm,
+            }
+          }),
           syncStatus: "ok",
         },
         provider: llm.provider,
