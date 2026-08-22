@@ -47,6 +47,7 @@ export type SlideGfx = {
     w: number
     h: number
     fill?: string | null
+    fillOpacity?: number
     line?: GfxLine | null
   }): void
   addRoundRect(opts: {
@@ -55,6 +56,7 @@ export type SlideGfx = {
     w: number
     h: number
     fill?: string | null
+    fillOpacity?: number
     line?: GfxLine | null
     rectRadius?: number
   }): void
@@ -64,6 +66,7 @@ export type SlideGfx = {
     w: number
     h: number
     fill?: string | null
+    fillOpacity?: number
     line?: GfxLine | null
   }): void
   addDiamond(opts: {
@@ -72,6 +75,7 @@ export type SlideGfx = {
     w: number
     h: number
     fill?: string | null
+    fillOpacity?: number
     line?: GfxLine | null
   }): void
   /** シリンダー（システム／DB ノード） */
@@ -81,6 +85,7 @@ export type SlideGfx = {
     w: number
     h: number
     fill?: string | null
+    fillOpacity?: number
     line?: GfxLine | null
   }): void
   addLine(opts: {

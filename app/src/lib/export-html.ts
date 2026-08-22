@@ -1,4 +1,4 @@
-import type { FlowState, ManualBlock, ManualSection, Project } from "@/lib/types"
+import type { ManualBlock, ManualSection, Project } from "@/lib/types"
 import {
   buildManualOutline,
   displaySectionTitle,
@@ -8,7 +8,6 @@ import {
   formatMajorTitle,
   formatMediumHeading,
   resolveExportTheme,
-  type ExportTheme,
 } from "@/lib/export-theme"
 import {
   buildTocItems,
@@ -18,6 +17,7 @@ import {
 } from "@/lib/export-toc"
 import { resolveImageDataUrl } from "@/lib/resolve-export-image"
 import { downloadHtmlFile } from "@/lib/api/export"
+import { renderFlowDiagramSvgs } from "@/lib/export-pptx"
 
 export interface ClientHtmlExportOptions {
   includeImages?: boolean
@@ -71,46 +71,6 @@ function renderBodyBlocks(blocks: ManualBlock[]): string {
   return html
 }
 
-function flowHtml(flow: FlowState, theme: ExportTheme): string {
-  const nodes = flow.nodes ?? []
-  if (nodes.length === 0) return ""
-  const lanes = (flow.lanes?.length ? flow.lanes : [...new Set(nodes.map((n) => n.data?.lane ?? ""))]).filter(
-    Boolean,
-  )
-  const systems = flow.layoutMeta?.columnSystems ?? []
-
-  const laneRows = lanes
-    .map((lane) => {
-      const items = nodes
-        .filter((n) => (n.data?.lane ?? "") === lane)
-        .map((n) => {
-          const kind = n.data?.kind ?? "process"
-          const num = n.data?.sectionNumber ? `<span class="fn">${escapeHtml(n.data.sectionNumber)}</span>` : ""
-          const sys = n.data?.system ? `<span class="fs">${escapeHtml(n.data.system)}</span>` : ""
-          return `<li class="fn-${escapeHtml(kind)}">${num}<span class="fl">${escapeHtml(n.data?.label ?? "")}</span>${sys}</li>`
-        })
-        .join("")
-      return `<tr><th>${escapeHtml(lane)}</th><td><ol class="flow-steps">${items}</ol></td></tr>`
-    })
-    .join("")
-
-  const sysLine =
-    systems.filter((s) => s.label && s.label !== "—").length > 0
-      ? `<p class="flow-systems">利用システム：${systems
-          .filter((s) => s.label && s.label !== "—")
-          .map((s) => {
-            const label = escapeHtml(s.label)
-            const href = s.url?.trim()
-            return href
-              ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-              : label
-          })
-          .join("　")}</p>`
-      : ""
-
-  return `<table class="flow-table" style="--accent:${hex(theme.accent)}"><tbody>${laneRows}</tbody></table>${sysLine}`
-}
-
 function slideNav(prevId: string | null, nextId: string | null): string {
   const prev = prevId
     ? `<a class="nav-btn" href="#${prevId}">← 前へ</a>`
@@ -161,7 +121,10 @@ export async function exportManualHtml(
   const theme = resolveExportTheme(options.template)
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const hasFlow = Boolean(project.flow?.nodes?.length)
-  const tocItems = buildTocItems(outline, includeFlow && hasFlow)
+  const flowParts =
+    includeFlow && hasFlow ? renderFlowDiagramSvgs(project.flow, options.template) : []
+  const flowIds = flowParts.map((_, i) => (i === 0 ? "flow" : `flow-${i + 1}`))
+  const tocItems = buildTocItems(outline, flowParts.length > 0)
 
   const imageCache = new Map<string, string | null>()
   let imageFailures = 0
@@ -181,20 +144,23 @@ export async function exportManualHtml(
     html: `<article class="slide cover" id="cover" data-page="1">
   <div class="cover-inner">
     <h1>${escapeHtml(project.name)}</h1>
-    <p>業務マニュアル</p>
   </div>
-  ${slideNav(null, includeFlow && hasFlow ? "flow" : "toc")}
+  ${slideNav(null, flowIds[0] ?? "toc")}
 </article>`,
   })
 
-  if (includeFlow && hasFlow) {
+  flowParts.forEach((part, i) => {
+    const id = flowIds[i]!
+    const prev = i === 0 ? "cover" : flowIds[i - 1]!
+    const next = i === flowParts.length - 1 ? "toc" : flowIds[i + 1]!
+    const pageNum = 2 + i
     slides.push({
-      id: "flow",
-      html: `${chromeOpen({ id: "flow", title: "業務フロー図", pageNum: 2 })}
-${flowHtml(project.flow, theme)}
-${chromeClose(2, "cover", "toc")}`,
+      id,
+      html: `${chromeOpen({ id, title: part.title, pageNum })}
+<div class="flow-svg">${part.svg}</div>
+${chromeClose(pageNum, prev, next)}`,
     })
-  }
+  })
 
   slides.push({
     id: "toc",
@@ -276,7 +242,7 @@ ${chromeClose(0, null, null)}`,
 
   const allIds = [
     "cover",
-    ...(includeFlow && hasFlow ? ["flow"] : []),
+    ...flowIds,
     "toc",
     ...procedureSlides.map((s) => s.id),
   ]
@@ -410,8 +376,7 @@ ${chromeClose(
       padding: 48px 24px 72px;
     }
     .cover-inner { text-align: center; color: #fff; }
-    .cover-inner h1 { font-size: 36px; margin: 0 0 16px; }
-    .cover-inner p { font-size: 18px; margin: 0; opacity: 0.95; }
+    .cover-inner h1 { font-size: 36px; margin: 0; }
     .slide.cover .slide-nav a, .slide.cover .slide-nav span { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.35); }
     .slide.divider {
       min-height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -447,6 +412,8 @@ ${chromeClose(
       border: 1px solid #ddd; border-radius: 4px;
     }
     .img-missing { color: #b45309; font-size: 14px; }
+    .flow-svg { margin: 0 -4px; }
+    .flow-svg svg { display: block; width: 100%; height: auto; }
     .toc-list { max-width: 46rem; margin: 4px 4px 8px; }
     .toc-flow, .toc-major, .toc-medium {
       display: flex; align-items: baseline; gap: 10px;
@@ -481,18 +448,6 @@ ${chromeClose(
       font-variant-numeric: tabular-nums;
     }
     .toc-flow:hover .ttl, .toc-major:hover .ttl, .toc-medium:hover .ttl { text-decoration: underline; }
-    .flow-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .flow-table th {
-      width: 7.5em; text-align: right; padding: 8px 12px; vertical-align: top;
-      background: #f3f6f9; color: var(--navy); border-bottom: 1px solid #dde;
-    }
-    .flow-table td { padding: 8px 12px; border-bottom: 1px solid #dde; }
-    .flow-steps { margin: 0; padding-left: 1.2em; }
-    .flow-steps li { margin: 0 0 6px; }
-    .fn { display: inline-block; min-width: 2.4em; font-weight: 700; color: var(--accent); margin-right: 6px; }
-    .fs { display: block; font-size: 12px; color: #666; }
-    .flow-systems { font-size: 13px; color: #444; margin: 12px 0 0; }
-    .flow-systems a { color: var(--link); }
     .slide-nav {
       position: absolute; left: 18px; right: 70px; bottom: 10px;
       display: flex; gap: 8px; align-items: center;

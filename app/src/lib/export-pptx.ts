@@ -24,11 +24,12 @@ import {
   needsInitialLayout,
 } from "@/features/flow/flow-layout"
 import PptxGenJS from "pptxgenjs"
-import type { GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
+import type { GfxTextOpts, GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
 import { createPptxSlideGfx } from "@/lib/pptx-slide-gfx"
 import { createPdfSlideGfx } from "@/lib/pdf-slide-gfx"
 import { jsPDF } from "jspdf"
 import { resolveImageDataUrl } from "@/lib/resolve-export-image"
+import { createSvgSlideGfx } from "@/lib/svg-slide-gfx"
 
 /** 必須要件: 13.333 × 7.5 in */
 const SLIDE_W = 13.333
@@ -452,6 +453,36 @@ function flowNodeFontSize(wIn: number, hIn: number, text: string): number {
   const chars9 = Math.floor((wIn - 0.1) / 0.125) * Math.floor((hIn - 0.08) / 0.156)
   if (chars9 >= 4 && approxZenLen(text) <= Math.max(chars9, 4)) return 9
   return 8
+}
+
+/** 図形・線の上でも読めるよう、文字の背面に半透明の角丸を置く */
+function addLabelChip(
+  gfx: SlideGfx,
+  text: string | GfxTextRun[],
+  opts: GfxTextOpts,
+) {
+  const raw = typeof text === "string" ? text : text.map((r) => r.text).join("")
+  const fs = opts.fontSize ?? 12
+  const zen = Math.max(approxZenLen(raw), 1)
+  const tw = Math.min(opts.w + 0.08, Math.max(0.34, zen * (fs / 72) * 1.12 + 0.14))
+  const th = Math.min(Math.max(opts.h * 0.72, (fs / 72) * 1.5 + 0.1), opts.h)
+  let x = opts.x
+  if (opts.align === "center") x = opts.x + (opts.w - tw) / 2
+  else if (opts.align === "right") x = opts.x + opts.w - tw
+  let y = opts.y
+  if (opts.valign === "middle") y = opts.y + (opts.h - th) / 2
+  else if (opts.valign === "bottom") y = opts.y + opts.h - th
+  gfx.addRoundRect({
+    x,
+    y,
+    w: tw,
+    h: th,
+    fill: "FFFFFF",
+    fillOpacity: 0.86,
+    line: null,
+    rectRadius: Math.min(0.07, th / 2),
+  })
+  gfx.addText(text, { ...opts, fill: undefined })
 }
 
 type FlowNodeVisual = {
@@ -964,7 +995,7 @@ function drawFlowOnSlide(
         fill: "FFFFFF",
         line: { color: hasLink ? "0563C1" : "595959", width: 0.75 },
       })
-      gfx.addText(span.label, {
+      addLabelChip(gfx, span.label, {
         x,
         y: sysY + 0.02,
         w,
@@ -989,7 +1020,7 @@ function drawFlowOnSlide(
       fill: "F7F7F7",
       line: null,
     })
-    gfx.addText(caption, {
+    addLabelChip(gfx, caption, {
       x,
       y: plotY + 0.04,
       w,
@@ -1061,7 +1092,7 @@ function drawFlowOnSlide(
       typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
       const lw = Math.min(1.1, Math.max(0.45, approxZenLen(label) * 0.125 + 0.1))
-      gfx.addText(label, {
+      addLabelChip(gfx, label, {
         x: mid.x - lw / 2,
         y: mid.y - 0.13,
         w: lw,
@@ -1070,7 +1101,6 @@ function drawFlowOnSlide(
         color: "000000",
         align: "center",
         valign: "middle",
-        fill: "FFFFFF",
       })
     }
   }
@@ -1122,7 +1152,8 @@ function drawFlowOnSlide(
     }
 
     if (num) {
-      gfx.addText(
+      addLabelChip(
+        gfx,
         [
           { text: `${num} `, bold: true, fontSize, color: visual.text },
           { text: body, bold: false, fontSize, color: visual.text },
@@ -1130,7 +1161,7 @@ function drawFlowOnSlide(
         textOpts,
       )
     } else {
-      gfx.addText(body, { ...textOpts, bold: kind === "start" || kind === "end" })
+      addLabelChip(gfx, body, { ...textOpts, bold: kind === "start" || kind === "end" })
     }
   }
 
@@ -1256,6 +1287,33 @@ function assignOffPageLinks(
     if (!srcIn && tgtIn) links.push({ letter, nodeId: e.target, side: "in" })
   }
   return links
+}
+
+/** HTML 出力用: PPTX/PDF と同じスイムレーン図を SVG にする */
+export function renderFlowDiagramSvgs(
+  flow: FlowState,
+  template?: string,
+): { title: string; svg: string }[] {
+  if (!flow?.nodes?.length) return []
+  const theme = resolveExportTheme(template)
+  const prepared = prepareFlow(flow)
+  const chunks = partitionFlowByColumns(prepared)
+  const letterMap = new Map<string, string>()
+  return chunks.map((chunk, i) => {
+    const { gfx, toSvg } = createSvgSlideGfx()
+    const title =
+      chunks.length > 1 ? `業務フロー図（${i + 1}/${chunks.length}）` : "業務フロー図"
+    drawFlowOnSlide(gfx, prepared, theme, new Set(chunk.nodes.map((n) => n.id)), {
+      overlapPrevCol: chunk.overlapPrevCol,
+      overlapNextCol: chunk.overlapNextCol,
+      offPage: assignOffPageLinks(prepared, chunk.nodes, letterMap),
+    })
+    const svg = toSvg().replace(
+      'viewBox="0 0 13.333 7.5"',
+      'viewBox="0.22 1.22 12.9 5.5"',
+    )
+    return { title, svg }
+  })
 }
 
 /* ---------- スライド計画（目次リンク用に番号を先に確定） ---------- */
@@ -1399,20 +1457,11 @@ async function renderManualDeck(
       })
       gfx.addText(project.name, {
         x: 0.8,
-        y: 2.6,
+        y: 3.05,
         w: 11.7,
         h: 1.4,
         fontSize: 36,
         bold: true,
-        color: "FFFFFF",
-        align: "center",
-      })
-      gfx.addText("業務マニュアル", {
-        x: 0.8,
-        y: 4.2,
-        w: 11.7,
-        h: 0.5,
-        fontSize: 18,
         color: "FFFFFF",
         align: "center",
       })

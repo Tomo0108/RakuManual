@@ -24,6 +24,31 @@ function applyFill(doc: jsPDF, fill: string | null | undefined) {
   return true
 }
 
+function withFillOpacity(doc: jsPDF, fillOpacity: number | undefined, draw: () => void) {
+  if (fillOpacity == null || fillOpacity >= 0.999) {
+    draw()
+    return
+  }
+  const anyDoc = doc as jsPDF & {
+    GState?: new (opts: { opacity: number }) => unknown
+    setGState?: (g: unknown) => void
+    saveGraphicsState?: () => void
+    restoreGraphicsState?: () => void
+  }
+  try {
+    if (anyDoc.GState && anyDoc.setGState) {
+      anyDoc.saveGraphicsState?.()
+      anyDoc.setGState(new anyDoc.GState({ opacity: fillOpacity }))
+      draw()
+      anyDoc.restoreGraphicsState?.()
+      return
+    }
+  } catch {
+    /* fall through */
+  }
+  draw()
+}
+
 function drawArrowHead(
   doc: jsPDF,
   tipX: number,
@@ -65,33 +90,39 @@ function textWidthIn(text: string, fontSize: number) {
 
 export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
   return {
-    addRect({ x, y, w, h, fill, line }) {
+    addRect({ x, y, w, h, fill, fillOpacity, line }) {
       const hasFill = applyFill(doc, fill)
       const hasStroke = applyStroke(doc, line)
-      if (hasFill && hasStroke) doc.rect(x, y, w, h, "FD")
-      else if (hasFill) doc.rect(x, y, w, h, "F")
-      else if (hasStroke) doc.rect(x, y, w, h, "S")
+      withFillOpacity(doc, hasFill ? fillOpacity : undefined, () => {
+        if (hasFill && hasStroke) doc.rect(x, y, w, h, "FD")
+        else if (hasFill) doc.rect(x, y, w, h, "F")
+        else if (hasStroke) doc.rect(x, y, w, h, "S")
+      })
     },
-    addRoundRect({ x, y, w, h, fill, line, rectRadius }) {
+    addRoundRect({ x, y, w, h, fill, fillOpacity, line, rectRadius }) {
       const r = Math.min(rectRadius ?? 0.1, w / 2, h / 2)
       const hasFill = applyFill(doc, fill)
       const hasStroke = applyStroke(doc, line)
-      if (hasFill && hasStroke) doc.roundedRect(x, y, w, h, r, r, "FD")
-      else if (hasFill) doc.roundedRect(x, y, w, h, r, r, "F")
-      else if (hasStroke) doc.roundedRect(x, y, w, h, r, r, "S")
+      withFillOpacity(doc, hasFill ? fillOpacity : undefined, () => {
+        if (hasFill && hasStroke) doc.roundedRect(x, y, w, h, r, r, "FD")
+        else if (hasFill) doc.roundedRect(x, y, w, h, r, r, "F")
+        else if (hasStroke) doc.roundedRect(x, y, w, h, r, r, "S")
+      })
     },
-    addEllipse({ x, y, w, h, fill, line }) {
+    addEllipse({ x, y, w, h, fill, fillOpacity, line }) {
       const cx = x + w / 2
       const cy = y + h / 2
       const rx = w / 2
       const ry = h / 2
       const hasFill = applyFill(doc, fill)
       const hasStroke = applyStroke(doc, line)
-      if (hasFill && hasStroke) doc.ellipse(cx, cy, rx, ry, "FD")
-      else if (hasFill) doc.ellipse(cx, cy, rx, ry, "F")
-      else if (hasStroke) doc.ellipse(cx, cy, rx, ry, "S")
+      withFillOpacity(doc, hasFill ? fillOpacity : undefined, () => {
+        if (hasFill && hasStroke) doc.ellipse(cx, cy, rx, ry, "FD")
+        else if (hasFill) doc.ellipse(cx, cy, rx, ry, "F")
+        else if (hasStroke) doc.ellipse(cx, cy, rx, ry, "S")
+      })
     },
-    addDiamond({ x, y, w, h, fill, line }) {
+    addDiamond({ x, y, w, h, fill, fillOpacity, line }) {
       const cx = x + w / 2
       const cy = y + h / 2
       const pts: [number, number][] = [
@@ -103,27 +134,31 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
       const hasFill = applyFill(doc, fill)
       const hasStroke = applyStroke(doc, line)
       const style = hasFill && hasStroke ? "FD" : hasFill ? "F" : "S"
-      doc.lines(
-        [
-          [pts[1]![0] - pts[0]![0], pts[1]![1] - pts[0]![1]],
-          [pts[2]![0] - pts[1]![0], pts[2]![1] - pts[1]![1]],
-          [pts[3]![0] - pts[2]![0], pts[3]![1] - pts[2]![1]],
-          [pts[0]![0] - pts[3]![0], pts[0]![1] - pts[3]![1]],
-        ],
-        pts[0]![0],
-        pts[0]![1],
-        [1, 1],
-        style,
-        true,
-      )
+      withFillOpacity(doc, hasFill ? fillOpacity : undefined, () => {
+        doc.lines(
+          [
+            [pts[1]![0] - pts[0]![0], pts[1]![1] - pts[0]![1]],
+            [pts[2]![0] - pts[1]![0], pts[2]![1] - pts[1]![1]],
+            [pts[3]![0] - pts[2]![0], pts[3]![1] - pts[2]![1]],
+            [pts[0]![0] - pts[3]![0], pts[0]![1] - pts[3]![1]],
+          ],
+          pts[0]![0],
+          pts[0]![1],
+          [1, 1],
+          style,
+          true,
+        )
+      })
     },
-    addCylinder({ x, y, w, h, fill, line }) {
+    addCylinder({ x, y, w, h, fill, fillOpacity, line }) {
       const r = Math.min(0.08, w / 2, h / 4)
       const hasFill = applyFill(doc, fill)
       const hasStroke = applyStroke(doc, line)
-      if (hasFill && hasStroke) doc.roundedRect(x, y, w, h, r, r, "FD")
-      else if (hasFill) doc.roundedRect(x, y, w, h, r, r, "F")
-      else if (hasStroke) doc.roundedRect(x, y, w, h, r, r, "S")
+      withFillOpacity(doc, hasFill ? fillOpacity : undefined, () => {
+        if (hasFill && hasStroke) doc.roundedRect(x, y, w, h, r, r, "FD")
+        else if (hasFill) doc.roundedRect(x, y, w, h, r, r, "F")
+        else if (hasStroke) doc.roundedRect(x, y, w, h, r, r, "S")
+      })
     },
     addLine({ x, y, w, h, flipH, flipV, line }) {
       let x1 = x

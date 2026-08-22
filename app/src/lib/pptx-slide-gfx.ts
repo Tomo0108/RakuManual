@@ -13,9 +13,14 @@ function toPptxLine(line: GfxLine | null | undefined) {
   }
 }
 
-function fillOpt(fill?: string | null) {
+function fillOpt(fill?: string | null, fillOpacity?: number) {
   if (fill == null || fill === "") return { type: "none" as const }
-  return { color: fill }
+  const transparency =
+    fillOpacity != null && fillOpacity < 0.999 ? Math.round((1 - fillOpacity) * 100) : undefined
+  return {
+    color: fill,
+    ...(transparency != null && transparency > 0 ? { transparency } : {}),
+  }
 }
 
 function toPptxHyperlink(link?: GfxHyperlink) {
@@ -28,54 +33,54 @@ function toPptxHyperlink(link?: GfxHyperlink) {
 
 export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): SlideGfx {
   return {
-    addRect({ x, y, w, h, fill, line }) {
+    addRect({ x, y, w, h, fill, fillOpacity, line }) {
       slide.addShape(pptx.ShapeType.rect, {
         x,
         y,
         w,
         h,
-        fill: fillOpt(fill),
+        fill: fillOpt(fill, fillOpacity),
         line: line === null ? { color: "FFFFFF", width: 0 } : toPptxLine(line ?? { color: "000000", width: 0 }),
       })
     },
-    addRoundRect({ x, y, w, h, fill, line, rectRadius }) {
+    addRoundRect({ x, y, w, h, fill, fillOpacity, line, rectRadius }) {
       slide.addShape(pptx.ShapeType.roundRect, {
         x,
         y,
         w,
         h,
-        fill: fillOpt(fill),
+        fill: fillOpt(fill, fillOpacity),
         line: line === null ? { color: "FFFFFF", width: 0 } : toPptxLine(line ?? { color: "000000", width: 0 }),
         rectRadius: rectRadius ?? 0.1,
       })
     },
-    addEllipse({ x, y, w, h, fill, line }) {
+    addEllipse({ x, y, w, h, fill, fillOpacity, line }) {
       slide.addShape(pptx.ShapeType.ellipse, {
         x,
         y,
         w,
         h,
-        fill: fillOpt(fill),
+        fill: fillOpt(fill, fillOpacity),
         line: line === null ? { color: "FFFFFF", width: 0 } : toPptxLine(line ?? { color: "000000", width: 0 }),
       })
     },
-    addDiamond({ x, y, w, h, fill, line }) {
+    addDiamond({ x, y, w, h, fill, fillOpacity, line }) {
       slide.addShape(pptx.ShapeType.flowChartDecision, {
         x,
         y,
         w,
         h,
-        fill: fillOpt(fill),
+        fill: fillOpt(fill, fillOpacity),
         line: line === null ? { color: "FFFFFF", width: 0 } : toPptxLine(line ?? { color: "000000", width: 0 }),
       })
     },
-    addCylinder({ x, y, w, h, fill, line }) {
+    addCylinder({ x, y, w, h, fill, fillOpacity, line }) {
       slide.addShape(pptx.ShapeType.flowChartMagneticDisk, {
         x,
         y,
         w,
         h,
-        fill: fillOpt(fill),
+        fill: fillOpt(fill, fillOpacity),
         line: line === null ? { color: "FFFFFF", width: 0 } : toPptxLine(line ?? { color: "000000", width: 0 }),
       })
     },
