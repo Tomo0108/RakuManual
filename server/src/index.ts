@@ -48,8 +48,11 @@ async function main() {
         cb(null, true)
         return
       }
-      // *.vercel.app を許可（プレビュー含む）
-      if (/^https:\/\/[\w.-]+\.vercel\.app$/.test(origin)) {
+      // Vercel プレビューは明示オプトイン時のみ（本番は ALLOWED_ORIGINS に列挙）
+      if (
+        process.env.ALLOW_VERCEL_PREVIEWS === "true" &&
+        /^https:\/\/[\w.-]+\.vercel\.app$/.test(origin)
+      ) {
         cb(null, true)
         return
       }

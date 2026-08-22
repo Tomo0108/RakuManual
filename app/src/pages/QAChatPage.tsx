@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react"
 import { BookOpenText, MessageCircleQuestion, Send, ThumbsDown, ThumbsUp } from "lucide-react"
 import { uid } from "@/lib/project-utils"
 import { askQuestion, sendQaFeedback, type QASource } from "@/lib/api/qa"
-import { submitCsat } from "@/lib/api/admin"
 import { SUCCESS_TEXT, DANGER_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -80,7 +79,7 @@ export function QAChatPage({ onOpenSource }: Props) {
     if (msg.question) {
       try {
         await sendQaFeedback({ messageId: msg.id, question: msg.question, feedback: fb })
-        await submitCsat({ score: fb === "up" ? 5 : 2, source: "qa" })
+        // QA の 👍👎 は回答品質フィードバック専用。CSAT（作成満足度）には混ぜない
       } catch {
         /* UI はローカル反映済み */
       }

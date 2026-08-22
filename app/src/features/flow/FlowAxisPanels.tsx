@@ -600,12 +600,17 @@ function SystemCell({
         <>
           <button
             type="button"
-            className="absolute right-0.5 top-0.5 rounded p-0.5 opacity-0 transition-opacity hover:bg-background group-hover:opacity-100"
+            className="absolute right-0.5 top-0.5 rounded p-0.5 opacity-100 transition-opacity hover:bg-background focus-visible:opacity-100 group-hover:opacity-100 md:opacity-70"
             aria-label={`列${col + 1}の利用システムを編集`}
             onClick={openEdit}
           >
             <Pencil className="size-2.5 text-muted-foreground" />
           </button>
+          {!href && (
+            <span className="pointer-events-none absolute bottom-0.5 left-1/2 max-w-[90%] -translate-x-1/2 truncate text-[8px] text-muted-foreground/80">
+              クリックでURL編集
+            </span>
+          )}
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="max-w-sm">
               <DialogHeader>

@@ -36,6 +36,7 @@ import {
 import { placeUnplacedSection } from "@/lib/manual-regen"
 import { appendRevision, snapshotSection } from "@/lib/manual-version"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
+import { isFilenameLikeCaption } from "@/lib/caption-quality"
 import { resolveMediaFetchUrl } from "@/lib/resolve-export-image"
 import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
@@ -725,6 +726,13 @@ function SectionEditor({
   }
 
   const regenerate = async () => {
+    if (
+      !window.confirm(
+        `「${section.title}」をAIで再生成します。現在の本文は版履歴に残りますが、表示内容は置き換わります。よろしいですか？`,
+      )
+    ) {
+      return
+    }
     setRegenerating(true)
     setRegenError(null)
     try {
@@ -831,6 +839,33 @@ function SectionEditor({
           </TooltipTrigger>
           <TooltipContent>このセクションのみ再生成します。他セクションには影響しません</TooltipContent>
         </Tooltip>
+      )}
+      {section.status !== "approved" ? (
+        <Button
+          variant="default"
+          size={isMobile ? "default" : "sm"}
+          className={cn("gap-1", isMobile && "h-10 flex-1")}
+          onClick={() => {
+            onUpdate((s) => ({ ...s, status: "approved", updatedAt: today() }))
+            onLog(`セクション「${section.title}」を確定`)
+          }}
+        >
+          <Check className="size-3.5" />
+          確定
+        </Button>
+      ) : (
+        <Button
+          variant="outline"
+          size={isMobile ? "default" : "sm"}
+          className={cn("gap-1", isMobile && "h-10 flex-1")}
+          onClick={() => {
+            onUpdate((s) => ({ ...s, status: "review", updatedAt: today() }))
+            onLog(`セクション「${section.title}」を編集中に戻した`)
+          }}
+        >
+          <Pencil className="size-3.5" />
+          編集中に戻す
+        </Button>
       )}
     </div>
   )
@@ -1259,7 +1294,9 @@ function BlockImageSection({
           size="sm"
           variant="outline"
           className="h-7 gap-1 border bg-background px-2 text-[11px] text-muted-foreground"
-          onClick={onRemoveImage}
+          onClick={() => {
+            if (window.confirm("この画像を削除しますか？")) onRemoveImage()
+          }}
         >
           <Trash2 className="size-3" />
           削除
@@ -1321,11 +1358,15 @@ function BlockImageSection({
                 rows={2}
                 className="min-h-[2.75rem] resize-y border border-input bg-background px-2.5 py-2 text-[13px] leading-relaxed text-foreground shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
-              {!captionDraft.trim() && (
+              {!captionDraft.trim() ? (
                 <p className="mt-1.5 text-[11px] text-[var(--semantic-warning-fg)]">
                   未入力のまま公開すると図の意図が伝わりにくくなります
                 </p>
-              )}
+              ) : isFilenameLikeCaption(captionDraft, image.name) ? (
+                <p className="mt-1.5 text-[11px] text-[var(--semantic-warning-fg)]">
+                  ファイル名のような説明です。画面上の操作内容が分かる一文に書き換えてください
+                </p>
+              ) : null}
             </figcaption>
           </figure>
         </div>

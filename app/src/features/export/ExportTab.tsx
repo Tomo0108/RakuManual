@@ -5,6 +5,7 @@ import { VISIBILITY_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { exportManualPdfClient } from "@/lib/export-pdf-client"
+import { downloadHtmlFile, exportProjectHtml } from "@/lib/api/export"
 import {
   buildLeafSectionNumberMap,
   compareSectionNumbers,
@@ -62,7 +63,7 @@ interface Props {
 }
 
 export function ExportTab({ project, updateProject }: Props) {
-  const [format, setFormat] = useState<"pdf" | "pptx">("pdf")
+  const [format, setFormat] = useState<"pdf" | "pptx" | "html">("pdf")
   const [templates, setTemplates] = useState<DesignTemplate[]>(FALLBACK_TEMPLATES)
   const [template, setTemplate] = useState("corporate")
   const [range, setRange] = useState("all")
@@ -121,6 +122,17 @@ export function ExportTab({ project, updateProject }: Props) {
     setExported(false)
     setExportError(null)
     try {
+      if (format === "html") {
+        const { html, filename } = await exportProjectHtml(project.id, {
+          template,
+          includeFlow,
+          imageMode: imageMode === "none" ? "none" : "expand",
+          sectionIds: range === "all" ? undefined : [range],
+        })
+        downloadHtmlFile(html, filename)
+        setExported(true)
+        return
+      }
       const opts = {
         includeImages: imageMode !== "none",
         includeFlow,
@@ -308,11 +320,12 @@ export function ExportTab({ project, updateProject }: Props) {
         </Card>
 
         {/* 形式 */}
-        <div className="mt-6 grid grid-cols-2 gap-3">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {(
             [
               { id: "pdf", icon: FileText, title: "PDF", desc: "PowerPointと同じスライドデザインで出力（閲覧・印刷用）" },
               { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "スライド形式で出力（長文は複数スライドに分割）" },
+              { id: "html", icon: Globe, title: "HTML", desc: "ブラウザで開ける単一ファイル（社内Wiki貼付・簡易配布）" },
             ] as const
           ).map((f) => (
             <Card
@@ -439,7 +452,9 @@ export function ExportTab({ project, updateProject }: Props) {
             disabled={exporting || project.sections.length === 0}
           >
             <Download className="size-4" />
-            {exporting ? "出力中…" : `${format === "pdf" ? "PDF" : "PowerPoint"} を出力`}
+            {exporting
+              ? "出力中…"
+              : `${format === "pdf" ? "PDF" : format === "pptx" ? "PowerPoint" : "HTML"} を出力`}
           </Button>
           {project.sections.length === 0 && (
             <span className="text-xs text-muted-foreground">マニュアルを生成すると出力できます</span>
@@ -449,7 +464,9 @@ export function ExportTab({ project, updateProject }: Props) {
               <Check className="size-4" />
               {format === "pptx"
                 ? `${project.name}.pptx をダウンロードしました`
-                : `${project.name}.pdf をダウンロードしました`}
+                : format === "html"
+                  ? `${project.name}.html をダウンロードしました`
+                  : `${project.name}.pdf をダウンロードしました`}
             </span>
           )}
           {exportError && (
