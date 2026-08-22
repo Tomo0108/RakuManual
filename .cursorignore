@@ -1,0 +1,8 @@
+# シークレット（AI エージェントの読み取り対象外）
+.env
+.env.*
+!.env.example
+
+# ローカル DB・バックアップ
+server/data/
+backups/
