@@ -505,6 +505,49 @@ function edgeLabelBox(
   return { x: anchor.x + 0.05, y: anchor.y - lh / 2, w: lw, h: lh }
 }
 
+type LabelRect = { x: number; y: number; w: number; h: number }
+
+function labelRectHitsBox(rect: LabelRect, box: FlowBox, pad = 0.03): boolean {
+  return (
+    rect.x < box.right + pad &&
+    rect.x + rect.w > box.left - pad &&
+    rect.y < box.bottom + pad &&
+    rect.y + rect.h > box.top - pad
+  )
+}
+
+/** 分岐元・分岐先以外の図形と重なる場合、矢印方向に沿ってずらす */
+function nudgeEdgeLabelBox(
+  box: LabelRect,
+  anchor: EdgeLabelAnchor,
+  boxes: Map<string, FlowBox>,
+  sourceId: string,
+  targetId: string,
+): LabelRect {
+  const obstacles = [...boxes.entries()]
+    .filter(([id]) => id !== sourceId && id !== targetId)
+    .map(([, b]) => b)
+  if (obstacles.length === 0) return box
+
+  let cur = { ...box }
+  const step = 0.07
+  for (let i = 0; i < 12; i++) {
+    if (!obstacles.some((b) => labelRectHitsBox(cur, b))) return cur
+    if (anchor.axis === "h") {
+      cur = { ...cur, y: cur.y - step }
+    } else {
+      cur = { ...cur, x: cur.x + step }
+    }
+  }
+  return cur
+}
+
+type PendingEdgeLabel = {
+  label: string
+  box: LabelRect
+  color: string
+}
+
 type FlowNodeVisual = {
   fill: string
   line: string
@@ -1084,6 +1127,7 @@ function drawFlowOnSlide(
   let hasForward = false
   let hasBackward = false
   let detourSlot = 0
+  const pendingEdgeLabels: PendingEdgeLabel[] = []
 
   for (const e of edges as FlowEdge[]) {
     const a = boxes.get(e.source)
@@ -1110,16 +1154,17 @@ function drawFlowOnSlide(
       typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
       const anchor = edgeLabelAnchor(a, b, backward, sameCol)
-      const box = edgeLabelBox(label, anchor)
-      gfx.addText(label, {
-        x: box.x,
-        y: box.y,
-        w: box.w,
-        h: box.h,
-        fontSize: 9,
+      const box = nudgeEdgeLabelBox(
+        edgeLabelBox(label, anchor),
+        anchor,
+        boxes,
+        e.source,
+        e.target,
+      )
+      pendingEdgeLabels.push({
+        label,
+        box,
         color: backward ? "595959" : "000000",
-        align: "center",
-        valign: "middle",
       })
     }
   }
@@ -1181,6 +1226,19 @@ function drawFlowOnSlide(
     } else {
       gfx.addText(body, { ...textOpts, bold: kind === "start" || kind === "end" })
     }
+  }
+
+  for (const item of pendingEdgeLabels) {
+    gfx.addText(item.label, {
+      x: item.box.x,
+      y: item.box.y,
+      w: item.box.w,
+      h: item.box.h,
+      fontSize: 9,
+      color: item.color,
+      align: "center",
+      valign: "middle",
+    })
   }
 
   const offPage = partition?.offPage ?? []
