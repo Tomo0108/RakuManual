@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Bell, Palette, Settings } from "lucide-react"
+import { Bell, Palette, RotateCcw, Settings } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import {
+  resetClientSettingsToDefault,
+  resetTutorialHints,
+} from "@/lib/client-settings"
 import { ACCENT_OPTIONS, type AccentId } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
 import {
@@ -179,6 +183,57 @@ export function AdminSettingsPage({ isAdmin, accent, setAccent }: Props) {
                 />
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <RotateCcw className="size-4" />
+              リセット
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              操作案内の再表示や、見た目・通知の初期化ができます。
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:flex-1"
+                onClick={() => {
+                  resetTutorialHints()
+                  setError(null)
+                  setMessage("チュートリアルをリセットしました")
+                }}
+              >
+                チュートリアルをリセット
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:flex-1"
+                onClick={() => {
+                  setError(null)
+                  void resetClientSettingsToDefault()
+                    .then(({ accent: nextAccent, notify: nextNotify }) => {
+                      setAccent(nextAccent)
+                      setNotify(nextNotify)
+                      setMessage("設定をデフォルトに戻しました")
+                    })
+                    .catch((err) =>
+                      setError(err instanceof Error ? err.message : "リセットに失敗しました"),
+                    )
+                }}
+              >
+                設定をデフォルトに戻す
+              </Button>
+            </div>
+            <ul className="space-y-1 text-[11px] leading-snug text-muted-foreground">
+              <li>・チュートリアル: フロー図ロック案内・深掘りの戻るボタン案内などを再表示します</li>
+              <li>・設定: アクセントカラーと通知設定を初期状態に戻します</li>
+            </ul>
           </CardContent>
         </Card>
 

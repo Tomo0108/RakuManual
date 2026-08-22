@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -32,6 +32,14 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { HintBubble } from "@/components/HintBubble"
+import {
+  hasSeenDeepdiveStepListBackIntro,
+  markDeepdiveStepListBackIntroSeen,
+} from "./deepdive-hints"
+
+/** 同一ステップの質問再取得を抑止（トークン浪費防止） */
+const deepdiveQuestionsCache = new Map<string, string[]>()
 
 const STATUS_STYLE: Record<DeepDiveStatus, string> = {
   "not-started": REVIEW_STATUS["not-started"],
@@ -87,6 +95,8 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
   )
   const [mobileView, setMobileView] = useState<"list" | "detail">("list")
   const [draft, setDraft] = useState("")
+  const stepListBackRef = useRef<HTMLButtonElement>(null)
+  const [stepListBackBubble, setStepListBackBubble] = useState(false)
 
   const selected = items.find((i) => i.stepId === selectedId) ?? null
   const [dynamicQuestions, setDynamicQuestions] = useState<string[] | null>(null)
@@ -101,21 +111,34 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
       setQuestionsError(null)
       return
     }
-    let cancelled = false
+    const stepId = selected.stepId
+    const importance = selected.importance
+    const cacheKey = `${project.id}:${stepId}:${importance}`
+    const cached = deepdiveQuestionsCache.get(cacheKey)
+    if (cached) {
+      setDynamicQuestions(cached)
+      setQuestionsError(null)
+      return
+    }
+
+    const controller = new AbortController()
     setDynamicQuestions(null)
     setQuestionsError(null)
-    void fetchDeepdiveQuestions(project.id, selected.stepId)
+    void fetchDeepdiveQuestions(project.id, stepId, { signal: controller.signal })
       .then((res) => {
-        if (!cancelled && res.questions?.length) setDynamicQuestions(res.questions)
-      })
-      .catch((err: unknown) => {
-        // 固定質問で継続できるが、AI質問が使えていないことは明示する
-        if (!cancelled) {
-          setQuestionsError(describeAiError(err, "AIによる質問の取得に失敗しました"))
+        if (controller.signal.aborted) return
+        if (res.questions?.length) {
+          deepdiveQuestionsCache.set(cacheKey, res.questions)
+          setDynamicQuestions(res.questions)
         }
       })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        // 固定質問で継続できるが、AI質問が使えていないことは明示する
+        setQuestionsError(describeAiError(err, "AIによる質問の取得に失敗しました"))
+      })
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [project.id, selected?.stepId, selected?.importance])
 
@@ -144,16 +167,48 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
     if (isMobile) setMobileView("detail")
   }
 
+  const advanceToNextStep = useCallback(
+    (completedStepId: string) => {
+      const curIdx = items.findIndex((i) => i.stepId === completedStepId)
+      const next =
+        items.slice(curIdx + 1).find((i) => i.stepId !== completedStepId && i.status !== "done") ??
+        items.find((i) => i.stepId !== completedStepId && i.status !== "done")
+      if (next) {
+        setSelectedId(next.stepId)
+        if (isMobile) setMobileView("detail")
+      }
+    },
+    [items, isMobile],
+  )
+
+  useEffect(() => {
+    if (!isMobile || mobileView !== "detail" || hasSeenDeepdiveStepListBackIntro()) return
+    const timer = window.setTimeout(() => setStepListBackBubble(true), 400)
+    return () => window.clearTimeout(timer)
+  }, [isMobile, mobileView])
+
+  const dismissStepListBackBubble = () => {
+    markDeepdiveStepListBackIntroSeen()
+    setStepListBackBubble(false)
+  }
+
   const submitAnswer = () => {
     if (!selected || !currentQuestion || !draft.trim()) return
     const answer = draft.trim()
     const willComplete = selected.answers.length + 1 >= questions.length
-    updateAnswers(selected.stepId, (d) => ({
+    const stepId = selected.stepId
+    updateAnswers(stepId, (d) => ({
       ...d,
       status: willComplete ? "done" : "in-progress",
       answers: [...d.answers, { question: currentQuestion, answer }],
     }))
     setDraft("")
+    if (willComplete) advanceToNextStep(stepId)
+  }
+
+  const markStepDone = (stepId: string) => {
+    update(stepId, (d) => ({ ...d, status: "done" }))
+    advanceToNextStep(stepId)
   }
 
   const statusForAnswerCount = (count: number, current: DeepDiveStatus): DeepDiveStatus => {
@@ -223,21 +278,33 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
 
   if (isMobile && mobileView === "detail" && selected) {
     return (
-      <StepDetailPanel
-        selected={selected}
-        manualExists={project.sections.length > 0}
-        questions={questions}
-        currentQuestion={currentQuestion}
-        questionsError={questionsError}
-        draft={draft}
-        setDraft={setDraft}
-        onSubmit={submitAnswer}
-        onUpdate={(updater) => update(selected.stepId, updater)}
-        onEditAnswer={editAnswer}
-        onDeleteAnswer={deleteAnswer}
-        isMobile
-        onBack={() => setMobileView("list")}
-      />
+      <>
+        <StepDetailPanel
+          selected={selected}
+          manualExists={project.sections.length > 0}
+          questions={questions}
+          currentQuestion={currentQuestion}
+          questionsError={questionsError}
+          draft={draft}
+          setDraft={setDraft}
+          onSubmit={submitAnswer}
+          onUpdate={(updater) => update(selected.stepId, updater)}
+          onMarkDone={() => markStepDone(selected.stepId)}
+          onEditAnswer={editAnswer}
+          onDeleteAnswer={deleteAnswer}
+          isMobile
+          stepListBackRef={stepListBackRef}
+          onBack={() => setMobileView("list")}
+        />
+        <HintBubble
+          anchorRef={stepListBackRef}
+          open={stepListBackBubble}
+          message="ここから全体のステップに戻れます"
+          onDismiss={dismissStepListBackBubble}
+          placement="bottom"
+          align="start"
+        />
+      </>
     )
   }
 
@@ -263,6 +330,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
             setDraft={setDraft}
             onSubmit={submitAnswer}
             onUpdate={(updater) => update(selected.stepId, updater)}
+            onMarkDone={() => markStepDone(selected.stepId)}
             onEditAnswer={editAnswer}
             onDeleteAnswer={deleteAnswer}
           />
@@ -369,9 +437,11 @@ function StepDetailPanel({
   setDraft,
   onSubmit,
   onUpdate,
+  onMarkDone,
   onEditAnswer,
   onDeleteAnswer,
   isMobile,
+  stepListBackRef,
   onBack,
 }: {
   selected: DeepDiveItem
@@ -383,9 +453,11 @@ function StepDetailPanel({
   setDraft: (v: string) => void
   onSubmit: () => void
   onUpdate: (updater: (d: DeepDiveItem) => DeepDiveItem) => void
+  onMarkDone: () => void
   onEditAnswer: (index: number, answer: string) => void
   onDeleteAnswer: (index: number) => void
   isMobile?: boolean
+  stepListBackRef?: React.RefObject<HTMLButtonElement | null>
   onBack?: () => void
 }) {
   const importanceSelect = (
@@ -426,9 +498,15 @@ function StepDetailPanel({
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <div className={cn("border-b px-4 py-3.5 md:px-6", isMobile && "flex flex-col gap-3")}>
         {isMobile && onBack && (
-          <Button variant="ghost" size="sm" className="-ml-2 h-9 gap-1 px-2" onClick={onBack}>
+          <Button
+            ref={stepListBackRef}
+            variant="ghost"
+            size="sm"
+            className="-ml-2 h-9 gap-1 px-2"
+            onClick={onBack}
+          >
             <ArrowLeft className="size-4" />
-            ステップ一覧
+            全体のステップ
           </Button>
         )}
         <div className={cn("flex gap-3", isMobile ? "flex-col" : "items-center")}>
@@ -464,7 +542,7 @@ function StepDetailPanel({
                   size="sm"
                   variant="outline"
                   className="mt-2 h-7 gap-1 bg-background text-xs"
-                  onClick={() => onUpdate((d) => ({ ...d, status: "done" }))}
+                  onClick={onMarkDone}
                 >
                   <Check className="size-3.5" />
                   確認済みにする

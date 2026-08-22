@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { CircleHelp } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { CircleHelp, Lock } from "lucide-react"
 import { WARNING_BOX } from "@/lib/semantic-styles"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { vibrateLockButtonElement } from "./lock-button-vibrate"
 
 interface Props {
   isMobile: boolean
@@ -19,6 +20,15 @@ interface Props {
 /** フロー編集の操作説明 */
 export function FlowHelpButton({ isMobile, isLocked }: Props) {
   const [open, setOpen] = useState(false)
+  const lockIconRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!open || !isLocked) return
+    const timer = window.setTimeout(() => {
+      vibrateLockButtonElement(lockIconRef.current)
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [open, isLocked])
 
   const tips = isMobile
     ? [
@@ -68,7 +78,9 @@ export function FlowHelpButton({ isMobile, isLocked }: Props) {
             ))}
             {isLocked && (
               <li className={cn("flex gap-2 rounded-md px-2.5 py-2", WARNING_BOX)}>
-                <span>🔒</span>
+                <span ref={lockIconRef} className="inline-flex shrink-0 pt-0.5 text-primary">
+                  <Lock className="size-4" aria-hidden />
+                </span>
                 <span>ロック中のため編集できません。ツールバーのロックを解除してください。</span>
               </li>
             )}

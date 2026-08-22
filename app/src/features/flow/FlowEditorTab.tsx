@@ -150,6 +150,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [aiThinking, setAiThinking] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
+  const [genFallbackNotice, setGenFallbackNotice] = useState<string | null>(null)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
@@ -912,8 +913,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setGenerating(true)
     setGenProgress(0)
     setAiError(null)
+    setGenFallbackNotice(null)
     try {
-      const { flow: aiFlow } = await aiGenerateFlow(project.id, (p) => setGenProgress(p))
+      const { flow: aiFlow, meta } = await aiGenerateFlow(project.id, (p) => setGenProgress(p))
+      if (meta?.usedLlmStructure === false) {
+        setGenFallbackNotice(
+          "AIの構造化に失敗したためテンプレートから生成しました。内容を確認し、必要なら再生成してください。",
+        )
+      }
       const generated = stampFlowHearing(polishFlow(autoLayout(aiFlow)), project.hearingAnswers)
       commit(() => generated)
       // ジョブ実行中にサーバー側が更新されている可能性があるため最新を取り直して合成する
@@ -1208,6 +1215,20 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         onRegenerate={() => setRegenConfirmOpen(true)}
         isMobile={isMobile}
       />
+      {genFallbackNotice && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-[var(--semantic-warning-border)] bg-[color-mix(in_oklch,var(--semantic-warning-bg)_45%,transparent)] px-3 py-2 text-xs text-foreground md:text-[13px]">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--semantic-warning-fg)]" />
+          <span className="min-w-0 flex-1">{genFallbackNotice}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 px-2"
+            onClick={() => setGenFallbackNotice(null)}
+          >
+            閉じる
+          </Button>
+        </div>
+      )}
       {aiError && (
         <div className="flex shrink-0 items-start gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive md:text-[13px]">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />

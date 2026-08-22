@@ -8,6 +8,7 @@ import path from "node:path"
 import { loadEnvFiles } from "./llm/config.js"
 import { getDb, getProjectForUser, UPLOADS_DIR } from "./db.js"
 import { registerAiJobHandlers } from "./ai/jobs-handlers.js"
+import { recoverStaleJobs } from "./jobs.js"
 import {
   registerAdminRoutes,
   registerAuthRoutes,
@@ -28,9 +29,54 @@ async function main() {
   loadEnvFiles()
   fs.mkdirSync(UPLOADS_DIR, { recursive: true })
   getDb()
+  recoverStaleJobs()
   registerAiJobHandlers()
 
   const app = Fastify({ logger: true })
+
+  // ボディなし POST + Content-Type: application/json を {} として受理（Fastify 既定の 400 を防ぐ）
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    const raw = typeof body === "string" ? body : ""
+    if (!raw.trim()) {
+      done(null, {})
+      return
+    }
+    try {
+      done(null, JSON.parse(raw) as unknown)
+    } catch (err) {
+      done(err as Error, undefined)
+    }
+  })
+
+  app.setErrorHandler((err, request, reply) => {
+    const code = (err as { code?: string }).code
+    const status =
+      typeof (err as { statusCode?: number }).statusCode === "number"
+        ? (err as { statusCode: number }).statusCode
+        : 500
+
+    if (code === "FST_ERR_CTP_EMPTY_JSON_BODY") {
+      return reply.status(400).send({
+        error: "リクエスト本文が空です。JSON（例: {}）で送信してください。",
+        code,
+      })
+    }
+    if (code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
+      return reply.status(415).send({
+        error: "Content-Type は application/json を指定してください。",
+        code,
+      })
+    }
+
+    request.log.error(err)
+    const message =
+      status >= 500
+        ? "サーバーエラーが発生しました"
+        : err instanceof Error && err.message
+          ? err.message
+          : "リクエストエラー"
+    return reply.status(status).send({ error: message, code })
+  })
 
   await app.register(cors, {
     origin: (origin, cb) => {

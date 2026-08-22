@@ -164,20 +164,43 @@ export async function generateFlowFromLlm(
 ): Promise<{ flow: FlowState; provider: string; tokens: number; usedLlmStructure: boolean }> {
   const adapter = getLlmAdapter()
   const messages = buildFlowGenerationMessages(project.name, buildHearingContext(project))
-  const llm = await adapter.complete(messages, {
-      maxTokens: 2048,
-      context: { userId, projectId: project.id, action: "flow_generate" },
-    },
-  )
 
-  try {
-    const parsed = JSON.parse(extractJson(llm.text)) as unknown
-    const flow = normalizeFlow(parsed, project.name)
-    if (flow) {
-      return { flow: autoLayout(flow), provider: llm.provider, tokens: llm.tokens, usedLlmStructure: true }
+  const tryOnce = async (msgs: typeof messages) => {
+    const llm = await adapter.complete(msgs, {
+      maxTokens: 4096,
+      context: { userId, projectId: project.id, action: "flow_generate" },
+    })
+    try {
+      const parsed = JSON.parse(extractJson(llm.text)) as unknown
+      const flow = normalizeFlow(parsed, project.name)
+      if (flow) {
+        return { flow: autoLayout(flow), provider: llm.provider, tokens: llm.tokens, usedLlmStructure: true as const }
+      }
+    } catch {
+      /* retry / fallback */
     }
-  } catch {
-    /* fallback */
+    return { provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false as const, flow: null as FlowState | null }
+  }
+
+  let attempt = await tryOnce(messages)
+  if (!attempt.flow) {
+    const retryMessages = [
+      ...messages,
+      {
+        role: "user" as const,
+        content:
+          "前回の出力は不正または空でした。lanes/nodes/edges を含む非空のフロー JSON のみを再出力してください。",
+      },
+    ]
+    attempt = await tryOnce(retryMessages)
+  }
+  if (attempt.flow) {
+    return {
+      flow: attempt.flow,
+      provider: attempt.provider,
+      tokens: attempt.tokens,
+      usedLlmStructure: true,
+    }
   }
 
   // モックでもヒアリング由来のラベルを少し反映
@@ -193,7 +216,12 @@ export async function generateFlowFromLlm(
       }
     })
   }
-  return { flow: autoLayout(flow), provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false }
+  return {
+    flow: autoLayout(flow),
+    provider: attempt.provider,
+    tokens: attempt.tokens,
+    usedLlmStructure: false,
+  }
 }
 
 type DeepdiveLike = {
@@ -324,20 +352,53 @@ export async function generateManualFromLlm(
   usedLlmStructure: boolean
 }> {
   const adapter = getLlmAdapter()
-  const llm = await adapter.complete(buildManualGenerationMessages(project), {
-      maxTokens: 3000,
-      context: { userId, projectId: project.id, action: "manual_generate" },
-    },
-  )
+  const baseMessages = buildManualGenerationMessages(project)
 
-  try {
-    const parsed = JSON.parse(extractJson(llm.text)) as unknown
-    const sections = normalizeSections(parsed, project)
-    if (sections) {
-      return { sections, provider: llm.provider, tokens: llm.tokens, usedLlmStructure: true }
+  const tryOnce = async (messages: ReturnType<typeof buildManualGenerationMessages>) => {
+    const llm = await adapter.complete(messages, {
+      maxTokens: 8000,
+      context: { userId, projectId: project.id, action: "manual_generate" },
+    })
+    try {
+      const parsed = JSON.parse(extractJson(llm.text)) as unknown
+      const sections = normalizeSections(parsed, project)
+      if (sections) {
+        return {
+          sections,
+          provider: llm.provider,
+          tokens: llm.tokens,
+          usedLlmStructure: true as const,
+        }
+      }
+    } catch {
+      /* retry / fallback */
     }
-  } catch {
-    /* fallback */
+    return {
+      sections: null as Project["sections"] | null,
+      provider: llm.provider,
+      tokens: llm.tokens,
+      usedLlmStructure: false as const,
+    }
+  }
+
+  let attempt = await tryOnce(baseMessages)
+  if (!attempt.sections) {
+    attempt = await tryOnce([
+      ...baseMessages,
+      {
+        role: "user",
+        content:
+          "前回の出力は sections が空または不正でした。deepdive 各項目に対応する非空の sections 配列 JSON のみを再出力してください。",
+      },
+    ])
+  }
+  if (attempt.sections) {
+    return {
+      sections: attempt.sections,
+      provider: attempt.provider,
+      tokens: attempt.tokens,
+      usedLlmStructure: true,
+    }
   }
 
   const sections = generateManualSectionsMock(project)
@@ -366,7 +427,12 @@ export async function generateManualFromLlm(
       }
     }
   }
-  return { sections, provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false }
+  return {
+    sections,
+    provider: attempt.provider,
+    tokens: attempt.tokens,
+    usedLlmStructure: false,
+  }
 }
 
 export async function generateNewSectionFromLlm(

@@ -12,12 +12,15 @@ export interface ConnectorInsertTarget {
 
 export interface FlowInteractionContext {
   locked: boolean
+  /** ロック中に編集操作が試みられたとき（ロックボタン点滅など） */
+  onLockedEditAttempt?: () => void
   onRequestInsert: (target: ConnectorInsertTarget, anchor?: { x: number; y: number }) => void
   onInsertConnector: (connector: FlowConnector, target: ConnectorInsertTarget) => void
 }
 
 let ctx: FlowInteractionContext = {
   locked: false,
+  onLockedEditAttempt: undefined,
   onRequestInsert: () => {},
   onInsertConnector: () => {},
 }

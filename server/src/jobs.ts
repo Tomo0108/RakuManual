@@ -20,8 +20,27 @@ type JobHandler = (job: JobRecord, update: (progress: number, message?: string) 
 const handlers = new Map<string, JobHandler>()
 const running = new Set<string>()
 
+/** 同時実行の上限（OpenRouter 429 予防） */
+const MAX_PARALLEL = 2
+/** 1ジョブの最大実行時間 */
+const JOB_TIMEOUT_MS = 3 * 60 * 1000
+
 export function registerJobHandler(type: string, handler: JobHandler) {
   handlers.set(type, handler)
+}
+
+/** 起動時: running のまま残ったジョブを failed に戻す */
+export function recoverStaleJobs() {
+  const now = Date.now()
+  const result = getDb()
+    .prepare(
+      `UPDATE jobs SET status = 'failed', error = ?, progress = 100, updated_at = ?
+       WHERE status = 'running'`,
+    )
+    .run("サーバー再起動により中断されました。再実行してください。", now)
+  if (result.changes > 0) {
+    console.warn(`[jobs] recovered ${result.changes} stale running job(s)`)
+  }
 }
 
 export function createJob(input: {
@@ -104,36 +123,72 @@ function setJobState(
     )
 }
 
-async function processNext() {
-  const row = getDb()
-    .prepare(
-      `SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`,
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    promise.then(
+      (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
     )
+  })
+}
+
+/** queued → running を原子的に取得（競合時は null） */
+function claimNextQueuedJob(): string | null {
+  const row = getDb()
+    .prepare(`SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`)
     .get() as { id: string } | undefined
-  if (!row || running.has(row.id)) return
-  running.add(row.id)
+  if (!row) return null
+  const claimed = getDb()
+    .prepare(
+      `UPDATE jobs SET status = 'running', progress = 5, updated_at = ? WHERE id = ? AND status = 'queued'`,
+    )
+    .run(Date.now(), row.id)
+  if (claimed.changes === 0) return null
+  return row.id
+}
+
+async function executeClaimedJob(jobId: string) {
+  running.add(jobId)
   try {
-    const job = getJob(row.id)
+    const job = getJob(jobId)
     if (!job) return
     const handler = handlers.get(job.type)
     if (!handler) {
       setJobState(job.id, { status: "failed", error: `Unknown job type: ${job.type}`, progress: 100 })
       return
     }
-    setJobState(job.id, { status: "running", progress: 5 })
-    const result = await handler(job, (progress) => {
-      setJobState(job.id, { progress: Math.max(0, Math.min(99, progress)), status: "running" })
-    })
+    const result = await withTimeout(
+      handler(job, (progress) => {
+        setJobState(job.id, { progress: Math.max(0, Math.min(99, progress)), status: "running" })
+      }),
+      JOB_TIMEOUT_MS,
+      `Job ${job.type}`,
+    )
     setJobState(job.id, { status: "completed", progress: 100, result, error: null })
   } catch (err) {
-    setJobState(row.id, {
+    setJobState(jobId, {
       status: "failed",
       progress: 100,
       error: err instanceof Error ? err.message : String(err),
     })
   } finally {
-    running.delete(row.id)
+    running.delete(jobId)
     queueMicrotask(() => void processNext())
+  }
+}
+
+async function processNext() {
+  while (running.size < MAX_PARALLEL) {
+    const jobId = claimNextQueuedJob()
+    if (!jobId) return
+    void executeClaimedJob(jobId)
   }
 }
 

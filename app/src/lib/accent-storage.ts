@@ -1,7 +1,7 @@
 import { ACCENT_OPTIONS, type AccentId } from "@/lib/mock-data"
 
 const STORAGE_KEY = "rakumanual:accent"
-const DEFAULT_ACCENT: AccentId = "red"
+export const DEFAULT_ACCENT: AccentId = "red"
 const VALID_IDS = new Set(ACCENT_OPTIONS.map((o) => o.id))
 
 function isAccentId(value: string): value is AccentId {

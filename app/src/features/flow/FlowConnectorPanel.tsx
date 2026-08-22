@@ -13,6 +13,7 @@ interface Props {
   onSelect: (connector: FlowConnector) => void
   onDragStart: (e: React.DragEvent, connector: FlowConnector) => void
   disabled?: boolean
+  onLockedEditAttempt?: () => void
   mode?: ConnectorInsertMode
   targetKind?: StepKind
 }
@@ -23,6 +24,7 @@ export function FlowConnectorPanel({
   onSelect,
   onDragStart,
   disabled,
+  onLockedEditAttempt,
   mode = "append",
   targetKind,
 }: Props) {
@@ -51,7 +53,7 @@ export function FlowConnectorPanel({
     <aside
       className={cn(
         "flex w-[248px] shrink-0 flex-col border-r bg-muted/20",
-        disabled && "pointer-events-none opacity-50",
+        disabled && "opacity-50",
       )}
     >
       <div
@@ -69,13 +71,18 @@ export function FlowConnectorPanel({
           <PanelLeftClose className="size-3.5" />
         </Button>
       </div>
-      <ConnectorPicker
-        mode={mode}
-        targetKind={targetKind}
-        onSelect={onSelect}
-        onDragStart={onDragStart}
-        className="min-h-0 flex-1"
-      />
+      <div
+        className={cn("min-h-0 flex-1", disabled && onLockedEditAttempt && "cursor-not-allowed")}
+        onClick={disabled ? onLockedEditAttempt : undefined}
+      >
+        <ConnectorPicker
+          mode={mode}
+          targetKind={targetKind}
+          onSelect={onSelect}
+          onDragStart={onDragStart}
+          className={cn("min-h-0 flex-1", disabled && "pointer-events-none")}
+        />
+      </div>
       <div className="shrink-0 border-t px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
         線やノードの <span className="font-mono text-primary">+</span> からも挿入できます
       </div>

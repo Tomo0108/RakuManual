@@ -44,6 +44,7 @@ export function TeamAxisPanel({
   viewport,
   activeLane,
   editable = false,
+  onLockedEditAttempt,
   onRenameLane,
   onAddLane,
   onDeleteLane,
@@ -53,6 +54,7 @@ export function TeamAxisPanel({
   viewport: FlowViewport
   activeLane?: string
   editable?: boolean
+  onLockedEditAttempt?: () => void
   onRenameLane?: (index: number, name: string) => void
   onAddLane?: (name: string) => void
   onDeleteLane?: (index: number, moveToLane?: string) => void
@@ -64,7 +66,10 @@ export function TeamAxisPanel({
   const [moveTo, setMoveTo] = useState("")
 
   const startRename = (index: number, current: string) => {
-    if (!editable) return
+    if (!editable) {
+      onLockedEditAttempt?.()
+      return
+    }
     setEditingIndex(index)
     setDraft(current)
   }
@@ -266,11 +271,13 @@ export function SystemAxisPanel({
   viewport,
   onUpdateColumn,
   readOnly = false,
+  onLockedEditAttempt,
 }: {
   columnSystems: ColumnSystemEntry[]
   viewport: FlowViewport
   onUpdateColumn?: (col: number, entry: ColumnSystemEntry) => void
   readOnly?: boolean
+  onLockedEditAttempt?: () => void
 }) {
   const totalH = SYSTEM_ROW_HEIGHT + AXIS_HEADER_HEIGHT
   const columnCount = columnSystems.length
@@ -296,6 +303,7 @@ export function SystemAxisPanel({
               left={screen.x}
               width={colW}
               readOnly={readOnly}
+              onLockedEditAttempt={onLockedEditAttempt}
               onSave={(next) => onUpdateColumn?.(col, next)}
             />
           )
@@ -310,10 +318,12 @@ export function MobileSystemAxisPanel({
   columnSystems,
   viewport,
   onUpdateColumn,
+  onLockedEditAttempt,
 }: {
   columnSystems: ColumnSystemEntry[]
   viewport: FlowViewport
   onUpdateColumn?: (col: number, entry: ColumnSystemEntry) => void
+  onLockedEditAttempt?: () => void
 }) {
   const columnCount = columnSystems.length
   if (columnCount === 0) return null
@@ -337,6 +347,7 @@ export function MobileSystemAxisPanel({
               left={screen.x}
               width={colW}
               onSave={onUpdateColumn ? (next) => onUpdateColumn(col, next) : undefined}
+              onLockedEditAttempt={onLockedEditAttempt}
             />
           )
         })}
@@ -394,12 +405,14 @@ function MobileSystemCell({
   left,
   width,
   onSave,
+  onLockedEditAttempt,
 }: {
   col: number
   entry: ColumnSystemEntry
   left: number
   width: number
   onSave?: (entry: ColumnSystemEntry) => void
+  onLockedEditAttempt?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [draftLabel, setDraftLabel] = useState(entry.label)
@@ -408,7 +421,10 @@ function MobileSystemCell({
   const display = entry.label || "—"
 
   const openEdit = () => {
-    if (!onSave) return
+    if (!onSave) {
+      onLockedEditAttempt?.()
+      return
+    }
     setDraftLabel(entry.label)
     setDraftUrl(entry.url ?? "")
     setOpen(true)
@@ -528,6 +544,7 @@ function SystemCell({
   left,
   width,
   readOnly,
+  onLockedEditAttempt,
   onSave,
 }: {
   col: number
@@ -535,6 +552,7 @@ function SystemCell({
   left: number
   width: number
   readOnly: boolean
+  onLockedEditAttempt?: () => void
   onSave: (entry: ColumnSystemEntry) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -542,7 +560,10 @@ function SystemCell({
   const [draftUrl, setDraftUrl] = useState(entry.url ?? "")
 
   const openEdit = () => {
-    if (readOnly) return
+    if (readOnly) {
+      onLockedEditAttempt?.()
+      return
+    }
     setDraftLabel(entry.label)
     setDraftUrl(entry.url ?? "")
     setOpen(true)

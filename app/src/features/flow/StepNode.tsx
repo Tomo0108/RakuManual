@@ -19,6 +19,7 @@ export interface StepNodeContext {
   lanes: string[]
   onRename: (id: string, label: string) => void
   locked?: boolean
+  onLockedEditAttempt?: () => void
 }
 
 let ctx: StepNodeContext = { lanes: [], onRename: () => {} }
@@ -103,7 +104,10 @@ export const StepNode = memo(function StepNode({ id, data, selected }: NodeProps
   }
 
   const startEdit = (e: React.MouseEvent) => {
-    if (ctx.locked) return
+    if (ctx.locked) {
+      ctx.onLockedEditAttempt?.()
+      return
+    }
     e.stopPropagation()
     setDraft(data.label)
     setEditing(true)

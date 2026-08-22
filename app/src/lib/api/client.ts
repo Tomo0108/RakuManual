@@ -14,27 +14,31 @@ export async function apiFetch<T>(
   init?: RequestInit,
 ): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase()
-  const hasBody = init?.body !== undefined && init?.body !== null
-  // Fastify は Content-Type: application/json かつ空ボディを 400 にする
+  const body = init?.body
+  const hasBody = body !== undefined && body !== null
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData
+  // Fastify は Content-Type: application/json かつ空ボディを 400 にする（サーバ側でも吸収済み）
   const needsEmptyJsonBody =
     !hasBody && (method === "POST" || method === "PUT" || method === "PATCH")
+
+  const headers = new Headers(init?.headers)
+  if (!isFormData && (needsEmptyJsonBody || hasBody) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
 
   const res = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
-    body: needsEmptyJsonBody ? "{}" : init?.body,
-    headers: {
-      ...(needsEmptyJsonBody || hasBody ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
+    body: needsEmptyJsonBody ? "{}" : body,
+    headers,
   })
 
   if (!res.ok) {
     let message = res.statusText
     try {
-      const body = (await res.json()) as { error?: string; message?: string }
-      if (body.error) message = body.error
-      else if (body.message) message = body.message
+      const errBody = (await res.json()) as { error?: string; message?: string }
+      if (errBody.error) message = errBody.error
+      else if (errBody.message) message = errBody.message
     } catch {
       /* ignore */
     }

@@ -13,10 +13,16 @@ export interface JobStatusResponse<T = unknown> {
 
 export type JobProgressHandler = (progress: number, status: string) => void
 
+export type GenerationMeta = {
+  provider?: string
+  tokens?: number
+  usedLlmStructure?: boolean
+}
+
 async function waitForJob<T>(
   jobId: string,
   onProgress?: JobProgressHandler,
-  timeoutMs = 60_000,
+  timeoutMs = 180_000,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const started = Date.now()
@@ -87,21 +93,21 @@ async function waitForJob<T>(
 export async function aiGenerateFlow(
   projectId: string,
   onProgress?: JobProgressHandler,
-): Promise<{ flow: FlowState }> {
+): Promise<{ flow: FlowState; meta?: GenerationMeta }> {
   const { jobId } = await apiFetch<{ jobId: string }>(`/projects/${projectId}/ai/flow/generate`, {
     method: "POST",
   })
-  return waitForJob<{ flow: FlowState }>(jobId, onProgress)
+  return waitForJob<{ flow: FlowState; meta?: GenerationMeta }>(jobId, onProgress)
 }
 
 export async function aiGenerateManualSections(
   projectId: string,
   onProgress?: JobProgressHandler,
-): Promise<{ sections: ManualSection[] }> {
+): Promise<{ sections: ManualSection[]; meta?: GenerationMeta }> {
   const { jobId } = await apiFetch<{ jobId: string }>(`/projects/${projectId}/ai/manual/generate`, {
     method: "POST",
   })
-  return waitForJob<{ sections: ManualSection[] }>(jobId, onProgress)
+  return waitForJob<{ sections: ManualSection[]; meta?: GenerationMeta }>(jobId, onProgress)
 }
 
 export async function aiProposeFlowNl(
@@ -155,8 +161,12 @@ export async function fetchNextHearingQuestion(projectId: string): Promise<{
 export async function fetchDeepdiveQuestions(
   projectId: string,
   stepId: string,
+  opts?: { signal?: AbortSignal },
 ): Promise<{ questions: string[] }> {
-  return apiFetch(`/projects/${projectId}/deepdive/${stepId}/questions`, { method: "POST" })
+  return apiFetch(`/projects/${projectId}/deepdive/${stepId}/questions`, {
+    method: "POST",
+    signal: opts?.signal,
+  })
 }
 
 export type StreamTokenHandler = (delta: string, fullText: string) => void

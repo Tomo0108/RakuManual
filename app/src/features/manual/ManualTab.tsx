@@ -119,6 +119,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const [generating, setGenerating] = useState(false)
   const [genProgress, setGenProgress] = useState(0)
   const [genError, setGenError] = useState<string | null>(null)
+  const [genFallbackNotice, setGenFallbackNotice] = useState<string | null>(null)
   const [impactFilter, setImpactFilter] = useState<ImpactFilter>("all")
   const [regenOpen, setRegenOpen] = useState(false)
   const documentRef = useRef<HTMLDivElement>(null)
@@ -149,10 +150,16 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
     setGenerating(true)
     setGenProgress(0)
     setGenError(null)
+    setGenFallbackNotice(null)
     try {
-      const { sections: generated } = await aiGenerateManualSections(project.id, (p) =>
+      const { sections: generated, meta } = await aiGenerateManualSections(project.id, (p) =>
         setGenProgress(p),
       )
+      if (meta?.usedLlmStructure === false) {
+        setGenFallbackNotice(
+          "AIの構造化に失敗したためテンプレートから生成しました。内容を確認し、必要ならセクションごとに再生成してください。",
+        )
+      }
       // ジョブ実行中にサーバー側が更新されている可能性があるため最新を取り直して合成する
       const latest = await fetchProject(project.id).catch(() => null)
 
@@ -229,6 +236,12 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               マニュアルを生成する
             </Button>
           )}
+          {genFallbackNotice && (
+            <div className={cn("mt-4 flex items-start gap-2 px-3 py-2.5 text-left text-xs leading-relaxed", WARNING_BOX)}>
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>{genFallbackNotice}</span>
+            </div>
+          )}
           {genError && (
             <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-left text-xs leading-relaxed text-destructive">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -291,6 +304,20 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
         className="scroll-touch min-w-0 flex-1 overflow-y-auto bg-muted/45"
       >
         <div className="mx-auto w-full max-w-[46rem] px-4 py-5 md:px-6 md:py-8">
+          {genFallbackNotice && (
+            <div className={cn("mb-4 flex items-start gap-2 px-3 py-2.5 text-xs leading-relaxed md:text-[13px]", WARNING_BOX)}>
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 flex-1">{genFallbackNotice}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 shrink-0 px-2"
+                onClick={() => setGenFallbackNotice(null)}
+              >
+                閉じる
+              </Button>
+            </div>
+          )}
           {isMobile && (
             <SectionTocBar
               outline={outline}
