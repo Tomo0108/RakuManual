@@ -11,6 +11,7 @@ import {
   resolveExportTheme,
   type ExportTheme,
 } from "@/lib/export-theme"
+import { buildTocItems, drawTocSlide, paginateTocItems, type TocItem } from "@/lib/export-toc"
 import {
   COL_WIDTH,
   FLOW_ORIGIN_X,
@@ -1270,7 +1271,7 @@ type Planned =
       overlapNextCol?: number
       offPage: FlowOffPageLink[]
     }
-  | { kind: "toc" }
+  | { kind: "toc"; items: TocItem[] }
   | { kind: "major"; majorNumber: string; majorTitle: string }
   | { kind: "procedure"; part: ProcedurePart }
 
@@ -1303,7 +1304,11 @@ function planPresentation(
     })
   }
 
-  planned.push({ kind: "toc" })
+  const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
+  const hasFlow = Boolean(options.includeFlow && project.flow?.nodes?.length)
+  for (const items of paginateTocItems(buildTocItems(outline, hasFlow))) {
+    planned.push({ kind: "toc", items })
+  }
 
   const parts = buildProcedureParts(sections, project, options.includeImages)
   let lastMajor = ""
@@ -1342,7 +1347,6 @@ async function renderManualDeck(
   createSlide: () => SlideGfx,
 ): Promise<{ imageFailures: number }> {
   const theme = resolveExportTheme(options.template)
-  const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const preparedFlow = project.flow?.nodes?.length ? prepareFlow(project.flow) : project.flow
   const projectForExport = { ...project, flow: preparedFlow }
   const { planned, sectionSlide, majorSlide, flowSlide } = planPresentation(
@@ -1431,102 +1435,16 @@ async function renderManualDeck(
 
     if (item.kind === "toc") {
       addChrome(gfx, theme, { title: "目次", pageNum })
-      type TocRow = {
-        text: string
-        indent: 0 | 1 | 2
-        bold?: boolean
-        fontSize: number
-        color: string
-        slide?: number
-        tooltip?: string
-      }
-      const rows: TocRow[] = []
-      if (flowSlide != null) {
-        rows.push({
-          text: "業務フロー図",
-          indent: 0,
-          bold: true,
-          fontSize: 12,
-          color: "0563C1",
-          slide: flowSlide,
-          tooltip: "業務フロー図へ",
-        })
-      }
-      for (const major of outline) {
-        const majorTarget = majorSlide.get(major.number) ?? pageNum
-        rows.push({
-          text: formatMajorTitle(major.number, major.title),
-          indent: 0,
-          bold: true,
-          fontSize: 13,
-          color: theme.navy,
-          slide: majorTarget,
-          tooltip: "この章へ",
-        })
-        for (const medium of major.mediums) {
-          const first = medium.sections[0]
-          const mediumLabel = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
-          const mediumTarget = first ? sectionSlide.get(first.id) ?? majorTarget : majorTarget
-          rows.push({
-            text: mediumLabel,
-            indent: 1,
-            fontSize: 11,
-            color: "0563C1",
-            slide: mediumTarget,
-            tooltip: mediumLabel,
-          })
-          if (medium.sections.length > 1) {
-            medium.sections.forEach((section, si) => {
-              const leaf = resolveLeafSectionNumber(
-                section,
-                medium.number,
-                si,
-                medium.sections.length,
-              )
-              const leafLabel = `${leaf}　${displaySectionTitle(section)}`
-              const leafTarget = sectionSlide.get(section.id) ?? mediumTarget
-              rows.push({
-                text: leafLabel,
-                indent: 2,
-                fontSize: 10,
-                color: "0563C1",
-                slide: leafTarget,
-                tooltip: leafLabel,
-              })
-            })
-          }
+      const pageOf = (tocItem: TocItem): number | undefined => {
+        if (tocItem.kind === "flow") return flowSlide
+        if (tocItem.kind === "major") return majorSlide.get(tocItem.majorNumber)
+        if (tocItem.kind === "medium") {
+          if (tocItem.sectionId) return sectionSlide.get(tocItem.sectionId)
+          return majorSlide.get(tocItem.majorNumber)
         }
+        return undefined
       }
-
-      // 2段組: 行を半分で分割し、各行を独立テキスト枠にしてスライド内リンクを確実に張る
-      const mid = Math.ceil(rows.length / 2)
-      const columns = [
-        { rows: rows.slice(0, mid), x: 0.5 },
-        { rows: rows.slice(mid), x: 6.85 },
-      ] as const
-      const lineH = 0.34
-      const indentIn = [0, 0.32, 0.58] as const
-      const startY = 1.28
-      for (const col of columns) {
-        col.rows.forEach((row, i) => {
-          const x = col.x + indentIn[row.indent]
-          const y = startY + i * lineH
-          if (y + lineH > 6.7) return
-          gfx.addText(row.text, {
-            x,
-            y,
-            w: 5.7 - indentIn[row.indent],
-            h: lineH,
-            fontSize: row.fontSize,
-            bold: row.bold,
-            color: row.color,
-            valign: "middle",
-            hyperlink: row.slide
-              ? { slide: row.slide, tooltip: row.tooltip ?? row.text }
-              : undefined,
-          })
-        })
-      }
+      drawTocSlide(gfx, theme, item.items, pageOf)
       return
     }
 

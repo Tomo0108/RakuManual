@@ -10,6 +10,12 @@ import {
   resolveExportTheme,
   type ExportTheme,
 } from "@/lib/export-theme"
+import {
+  buildTocItems,
+  tocItemsToHtml,
+  tocItemsToSidebarHtml,
+  type TocItem,
+} from "@/lib/export-toc"
 import { resolveImageDataUrl } from "@/lib/resolve-export-image"
 import { downloadHtmlFile } from "@/lib/api/export"
 
@@ -105,47 +111,6 @@ function flowHtml(flow: FlowState, theme: ExportTheme): string {
   return `<table class="flow-table" style="--accent:${hex(theme.accent)}"><tbody>${laneRows}</tbody></table>${sysLine}`
 }
 
-type TocNav = { href: string; label: string; indent: 0 | 1 | 2; major?: boolean }
-
-function buildTocNav(
-  outline: ReturnType<typeof buildManualOutline>,
-  includeFlow: boolean,
-  hasFlow: boolean,
-): TocNav[] {
-  const rows: TocNav[] = []
-  if (includeFlow && hasFlow) {
-    rows.push({ href: "#flow", label: "業務フロー図", indent: 0, major: true })
-  }
-  for (const major of outline) {
-    rows.push({
-      href: `#${majorAnchor(major.number)}`,
-      label: formatMajorTitle(major.number, major.title),
-      indent: 0,
-      major: true,
-    })
-    for (const medium of major.mediums) {
-      const first = medium.sections[0]
-      const mediumLabel = `${medium.number}　${medium.title ?? (first ? displaySectionTitle(first) : "")}`
-      rows.push({
-        href: first ? `#${sectionAnchor(first.id)}` : `#${majorAnchor(major.number)}`,
-        label: mediumLabel,
-        indent: 1,
-      })
-      if (medium.sections.length > 1) {
-        medium.sections.forEach((section, si) => {
-          const leaf = resolveLeafSectionNumber(section, medium.number, si, medium.sections.length)
-          rows.push({
-            href: `#${sectionAnchor(section.id)}`,
-            label: `${leaf}　${displaySectionTitle(section)}`,
-            indent: 2,
-          })
-        })
-      }
-    }
-  }
-  return rows
-}
-
 function slideNav(prevId: string | null, nextId: string | null): string {
   const prev = prevId
     ? `<a class="nav-btn" href="#${prevId}">← 前へ</a>`
@@ -196,7 +161,7 @@ export async function exportManualHtml(
   const theme = resolveExportTheme(options.template)
   const outline = buildManualOutline(sections, { defaultMajorTitle: project.name })
   const hasFlow = Boolean(project.flow?.nodes?.length)
-  const tocNav = buildTocNav(outline, includeFlow, hasFlow)
+  const tocItems = buildTocItems(outline, includeFlow && hasFlow)
 
   const imageCache = new Map<string, string | null>()
   let imageFailures = 0
@@ -230,13 +195,6 @@ ${flowHtml(project.flow, theme)}
 ${chromeClose(2, "cover", "toc")}`,
     })
   }
-
-  const tocSlideHtml = tocNav
-    .map((row) => {
-      const cls = `toc-row indent-${row.indent}${row.major ? " major" : ""}`
-      return `<a class="${cls}" href="${escapeHtml(row.href)}">${escapeHtml(row.label)}</a>`
-    })
-    .join("")
 
   slides.push({
     id: "toc",
@@ -338,10 +296,25 @@ ${chromeClose(0, null, null)}`,
 
   const tocIndex = allIds.indexOf("toc")
   const tocPage = tocIndex + 1
+  const hrefOf = (item: TocItem): string | undefined => {
+    if (item.kind === "flow") return "#flow"
+    if (item.kind === "major") return `#${majorAnchor(item.majorNumber)}`
+    if (item.kind === "medium") {
+      if (item.sectionId) return `#${sectionAnchor(item.sectionId)}`
+      return `#${majorAnchor(item.majorNumber)}`
+    }
+    return undefined
+  }
+  const pageOf = (item: TocItem): number | undefined => {
+    const href = hrefOf(item)
+    if (!href) return undefined
+    const idx = allIds.indexOf(href.slice(1))
+    return idx >= 0 ? idx + 1 : undefined
+  }
   slides[slides.findIndex((s) => s.id === "toc")] = {
     id: "toc",
     html: `${chromeOpen({ id: "toc", title: "目次", pageNum: tocPage })}
-<div class="toc-grid">${tocSlideHtml}</div>
+${tocItemsToHtml(tocItems, hrefOf, pageOf)}
 ${chromeClose(
   tocPage,
   tocIndex > 0 ? allIds[tocIndex - 1]! : null,
@@ -357,12 +330,7 @@ ${chromeClose(
     })
   })
 
-  const sidebar = tocNav
-    .map((row) => {
-      const cls = `side-link indent-${row.indent}${row.major ? " major" : ""}`
-      return `<a class="${cls}" href="${escapeHtml(row.href)}">${escapeHtml(row.label)}</a>`
-    })
-    .join("")
+  const sidebar = tocItemsToSidebarHtml(tocItems, hrefOf)
 
   const navy = hex(theme.navy)
   const accent = hex(theme.accent)
@@ -408,12 +376,21 @@ ${chromeClose(
     .sidebar h1 { font-size: 13px; margin: 0 0 4px; color: var(--navy); }
     .sidebar .hint { font-size: 11px; color: #666; margin: 0 0 12px; }
     .side-link {
-      display: block; color: var(--link); text-decoration: none;
-      font-size: 12px; line-height: 1.45; padding: 4px 8px; border-radius: 4px;
+      display: flex; align-items: baseline; gap: 8px;
+      color: #2a3038; text-decoration: none;
+      font-size: 13px; line-height: 1.45; padding: 5px 8px; border-radius: 4px;
     }
-    .side-link.major { color: var(--navy); font-weight: 700; font-size: 13px; margin-top: 8px; }
-    .side-link.indent-1 { padding-left: 16px; }
-    .side-link.indent-2 { padding-left: 28px; font-size: 11px; }
+    .side-link .num {
+      flex: 0 0 2.1rem; font-variant-numeric: tabular-nums; color: var(--navy);
+    }
+    .side-link.flow { font-weight: 700; color: var(--navy); }
+    .side-link.flow .disc {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--navy);
+      flex: 0 0 7px; align-self: center;
+    }
+    .side-link.major { font-weight: 700; color: var(--navy); margin-top: 6px; }
+    .side-link.medium { padding-left: 22px; font-weight: 400; }
+    .side-rule { border: 0; border-top: 1px solid #c5cdd6; margin: 8px 8px; }
     .side-link:hover, .side-link:focus-visible { background: #eef4fb; outline: none; }
     .side-link.active { background: #e8f1fb; box-shadow: inset 3px 0 0 var(--accent); }
     .deck { flex: 1; padding: 24px 20px 64px; max-width: 1100px; }
@@ -470,15 +447,40 @@ ${chromeClose(
       border: 1px solid #ddd; border-radius: 4px;
     }
     .img-missing { color: #b45309; font-size: 14px; }
-    .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 32px; }
-    .toc-row {
-      display: block; text-decoration: none; color: var(--link);
-      font-size: 14px; line-height: 1.6; padding: 2px 0;
+    .toc-list { max-width: 46rem; margin: 4px 4px 8px; }
+    .toc-flow, .toc-major, .toc-medium {
+      display: flex; align-items: baseline; gap: 10px;
+      text-decoration: none; color: inherit;
     }
-    .toc-row.major { color: var(--navy); font-weight: 700; font-size: 16px; margin-top: 6px; }
-    .toc-row.indent-1 { padding-left: 18px; font-size: 14px; }
-    .toc-row.indent-2 { padding-left: 36px; font-size: 13px; }
-    .toc-row:hover { text-decoration: underline; }
+    .toc-flow {
+      font-size: 16px; font-weight: 700; color: var(--navy);
+      padding: 6px 0 14px;
+    }
+    .toc-flow .disc {
+      width: 9px; height: 9px; border-radius: 50%; background: var(--navy);
+      flex: 0 0 9px; align-self: center;
+    }
+    .toc-rule { border: 0; border-top: 1px solid #c5cdd6; margin: 0 0 16px; }
+    .toc-major {
+      font-size: 16px; font-weight: 700; color: var(--navy);
+      padding: 10px 0 4px;
+    }
+    .toc-major .num { flex: 0 0 2.4rem; font-size: 18px; font-variant-numeric: tabular-nums; }
+    .toc-medium {
+      font-size: 14px; color: #2a3038; padding: 4px 0 4px 1.7rem;
+    }
+    .toc-medium .num { flex: 0 0 2.6rem; font-variant-numeric: tabular-nums; }
+    .toc-flow .ttl, .toc-major .ttl, .toc-medium .ttl { flex: 0 1 auto; min-width: 0; }
+    .toc-list .lead {
+      flex: 1 1 auto; border-bottom: 1px dotted #c5cdd6;
+      margin: 0 8px 0.35em; min-width: 2.5rem; height: 0;
+      align-self: flex-end;
+    }
+    .toc-list .pg {
+      flex: 0 0 1.6rem; text-align: right; font-size: 12px; color: #5c6770;
+      font-variant-numeric: tabular-nums;
+    }
+    .toc-flow:hover .ttl, .toc-major:hover .ttl, .toc-medium:hover .ttl { text-decoration: underline; }
     .flow-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .flow-table th {
       width: 7.5em; text-align: right; padding: 8px 12px; vertical-align: top;
@@ -505,7 +507,6 @@ ${chromeClose(
     @media (max-width: 900px) {
       .layout { display: block; }
       .sidebar { position: relative; width: auto; height: auto; max-height: 40vh; }
-      .toc-grid { grid-template-columns: 1fr; }
     }
     @media print {
       body { background: #fff; }
