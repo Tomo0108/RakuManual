@@ -37,6 +37,7 @@ import { now } from "@/lib/project-utils"
 import { applyManualImpactStatuses, computeManualImpact } from "@/lib/manual-impact"
 import { WARNING_TEXT } from "@/lib/semantic-styles"
 import { Button } from "@/components/ui/button"
+import { GenerationProgress } from "@/components/GenerationProgress"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -1166,16 +1167,35 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               <AlertDescription>{aiError}</AlertDescription>
             </Alert>
           )}
-          <div className="mt-5 flex justify-center gap-3">
-            <Button variant="outline" onClick={() => setTab("hearing")} className="gap-1.5">
-              <ArrowLeft className="size-4" />
-              ヒアリングに戻る
-            </Button>
-            <Button onClick={generate} disabled={generating} className="gap-1.5">
-              <Sparkles className="size-4" />
-              {generating ? `生成中… ${genProgress}%` : "フロー図を生成する"}
-            </Button>
-          </div>
+          {generating ? (
+            <div className="mt-5 flex flex-col items-center gap-2">
+              <GenerationProgress
+                value={genProgress}
+                label="フロー図を生成しています"
+                description="ヒアリングの回答から担当者レーンと条件分岐を組み立てています。"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTab("hearing")}
+                className="gap-1.5 text-muted-foreground"
+              >
+                <ArrowLeft className="size-4" />
+                ヒアリングに戻る
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-5 flex justify-center gap-3">
+              <Button variant="outline" onClick={() => setTab("hearing")} className="gap-1.5">
+                <ArrowLeft className="size-4" />
+                ヒアリングに戻る
+              </Button>
+              <Button onClick={generate} className="gap-1.5">
+                <Sparkles className="size-4" />
+                フロー図を生成する
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     )

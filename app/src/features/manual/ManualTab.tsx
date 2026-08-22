@@ -56,6 +56,7 @@ import { resolveMediaFetchUrl } from "@/lib/resolve-export-image"
 import { REVIEW_STATUS, WARNING_TEXT, WARNING_BOX, WARNING_SUBTLE } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { GenerationProgress } from "@/components/GenerationProgress"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -215,10 +216,19 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
               深掘りヒアリングが未回答のため、生成してもプレースホルダが多くなります
             </p>
           )}
-          <Button className="mt-5 gap-1.5" onClick={generateSections} disabled={generating}>
-            <Sparkles className="size-4" />
-            {generating ? `生成中… ${genProgress}%` : "マニュアルを生成する"}
-          </Button>
+          {generating ? (
+            <GenerationProgress
+              className="mt-5"
+              value={genProgress}
+              label="マニュアルを生成しています"
+              description="深掘りヒアリングの回答をもとに、セクションごとの手順を組み立てています。"
+            />
+          ) : (
+            <Button className="mt-5 gap-1.5" onClick={generateSections}>
+              <Sparkles className="size-4" />
+              マニュアルを生成する
+            </Button>
+          )}
           {genError && (
             <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-left text-xs leading-relaxed text-destructive">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />

@@ -287,6 +287,42 @@
   border-color: var(--semantic-danger-border);
 }
 
+/* AI生成の進捗バー: 塗りの上を淡いハイライトが流れる */
+@keyframes progress-sheen {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+@keyframes progress-beacon {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.72);
+  }
+}
+
+@utility progress-sheen {
+  animation: progress-sheen 1.6s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility progress-beacon {
+  animation: progress-beacon 1.4s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 /* タブバー横スクロールのフェードヒント（mask で塗りを汚さない） */
 @utility tab-scroll-fade {
   -webkit-mask-image: linear-gradient(
