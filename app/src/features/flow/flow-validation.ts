@@ -1,4 +1,5 @@
 import type { FlowEdge, FlowNode, FlowState } from "@/lib/types"
+import { BRANCH_NO_PATTERN, BRANCH_YES_PATTERN } from "./flow-layout"
 
 export type FlowIssueSeverity = "error" | "warning"
 
@@ -98,12 +99,12 @@ export function validateFlow(state: FlowState): FlowValidationResult {
       const yes = edges.filter(
         (e) =>
           e.source === n.id &&
-          (e.sourceHandle === "yes" || /はい|可|○|真|yes/i.test(String(e.label ?? ""))),
+          (e.sourceHandle === "yes" || BRANCH_YES_PATTERN.test(String(e.label ?? ""))),
       )
       const no = edges.filter(
         (e) =>
           e.source === n.id &&
-          (e.sourceHandle === "no" || /いいえ|不要|否|×|偽|no/i.test(String(e.label ?? ""))),
+          (e.sourceHandle === "no" || BRANCH_NO_PATTERN.test(String(e.label ?? ""))),
       )
       if (outs.length < 2) {
         issues.push({

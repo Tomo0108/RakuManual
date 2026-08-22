@@ -327,12 +327,21 @@ export function clampFlowPanY(
   return Math.max(min, Math.min(max, y))
 }
 
+/** autoLayout の版。戻りエッジ処理等を変えたら上げ、既存フローを再整列させる */
+export const FLOW_LAYOUT_VERSION = 2
+
+/** 分岐の「否」系ラベル（差し戻し・却下など） */
+export const BRANCH_NO_PATTERN = /いいえ|不要|否|×|偽|差し戻し|差戻|却下|やり直|再修正|非承認|NG|no/i
+
+/** 分岐の「可」系ラベル（承認など） */
+export const BRANCH_YES_PATTERN = /はい|可|○|真|承認|OK|可決|yes/i
+
 function isNoLabel(label: string | undefined): boolean {
-  return /いいえ|不要|否|×|偽|no/i.test(label ?? "")
+  return BRANCH_NO_PATTERN.test(label ?? "")
 }
 
 function isYesLabel(label: string | undefined): boolean {
-  return /はい|可|○|真|yes/i.test(label ?? "")
+  return BRANCH_YES_PATTERN.test(label ?? "")
 }
 
 /** 分岐ノードからのエッジに はい/いいえ ラベルを補完 */
@@ -359,18 +368,18 @@ export function ensureDecisionEdgeLabel(
 /** エッジラベルから分岐の出口を判定(はい=右、いいえ=下) */
 export function decisionSourceHandle(label: string | undefined, isBack: boolean): "yes" | "no" {
   const text = label ?? ""
-  if (/いいえ|不要|否|×|偽|no/i.test(text)) return "no"
-  if (/はい|可|○|真|yes/i.test(text)) return "yes"
+  if (BRANCH_NO_PATTERN.test(text)) return "no"
+  if (BRANCH_YES_PATTERN.test(text)) return "yes"
   return isBack ? "no" : "yes"
 }
 
 function isBranchLabel(label: string | undefined): boolean {
-  return /はい|いいえ|yes|no/i.test(label ?? "")
+  return BRANCH_YES_PATTERN.test(label ?? "") || BRANCH_NO_PATTERN.test(label ?? "")
 }
 
 function branchLabelStyle(label: string | undefined) {
-  const isNo = /いいえ|不要|否|×|偽|no/i.test(label ?? "")
-  const isYes = /はい|可|○|真|yes/i.test(label ?? "")
+  const isNo = BRANCH_NO_PATTERN.test(label ?? "")
+  const isYes = BRANCH_YES_PATTERN.test(label ?? "")
   const stroke = isNo ? "#e11d48" : isYes ? "var(--primary)" : "var(--border)"
   const fill = isNo ? "#e11d48" : isYes ? "var(--primary)" : "var(--foreground)"
   return {
@@ -505,7 +514,10 @@ export function autoLayout(state: FlowState): FlowState {
 
   const layer = new Map<string, number>()
   const inDeg = new Map<string, number>()
-  nodes.forEach((n) => inDeg.set(n.id, 0))
+  nodes.forEach((n) => {
+    inDeg.set(n.id, 0)
+    layer.set(n.id, -1)
+  })
   edges.forEach((e) => inDeg.set(e.target, (inDeg.get(e.target) ?? 0) + 1))
 
   const queue = nodes.filter((n) => (inDeg.get(n.id) ?? 0) === 0).map((n) => n.id)
@@ -522,12 +534,15 @@ export function autoLayout(state: FlowState): FlowState {
     visited.add(id)
     const col = layer.get(id) ?? 0
     for (const next of outAdj.get(id) ?? []) {
-      layer.set(next, Math.max(layer.get(next) ?? 0, col + 1))
+      const tgtCol = layer.get(next) ?? -1
+      // 差し戻し・修正ループ等の戻りエッジで列番号を押し広げない
+      if (tgtCol >= 0 && tgtCol <= col) continue
+      layer.set(next, Math.max(tgtCol, col + 1))
       queue.push(next)
     }
   }
   nodes.forEach((n) => {
-    if (!layer.has(n.id)) layer.set(n.id, 0)
+    if ((layer.get(n.id) ?? -1) < 0) layer.set(n.id, 0)
   })
 
   const maxLayer = Math.max(0, ...Array.from(layer.values()))
@@ -628,7 +643,7 @@ export function autoLayout(state: FlowState): FlowState {
   const laid: FlowState = {
     ...state,
     lanes: laneList,
-    layoutMeta: { columnCount: maxLayer + 1, columnSystems },
+    layoutMeta: { columnCount: maxLayer + 1, columnSystems, layoutVersion: FLOW_LAYOUT_VERSION },
     nodes: layoutAllLaneNodes(
       nodes.map((n) => ({
         ...n,
@@ -698,9 +713,10 @@ export function flowToScreen(
   }
 }
 
-/** 初回のみ整列が必要か(layoutMeta 欠落 or 全ノードが原点付近) */
+/** 初回のみ整列が必要か(layoutMeta 欠落 or 全ノードが原点付近 or 旧レイアウト版) */
 export function needsInitialLayout(flow: FlowState): boolean {
   if (flow.nodes.length === 0) return false
   if (!flow.layoutMeta?.columnCount) return true
+  if ((flow.layoutMeta.layoutVersion ?? 1) < FLOW_LAYOUT_VERSION) return true
   return flow.nodes.every((n) => n.position.x < 8 && n.position.y < 8)
 }

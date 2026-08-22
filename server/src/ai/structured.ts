@@ -5,6 +5,7 @@
 
 import { getLlmAdapter } from "../llm/adapter.js"
 import type { FlowState, StepKind } from "../flow-types.js"
+import { autoLayout } from "../flow-layout.js"
 import type { Project } from "../types.js"
 import {
   buildFlowGenerationMessages,
@@ -173,7 +174,7 @@ export async function generateFlowFromLlm(
     const parsed = JSON.parse(extractJson(llm.text)) as unknown
     const flow = normalizeFlow(parsed, project.name)
     if (flow) {
-      return { flow, provider: llm.provider, tokens: llm.tokens, usedLlmStructure: true }
+      return { flow: autoLayout(flow), provider: llm.provider, tokens: llm.tokens, usedLlmStructure: true }
     }
   } catch {
     /* fallback */
@@ -192,7 +193,7 @@ export async function generateFlowFromLlm(
       }
     })
   }
-  return { flow, provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false }
+  return { flow: autoLayout(flow), provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false }
 }
 
 type DeepdiveLike = {

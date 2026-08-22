@@ -43,6 +43,8 @@ export interface ColumnSystemEntry {
 export interface FlowLayoutMeta {
   columnCount: number
   columnSystems: ColumnSystemEntry[]
+  /** autoLayout アルゴリズム版（改善時にインクリメントし再整列を促す） */
+  layoutVersion?: number
 }
 
 export interface FlowState {

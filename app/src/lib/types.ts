@@ -94,6 +94,8 @@ export interface FlowLayoutMeta {
   columnCount: number
   /** 列インデックスごとの利用システム */
   columnSystems: ColumnSystemEntry[]
+  /** autoLayout アルゴリズム版（改善時にインクリメントし再整列を促す） */
+  layoutVersion?: number
 }
 
 export interface FlowState {
