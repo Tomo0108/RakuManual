@@ -114,7 +114,7 @@ export function drawTocSlide(
     })
   }
 
-  const addPage = (page: number | undefined, rowY: number, rowH: number, slide?: number) => {
+  const addPage = (page: number | undefined, rowY: number, rowH: number) => {
     if (page == null) return
     gfx.addText(String(page), {
       x: pageX,
@@ -125,7 +125,22 @@ export function drawTocSlide(
       color: muted,
       align: "right",
       valign: "middle",
-      hyperlink: slide ? { slide, tooltip: `${page}` } : undefined,
+    })
+  }
+
+  const addRowLink = (
+    slide: number | undefined,
+    rowY: number,
+    rowH: number,
+    tooltip: string,
+  ) => {
+    if (slide == null) return
+    gfx.addHyperlinkArea({
+      x: TOC_X,
+      y: rowY,
+      w: TOC_RIGHT - TOC_X,
+      h: rowH,
+      hyperlink: { slide, tooltip },
     })
   }
 
@@ -152,10 +167,10 @@ export function drawTocSlide(
         bold: true,
         color: theme.navy,
         valign: "middle",
-        hyperlink: slide ? { slide, tooltip: "業務フロー図へ" } : undefined,
       })
       if (page != null) addLeaders(LEADER_X, y + h / 2)
-      addPage(page, y, h, slide)
+      addPage(page, y, h)
+      addRowLink(slide, y, h, "業務フロー図へ")
     } else if (item.kind === "rule") {
       gfx.addLine({
         x: TOC_X,
@@ -175,7 +190,6 @@ export function drawTocSlide(
         bold: true,
         color: theme.navy,
         valign: "middle",
-        hyperlink: slide ? { slide, tooltip: item.title || num } : undefined,
       })
       gfx.addText(item.title || " ", {
         x: TOC_X + 0.78,
@@ -186,10 +200,10 @@ export function drawTocSlide(
         bold: true,
         color: theme.navy,
         valign: "middle",
-        hyperlink: slide ? { slide, tooltip: item.title || num } : undefined,
       })
       if (page != null) addLeaders(LEADER_X, y + h / 2)
-      addPage(page, y, h, slide)
+      addPage(page, y, h)
+      addRowLink(slide, y, h, item.title || num)
     } else {
       gfx.addText(item.mediumNumber, {
         x: TOC_X + 0.55,
@@ -199,7 +213,6 @@ export function drawTocSlide(
         fontSize: 14,
         color: "2A3038",
         valign: "middle",
-        hyperlink: slide ? { slide, tooltip: item.title } : undefined,
       })
       gfx.addText(item.title || " ", {
         x: TOC_X + 1.52,
@@ -209,10 +222,10 @@ export function drawTocSlide(
         fontSize: 14,
         color: "2A3038",
         valign: "middle",
-        hyperlink: slide ? { slide, tooltip: item.title } : undefined,
       })
       if (page != null) addLeaders(LEADER_X, y + h / 2)
-      addPage(page, y, h, slide)
+      addPage(page, y, h)
+      addRowLink(slide, y, h, item.title)
     }
 
     y += h

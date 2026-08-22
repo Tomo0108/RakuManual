@@ -24,7 +24,7 @@ import {
   needsInitialLayout,
 } from "@/features/flow/flow-layout"
 import PptxGenJS from "pptxgenjs"
-import type { GfxTextOpts, GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
+import type { GfxTextRun, SlideGfx } from "@/lib/slide-gfx"
 import { createPptxSlideGfx } from "@/lib/pptx-slide-gfx"
 import { createPdfSlideGfx } from "@/lib/pdf-slide-gfx"
 import { jsPDF } from "jspdf"
@@ -455,49 +455,6 @@ function flowNodeFontSize(wIn: number, hIn: number, text: string): number {
   return 8
 }
 
-/** 図形・線の上でも読めるよう、文字の背面に半透明の角丸ラベルを置く */
-function addLabelChip(
-  gfx: SlideGfx,
-  text: string | GfxTextRun[],
-  opts: GfxTextOpts,
-) {
-  const raw = typeof text === "string" ? text : text.map((r) => r.text).join("")
-  const fs = opts.fontSize ?? 12
-  const zen = Math.max(approxZenLen(raw), 1)
-  const padX = 0.1
-  const padY = 0.06
-  const tw = Math.min(opts.w + padX * 2, Math.max(0.38, zen * (fs / 72) * 1.14 + padX * 2))
-  const th = Math.max(opts.h, (fs / 72) * 1.55 + padY * 2)
-  let x = opts.x
-  if (opts.align === "center") x = opts.x + (opts.w - tw) / 2
-  else if (opts.align === "right") x = opts.x + opts.w - tw
-  let y = opts.y
-  if (opts.valign === "middle") y = opts.y + (opts.h - th) / 2
-  else if (opts.valign === "bottom") y = opts.y + opts.h - th
-  const radius = Math.min(0.09, th / 2.4)
-  gfx.addRoundRect({
-    x: x + 0.012,
-    y: y + 0.014,
-    w: tw,
-    h: th,
-    fill: "64748B",
-    fillOpacity: 0.1,
-    line: null,
-    rectRadius: radius,
-  })
-  gfx.addRoundRect({
-    x,
-    y,
-    w: tw,
-    h: th,
-    fill: "F8FAFC",
-    fillOpacity: 0.93,
-    line: { color: "CBD5E1", width: 0.55 },
-    rectRadius: radius,
-  })
-  gfx.addText(text, { ...opts, fill: undefined })
-}
-
 type FlowBox = {
   left: number
   right: number
@@ -507,31 +464,45 @@ type FlowBox = {
   cy: number
 }
 
-/** 分岐ラベル（はい／いいえ等）を矢印からずらして読みやすく配置 */
-function edgeLabelBox(
-  label: string,
+type EdgeLabelAnchor = { x: number; y: number; axis: "h" | "v" }
+
+/** 分岐ラベルを折れ曲がりではなく、分岐先ノードへ向かう最終矢印付近に置く */
+function edgeLabelAnchor(
   from: FlowBox,
   to: FlowBox,
-  mid: Pt,
   backward: boolean,
   sameCol: boolean,
-): { x: number; y: number; w: number; h: number } {
-  const lw = Math.min(1.15, Math.max(0.48, approxZenLen(label) * 0.13 + 0.16))
-  const lh = 0.24
+): EdgeLabelAnchor {
+  const inset = 0.3
 
-  if (sameCol && !backward && to.cy > from.cy + 0.02) {
-    return { x: mid.x + 0.06, y: mid.y - lh / 2, w: lw, h: lh }
+  if (sameCol && !backward && to.cy >= from.cy) {
+    return { x: to.cx, y: to.top - inset, axis: "v" }
+  }
+  if (sameCol && to.cy < from.cy) {
+    return { x: to.cx, y: to.bottom + inset * 0.65, axis: "v" }
   }
   if (!backward && Math.abs(from.cy - to.cy) < 0.05) {
-    return { x: mid.x - lw / 2, y: mid.y - lh - 0.05, w: lw, h: lh }
+    return { x: to.left - inset, y: to.cy, axis: "h" }
   }
-  if (!backward && to.left >= from.right - 0.02 && Math.abs(from.cy - to.cy) >= 0.05) {
-    if (Math.abs(mid.x - to.cx) < 0.08) {
-      return { x: mid.x + 0.06, y: mid.y - lh / 2, w: lw, h: lh }
-    }
-    return { x: mid.x - lw / 2, y: mid.y - lh - 0.05, w: lw, h: lh }
+  if (!backward && to.left >= from.right - 0.02) {
+    return { x: to.left - inset, y: to.cy, axis: "h" }
   }
-  return { x: mid.x - lw / 2, y: mid.y - lh - 0.06, w: lw, h: lh }
+  if (backward) {
+    return { x: to.cx + 0.05, y: to.bottom + inset * 0.55, axis: "v" }
+  }
+  return { x: to.left - inset, y: to.cy, axis: "h" }
+}
+
+function edgeLabelBox(
+  label: string,
+  anchor: EdgeLabelAnchor,
+): { x: number; y: number; w: number; h: number } {
+  const lw = Math.min(1.15, Math.max(0.48, approxZenLen(label) * 0.13 + 0.16))
+  const lh = 0.22
+  if (anchor.axis === "h") {
+    return { x: anchor.x - lw / 2, y: anchor.y - lh - 0.03, w: lw, h: lh }
+  }
+  return { x: anchor.x + 0.05, y: anchor.y - lh / 2, w: lw, h: lh }
 }
 
 type FlowNodeVisual = {
@@ -1044,7 +1015,7 @@ function drawFlowOnSlide(
         fill: "FFFFFF",
         line: { color: hasLink ? "0563C1" : "595959", width: 0.75 },
       })
-      addLabelChip(gfx, span.label, {
+      gfx.addText(span.label, {
         x,
         y: sysY + 0.02,
         w,
@@ -1069,7 +1040,7 @@ function drawFlowOnSlide(
       fill: "F7F7F7",
       line: null,
     })
-    addLabelChip(gfx, caption, {
+    gfx.addText(caption, {
       x,
       y: plotY + 0.04,
       w,
@@ -1124,7 +1095,6 @@ function drawFlowOnSlide(
     if (backward) hasBackward = true
     else hasForward = true
 
-    let mid: Pt
     if (sameCol && b.cy >= a.cy) {
       addStraightLine(
         gfx,
@@ -1132,16 +1102,16 @@ function drawFlowOnSlide(
         { x: b.cx, y: b.top },
         { color: "000000", width: 2.25, endArrow: true },
       )
-      mid = { x: a.cx, y: (a.bottom + b.top) / 2 }
     } else {
-      mid = addOrthoConnector(gfx, a, b, backward, backward ? detourSlot++ : 0)
+      addOrthoConnector(gfx, a, b, backward, backward ? detourSlot++ : 0)
     }
 
     const label =
       typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
-      const box = edgeLabelBox(label, a, b, mid, backward, sameCol)
-      addLabelChip(gfx, label, {
+      const anchor = edgeLabelAnchor(a, b, backward, sameCol)
+      const box = edgeLabelBox(label, anchor)
+      gfx.addText(label, {
         x: box.x,
         y: box.y,
         w: box.w,
@@ -1201,8 +1171,7 @@ function drawFlowOnSlide(
     }
 
     if (num) {
-      addLabelChip(
-        gfx,
+      gfx.addText(
         [
           { text: `${num} `, bold: true, fontSize, color: visual.text },
           { text: body, bold: false, fontSize, color: visual.text },
@@ -1210,7 +1179,7 @@ function drawFlowOnSlide(
         textOpts,
       )
     } else {
-      addLabelChip(gfx, body, { ...textOpts, bold: kind === "start" || kind === "end" })
+      gfx.addText(body, { ...textOpts, bold: kind === "start" || kind === "end" })
     }
   }
 

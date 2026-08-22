@@ -146,6 +146,9 @@ export function createSvgSlideGfx(): { gfx: SlideGfx; toSvg: () => string } {
         )
       })
     },
+    addHyperlinkArea() {
+      /* HTML フロー SVG では目次リンクを使わない */
+    },
     addImage() {
       /* flow slides do not embed raster images */
     },

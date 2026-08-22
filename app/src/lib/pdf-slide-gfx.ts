@@ -176,6 +176,9 @@ export function createPdfSlideGfx(doc: jsPDF): SlideGfx {
       if (line.beginArrow) drawArrowHead(doc, x1, y1, x2, y2, line.color)
       doc.setLineDashPattern([], 0)
     },
+    addHyperlinkArea({ x, y, w, h, hyperlink }) {
+      applyPdfLink(doc, x, y, w, h, hyperlink)
+    },
     addText(text, opts: GfxTextOpts) {
       const fontName = "Meiryo"
       const align = opts.align ?? "left"

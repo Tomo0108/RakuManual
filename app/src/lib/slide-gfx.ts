@@ -98,5 +98,13 @@ export type SlideGfx = {
     line: GfxLine
   }): void
   addText(text: string | GfxTextRun[], opts: GfxTextOpts): void
+  /** 目次など、テキスト色を保ったままクリック領域だけリンクしたい場合に使う */
+  addHyperlinkArea(opts: {
+    x: number
+    y: number
+    w: number
+    h: number
+    hyperlink: GfxHyperlink
+  }): void
   addImage(opts: { data: string; x: number; y: number; w: number; h: number }): void
 }
