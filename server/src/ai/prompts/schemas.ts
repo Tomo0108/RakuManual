@@ -10,7 +10,7 @@ export const FLOW_JSON_SCHEMA = {
         lane: "担当者",
         kind: "start|process|decision|end",
         sectionNumber: "1.1",
-        system: "Kintoneアプリ名または —",
+        system: "利用システム名または —",
         source: "q4|q8|deepdive:...",
       },
     },

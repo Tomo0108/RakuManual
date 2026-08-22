@@ -20,8 +20,8 @@ export const FLOW_NL_EDIT_OPS_SCHEMA = {
       ops: [{ op: "swapNodes", aLabel: "骨組みヒアリング", bLabel: "深掘りヒアリング" }],
     },
     {
-      instruction: "「AIでマニュアル作成」の利用システムを Kintone に変更",
-      ops: [{ op: "setNodeSystem", label: "AIでマニュアル作成", system: "Kintone" }],
+      instruction: "「AIでマニュアル作成」の利用システムを 社内ポータル に変更",
+      ops: [{ op: "setNodeSystem", label: "AIでマニュアル作成", system: "社内ポータル" }],
     },
   ],
 } as const

@@ -1,6 +1,6 @@
 /**
- * 参考資料（ROS発注 Kintone アプリ）から抽出した few-shot 例。
- * API 呼び出しなしでプロンプト品質を固定するため、実物に近い断片を埋め込む。
+ * 参考資料から抽出した few-shot 例（文体・粒度の gold）。
+ * 例中の業務名・アプリ名は手本用。生成時は入力コンテキストの名称のみ使うこと。
  */
 
 /** 操作手順スライドの gold 例（1.1 商品タイプを選択） */
@@ -53,11 +53,11 @@ export const GOLD_FLOW_SNIPPET = {
     {
       id: "n1",
       data: {
-        label: "ROS発注アプリ確認",
+        label: "発注アプリ確認",
         lane: "営業担当",
         kind: "process",
         sectionNumber: "4-1",
-        system: "【営業】ROS発注前確認",
+        system: "【営業】発注前確認",
         source: "deepdive:4-1",
       },
     },
@@ -79,10 +79,13 @@ export const GOLD_FLOW_SNIPPET = {
   ],
 }
 
+const GOLD_DISCLAIMER =
+  "（以下は文体・粒度の手本。例中の業務名・システム名はコピーせず、入力コンテキストの名称のみ使う）"
+
 export function formatGoldSectionForPrompt(): string {
-  return JSON.stringify(GOLD_SECTION_BLOCKS, null, 2)
+  return `${GOLD_DISCLAIMER}\n${JSON.stringify(GOLD_SECTION_BLOCKS, null, 2)}`
 }
 
 export function formatGoldFlowForPrompt(): string {
-  return JSON.stringify(GOLD_FLOW_SNIPPET, null, 2)
+  return `${GOLD_DISCLAIMER}\n${JSON.stringify(GOLD_FLOW_SNIPPET, null, 2)}`
 }

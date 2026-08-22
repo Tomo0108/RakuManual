@@ -41,6 +41,19 @@ export function validatePromptDefinitions(): PromptValidationResult {
   if (!manualSys.includes(GOLD_SECTION_BLOCKS.blocks[1]!.text.slice(0, 20))) {
     issues.push({ level: "warn", code: "gold_example", message: "gold 例がプロンプトに含まれていない可能性" })
   }
+  // 参考資料由来の製品名がプロンプトに残ると、対象外のマニュアルへ混入しやすい
+  for (const [name, text] of [
+    ["flow", flowSys],
+    ["manual", manualSys],
+  ] as const) {
+    if (/kintone/i.test(text)) {
+      issues.push({
+        level: "error",
+        code: `${name}_kintone_leak`,
+        message: `${name} プロンプトに Kintone が含まれている（例示固有名詞の混入防止）`,
+      })
+    }
+  }
 
   return {
     ok: issues.every((i) => i.level !== "error"),
