@@ -31,7 +31,77 @@ function toPptxHyperlink(link?: GfxHyperlink) {
   return { slide: link.slide, tooltip: link.tooltip }
 }
 
+function hasSlideTarget(link?: ReturnType<typeof toPptxHyperlink>): link is Extract<
+  NonNullable<ReturnType<typeof toPptxHyperlink>>,
+  { slide: number }
+> {
+  return Boolean(link && typeof link.slide === "number")
+}
+
 export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): SlideGfx {
+  const addSlideHyperlinkOverlay = (
+    link: { slide: number; tooltip?: string },
+    opts: GfxTextOpts,
+  ) => {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: opts.x,
+      y: opts.y,
+      w: opts.w,
+      h: opts.h,
+      fill: { color: "FFFFFF", transparency: 100 },
+      line: { color: "FFFFFF", width: 0 },
+      hyperlink: link,
+    })
+  }
+
+  const addPlainText = (text: string | GfxTextRun[], opts: GfxTextOpts) => {
+    if (typeof text === "string") {
+      slide.addText(text, {
+        x: opts.x,
+        y: opts.y,
+        w: opts.w,
+        h: opts.h,
+        fontFace: FONT_FACE,
+        fontSize: opts.fontSize,
+        bold: opts.bold,
+        color: opts.color,
+        align: opts.align,
+        valign: opts.valign,
+        fill: opts.fill ? { color: opts.fill } : undefined,
+        highlight: opts.highlight,
+        margin: opts.margin,
+      })
+      return
+    }
+    slide.addText(
+      (text as GfxTextRun[]).map((r) => ({
+        text: r.text,
+        options: {
+          bold: r.bold,
+          fontSize: r.fontSize,
+          color: r.color,
+          highlight: r.highlight,
+          breakLine: r.breakLine,
+        },
+      })),
+      {
+        x: opts.x,
+        y: opts.y,
+        w: opts.w,
+        h: opts.h,
+        fontFace: FONT_FACE,
+        fontSize: opts.fontSize,
+        bold: opts.bold,
+        color: opts.color ?? "000000",
+        align: opts.align,
+        valign: opts.valign,
+        fill: opts.fill ? { color: opts.fill } : undefined,
+        highlight: opts.highlight,
+        margin: opts.margin,
+      },
+    )
+  }
+
   return {
     addRect({ x, y, w, h, fill, fillOpacity, line }) {
       slide.addShape(pptx.ShapeType.rect, {
@@ -97,8 +167,13 @@ export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): Sli
     },
     addText(text, opts: GfxTextOpts) {
       const link = toPptxHyperlink(opts.hyperlink)
-      // 色付きランに hyperlink を載せると pptxgenjs が ahyp 拡張を付け、環境によってリンクが無効化される。
-      // リンクがある場合は色を親オプションに寄せ、テキスト側はリンクのみにする。
+      // スライド内リンクはテキスト色と ahyp 拡張が衝突するため、透明シェイプでリンクを付ける
+      if (hasSlideTarget(link)) {
+        addPlainText(text, opts)
+        addSlideHyperlinkOverlay(link, opts)
+        return
+      }
+      // URL リンクは run 側に載せる（色付きテキストと共存しにくいため色は親に寄せる）
       if (typeof text === "string") {
         if (link) {
           slide.addText([{ text, options: { hyperlink: link, bold: opts.bold, fontSize: opts.fontSize } }], {
@@ -117,21 +192,7 @@ export function createPptxSlideGfx(pptx: PptxGenJS, slide: PptxGenJS.Slide): Sli
             margin: opts.margin,
           })
         } else {
-          slide.addText(text, {
-            x: opts.x,
-            y: opts.y,
-            w: opts.w,
-            h: opts.h,
-            fontFace: FONT_FACE,
-            fontSize: opts.fontSize,
-            bold: opts.bold,
-            color: opts.color,
-            align: opts.align,
-            valign: opts.valign,
-            fill: opts.fill ? { color: opts.fill } : undefined,
-            highlight: opts.highlight,
-            margin: opts.margin,
-          })
+          addPlainText(text, opts)
         }
         return
       }

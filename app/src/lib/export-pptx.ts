@@ -455,7 +455,7 @@ function flowNodeFontSize(wIn: number, hIn: number, text: string): number {
   return 8
 }
 
-/** 図形・線の上でも読めるよう、文字の背面に半透明の角丸を置く */
+/** 図形・線の上でも読めるよう、文字の背面に半透明の角丸ラベルを置く */
 function addLabelChip(
   gfx: SlideGfx,
   text: string | GfxTextRun[],
@@ -464,25 +464,74 @@ function addLabelChip(
   const raw = typeof text === "string" ? text : text.map((r) => r.text).join("")
   const fs = opts.fontSize ?? 12
   const zen = Math.max(approxZenLen(raw), 1)
-  const tw = Math.min(opts.w + 0.08, Math.max(0.34, zen * (fs / 72) * 1.12 + 0.14))
-  const th = Math.min(Math.max(opts.h * 0.72, (fs / 72) * 1.5 + 0.1), opts.h)
+  const padX = 0.1
+  const padY = 0.06
+  const tw = Math.min(opts.w + padX * 2, Math.max(0.38, zen * (fs / 72) * 1.14 + padX * 2))
+  const th = Math.max(opts.h, (fs / 72) * 1.55 + padY * 2)
   let x = opts.x
   if (opts.align === "center") x = opts.x + (opts.w - tw) / 2
   else if (opts.align === "right") x = opts.x + opts.w - tw
   let y = opts.y
   if (opts.valign === "middle") y = opts.y + (opts.h - th) / 2
   else if (opts.valign === "bottom") y = opts.y + opts.h - th
+  const radius = Math.min(0.09, th / 2.4)
+  gfx.addRoundRect({
+    x: x + 0.012,
+    y: y + 0.014,
+    w: tw,
+    h: th,
+    fill: "64748B",
+    fillOpacity: 0.1,
+    line: null,
+    rectRadius: radius,
+  })
   gfx.addRoundRect({
     x,
     y,
     w: tw,
     h: th,
-    fill: "FFFFFF",
-    fillOpacity: 0.86,
-    line: null,
-    rectRadius: Math.min(0.07, th / 2),
+    fill: "F8FAFC",
+    fillOpacity: 0.93,
+    line: { color: "CBD5E1", width: 0.55 },
+    rectRadius: radius,
   })
   gfx.addText(text, { ...opts, fill: undefined })
+}
+
+type FlowBox = {
+  left: number
+  right: number
+  top: number
+  bottom: number
+  cx: number
+  cy: number
+}
+
+/** 分岐ラベル（はい／いいえ等）を矢印からずらして読みやすく配置 */
+function edgeLabelBox(
+  label: string,
+  from: FlowBox,
+  to: FlowBox,
+  mid: Pt,
+  backward: boolean,
+  sameCol: boolean,
+): { x: number; y: number; w: number; h: number } {
+  const lw = Math.min(1.15, Math.max(0.48, approxZenLen(label) * 0.13 + 0.16))
+  const lh = 0.24
+
+  if (sameCol && !backward && to.cy > from.cy + 0.02) {
+    return { x: mid.x + 0.06, y: mid.y - lh / 2, w: lw, h: lh }
+  }
+  if (!backward && Math.abs(from.cy - to.cy) < 0.05) {
+    return { x: mid.x - lw / 2, y: mid.y - lh - 0.05, w: lw, h: lh }
+  }
+  if (!backward && to.left >= from.right - 0.02 && Math.abs(from.cy - to.cy) >= 0.05) {
+    if (Math.abs(mid.x - to.cx) < 0.08) {
+      return { x: mid.x + 0.06, y: mid.y - lh / 2, w: lw, h: lh }
+    }
+    return { x: mid.x - lw / 2, y: mid.y - lh - 0.05, w: lw, h: lh }
+  }
+  return { x: mid.x - lw / 2, y: mid.y - lh - 0.06, w: lw, h: lh }
 }
 
 type FlowNodeVisual = {
@@ -1091,14 +1140,14 @@ function drawFlowOnSlide(
     const label =
       typeof e.label === "string" ? e.label : e.label != null ? String(e.label) : ""
     if (label) {
-      const lw = Math.min(1.1, Math.max(0.45, approxZenLen(label) * 0.125 + 0.1))
+      const box = edgeLabelBox(label, a, b, mid, backward, sameCol)
       addLabelChip(gfx, label, {
-        x: mid.x - lw / 2,
-        y: mid.y - 0.13,
-        w: lw,
-        h: 0.26,
+        x: box.x,
+        y: box.y,
+        w: box.w,
+        h: box.h,
         fontSize: 9,
-        color: "000000",
+        color: backward ? "595959" : "000000",
         align: "center",
         valign: "middle",
       })
