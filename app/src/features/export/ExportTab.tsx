@@ -316,7 +316,7 @@ export function ExportTab({ project, updateProject }: Props) {
             [
               { id: "pdf", icon: FileText, title: "PDF", desc: "PowerPointと同じスライドデザインで出力（閲覧・印刷用）" },
               { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "スライド形式で出力（長文は複数スライドに分割）" },
-              { id: "html", icon: Globe, title: "HTML", desc: "画像埋め込みの単一ファイル（オフラインでも開ける）" },
+              { id: "html", icon: Globe, title: "HTML", desc: "PowerPointと同じ項番・表紙・目次リンク（ブラウザで閲覧）" },
             ] as const
           ).map((f) => (
             <Card
