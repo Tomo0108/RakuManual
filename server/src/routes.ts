@@ -877,6 +877,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     reply.raw.end()
   })
 
+  const deepdiveQuestionsMemo = new Map<
+    string,
+    { at: number; result: Awaited<ReturnType<typeof generateDeepdiveQuestions>> }
+  >()
+  const DEEPDIVE_Q_TTL_MS = 10 * 60 * 1000
+
   app.post<{ Params: { id: string; stepId: string } }>(
     "/api/projects/:id/deepdive/:stepId/questions",
     async (request, reply) => {
@@ -891,17 +897,27 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       const item = existing.deepdive.find((d) => d.stepId === request.params.stepId)
       if (!item) return reply.status(404).send({ error: "Deepdive item not found" })
 
+      const answers = ((item as { answers?: unknown[] }).answers ?? []) as Array<{
+        question?: string
+        value?: string
+      }>
+      const importance = String((item as { importance?: string }).importance ?? "normal")
+      const answersKey = answers.map((a) => `${a.question ?? ""}=${a.value ?? ""}`).join("|")
+      const cacheKey = `${existing.id}:${request.params.stepId}:${importance}:${answersKey}`
+      const cached = deepdiveQuestionsMemo.get(cacheKey)
+      if (cached && Date.now() - cached.at < DEEPDIVE_Q_TTL_MS) {
+        return cached.result
+      }
+
       const result = await generateDeepdiveQuestions({
         projectName: existing.name,
         projectId: existing.id,
         userId: user.id,
         stepLabel: String((item as { stepLabel?: string }).stepLabel ?? item.stepId),
-        importance: String((item as { importance?: string }).importance ?? "normal"),
-        existingAnswers: ((item as { answers?: unknown[] }).answers ?? []) as Array<{
-          question?: string
-          value?: string
-        }>,
+        importance,
+        existingAnswers: answers,
       })
+      deepdiveQuestionsMemo.set(cacheKey, { at: Date.now(), result })
       recordLlmUsage({
         userId: user.id,
         projectId: existing.id,
