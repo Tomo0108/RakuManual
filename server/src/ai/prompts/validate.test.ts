@@ -9,6 +9,8 @@ import {
   validateGeneratedSection,
   validatePromptDefinitions,
 } from "./validate.js"
+import { buildHearingNextSystemPrompt } from "./hearing.js"
+import { buildDeepdiveQuestionsSystemPrompt } from "./deepdive.js"
 
 describe("prompt definitions", () => {
   it("includes version and JSON-only instruction", () => {
@@ -28,6 +30,14 @@ describe("prompt definitions", () => {
     assert.match(sys, /※/)
     assert.match(sys, /「」/)
     assert.ok(sys.includes(GOLD_SECTION_BLOCKS.blocks[1]!.text.slice(0, 15)))
+  })
+
+  it("hearing/deepdive prompts include version and JSON-only", () => {
+    const hearing = buildHearingNextSystemPrompt()
+    const deepdive = buildDeepdiveQuestionsSystemPrompt()
+    assert.match(hearing, /JSON のみ/)
+    assert.match(deepdive, /JSON のみ/)
+    assert.match(deepdive, /重要度/)
   })
 })
 

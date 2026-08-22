@@ -51,6 +51,9 @@ export function buildFlowMessages(projectName: string, hearingAnswers: HearingCo
   ]
 }
 
+/** @deprecated alias */
+export const buildFlowGenerationMessages = buildFlowMessages
+
 export function buildFlowGenerationPayload(project: {
   name: string
   hearingAnswers: Parameters<typeof buildHearingContext>[0]["hearingAnswers"]

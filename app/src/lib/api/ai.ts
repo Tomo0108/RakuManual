@@ -134,6 +134,16 @@ export async function aiRegenerateSection(
   })
 }
 
+export async function aiApplyManualRegen(
+  projectId: string,
+  choices: Record<string, string>,
+): Promise<{ sections: ManualSection[]; meta?: { provider?: string; tokens?: number } }> {
+  return apiFetch(`/projects/${projectId}/ai/manual/regenerate-batch`, {
+    method: "POST",
+    body: JSON.stringify({ choices }),
+  })
+}
+
 export async function fetchNextHearingQuestion(projectId: string): Promise<{
   question: HearingQuestion | null
   done: boolean

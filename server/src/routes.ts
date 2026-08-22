@@ -35,6 +35,7 @@ import { proposeNlEdit, mergeFlowPreservingManual } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
 import { generateDeepdiveQuestions, nextHearingQuestion } from "./ai/hearing.js"
 import { extractJson, generateFlowFromLlm, regenerateSectionFromLlm } from "./ai/structured.js"
+import { applyManualRegenWithLlm } from "./ai/manual-regen.js"
 import {
   enqueueFlowGenerate,
   enqueueManualGenerate,
@@ -1047,6 +1048,50 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         } catch {
           return reply.status(404).send({ error: "Section not found" })
         }
+      }
+    },
+  )
+
+  app.post<{ Params: { id: string } }>(
+    "/api/projects/:id/ai/manual/regenerate-batch",
+    async (request, reply) => {
+      const user = await requireAuth(request, reply)
+      if (!user) return
+      const existing = loadOwned(request.params.id, user, reply)
+      if (!existing) return
+
+      const allowed = assertGenerationAllowed(user.id)
+      if (!allowed.ok) return reply.status(429).send({ error: allowed.error })
+
+      const body = (request.body ?? {}) as { choices?: Record<string, string> }
+      const choices = body.choices ?? {}
+      if (Object.keys(choices).length === 0) {
+        return reply.status(400).send({ error: "choices is required" })
+      }
+
+      try {
+        const { sections, provider, tokens } = await applyManualRegenWithLlm(
+          existing,
+          choices as Record<string, "keep" | "regenerate" | "archive">,
+          user.id,
+        )
+        recordLlmUsage({
+          userId: user.id,
+          projectId: existing.id,
+          action: "manual_regen_batch",
+          tokens,
+        })
+        recordOperationLog({
+          userId: user.id,
+          actionType: "generate",
+          projectId: existing.id,
+          payload: { kind: "manual_regen_batch", provider, sectionCount: sections.length },
+        })
+        return { sections, meta: { provider, tokens } }
+      } catch (e) {
+        return reply.status(500).send({
+          error: e instanceof Error ? e.message : "manual regen batch failed",
+        })
       }
     },
   )

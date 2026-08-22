@@ -184,6 +184,8 @@ export interface ManualSourceSnapshot {
   label: string
   kind?: StepKind
   sectionNumber?: string
+  /** 深掘り回答の同期基準（変更検知用） */
+  deepdiveAnswersKey?: string
 }
 
 export interface ManualSection {
@@ -203,6 +205,8 @@ export interface ManualSection {
   blocks: ManualBlock[]
   /** フローとの対応状態。未設定は ok 扱い */
   syncStatus?: ManualSyncStatus
+  /** needs_review の理由（UI 文言分岐。未設定時はフロー由来とみなす） */
+  reviewReason?: "flow" | "deepdive"
   /** 最終同期／生成時のフロー側スナップショット */
   sourceSnapshot?: ManualSourceSnapshot
 }

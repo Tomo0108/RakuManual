@@ -152,6 +152,7 @@ export function applyManualImpactStatuses(
       return {
         ...section,
         syncStatus: "needs_review" as const,
+        reviewReason: "flow" as const,
         // 比較基準は旧ラベル側を残す（解除時に更新）
         sourceSnapshot: section.sourceSnapshot ?? {
           label: baselineLabel(section),
@@ -237,6 +238,9 @@ export function clearManualReview(
   return {
     ...section,
     syncStatus: "ok",
-    sourceSnapshot: node ? snapshotFromNode(node) : section.sourceSnapshot,
+    reviewReason: undefined,
+    sourceSnapshot: node
+      ? { ...snapshotFromNode(node), deepdiveAnswersKey: section.sourceSnapshot?.deepdiveAnswersKey }
+      : section.sourceSnapshot,
   }
 }

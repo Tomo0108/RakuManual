@@ -34,6 +34,14 @@ import {
   partitionSectionsBySync,
 } from "@/lib/manual-impact"
 import { placeUnplacedSection } from "@/lib/manual-regen"
+import {
+  acknowledgeDeepdiveReview,
+  deepdiveItemForStep,
+  sectionNeedsDeepdiveReview,
+  sectionNeedsFlowReview,
+  stampAllSectionsDeepdive,
+  stampDeepdiveOnSection,
+} from "@/lib/manual-deepdive-sync"
 import { appendRevision, snapshotSection } from "@/lib/manual-version"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { isFilenameLikeCaption } from "@/lib/caption-quality"
@@ -52,6 +60,7 @@ import {
   type ImpactFilter,
 } from "@/features/manual/ManualImpactBanner"
 import { ManualRegenWizard } from "@/features/manual/ManualRegenWizard"
+import { DeepdiveStaleBanner } from "@/features/manual/DeepdiveStaleBanner"
 import { SectionHistoryButton } from "@/features/manual/SectionHistoryPanel"
 import { aiGenerateManualSections, aiRegenerateSection } from "@/lib/api/ai"
 import { describeAiError } from "@/lib/api/errors"
@@ -143,7 +152,7 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
         let next: Project = {
           ...base,
           status: base.status === "deepdive" ? "manual" : base.status,
-          sections: generated,
+          sections: stampAllSectionsDeepdive(generated, base.deepdive),
           history: [
             { id: `h-${Date.now()}`, date: now(), user: actor, action: `マニュアルを生成(全${generated.length}セクション)` },
             ...base.history,
@@ -233,10 +242,13 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
   const showOrphans = impactFilter === "all" || impactFilter === "orphaned"
   const showUnplaced = impactFilter === "all" || impactFilter === "unplaced"
   const hasUnplacedTools = showUnplaced && unplacedCandidates.length > 0
-  const hasImpactSignal = sections.some((s) => {
-    const st = s.syncStatus ?? "ok"
-    return st === "needs_review" || st === "orphaned" || st === "unplaced"
-  }) || unplacedCandidates.length > 0
+  const hasImpactSignal =
+    sections.some((s) => {
+      const st = s.syncStatus ?? "ok"
+      return st === "needs_review" || st === "orphaned" || st === "unplaced"
+    }) ||
+    unplacedCandidates.length > 0 ||
+    project.sections.some((s) => sectionNeedsDeepdiveReview(s, project))
   const showWorkspaceChrome = hasImpactSignal || hasUnplacedTools
 
   return (
@@ -279,6 +291,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                 onFilterChange={setImpactFilter}
                 onOpenRegen={() => setRegenOpen(true)}
                 isMobile={isMobile}
+              />
+              <DeepdiveStaleBanner
+                project={project}
+                isMobile={isMobile}
+                onShowStaleSections={() => setImpactFilter("needs_review")}
               />
               {hasUnplacedTools && (
                 <div
@@ -714,6 +731,8 @@ function SectionEditor({
 
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
   const sync = section.syncStatus ?? "ok"
+  const deepdiveReview = sectionNeedsDeepdiveReview(section, project)
+  const flowReview = sectionNeedsFlowReview(section, project)
 
   const updateBlock = (blockId: string, updater: (b: ManualBlock) => ManualBlock) => {
     onUpdate((s) => ({
@@ -741,9 +760,11 @@ function SectionEditor({
         project,
         snapshotSection(section, { reason: "regenerate", user: actor }),
       )
+      const item = deepdiveItemForStep(withSnapshot, section.stepId ?? "")
+      const merged = stampDeepdiveOnSection(regenerated, item)
       onReplaceProject({
         ...withSnapshot,
-        sections: withSnapshot.sections.map((s) => (s.id === section.id ? regenerated : s)),
+        sections: withSnapshot.sections.map((s) => (s.id === section.id ? merged : s)),
       })
       onLog(`セクション「${section.title}」をAIで部分再生成(他セクションへの影響なし)`)
     } catch (err) {
@@ -760,7 +781,79 @@ function SectionEditor({
   const chromeCollapsed = confirms === 0 && sync === "ok"
 
   const syncActions =
-    sync === "needs_review" || sync === "orphaned" ? (
+    sync === "orphaned" ? (
+      <details className={cn(APP_CHROME, "open:bg-muted/55")}>
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <Workflow className="size-3.5 text-muted-foreground" />
+              <span className={APP_CHROME_LABEL}>アプリ操作</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-foreground">廃止候補</span>
+              <SyncStatusBadge status={section.syncStatus} />
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </span>
+        </summary>
+        <div className={cn("flex gap-2 border-t border-border/50 px-3 py-3", isMobile && "flex-col")}>
+          <Button
+            variant="outline"
+            size={isMobile ? "default" : "sm"}
+            className={cn(isMobile && "h-10 w-full")}
+            onClick={() => {
+              onUpdate((s) => markIntentionalDifference(s))
+              onLog(`セクション「${section.title}」をフローと不一致のまま残す`)
+            }}
+          >
+            フローと不一致のまま残す
+          </Button>
+        </div>
+      </details>
+    ) : deepdiveReview ? (
+      <details className={cn(APP_CHROME, "open:bg-muted/55")} open>
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <StickyNote className="size-3.5 text-muted-foreground" />
+              <span className={APP_CHROME_LABEL}>アプリ操作</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-foreground">深掘り回答の更新</span>
+              <SyncStatusBadge status="needs_review" />
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </span>
+        </summary>
+        <div className={cn("space-y-2 border-t border-border/50 px-3 py-3 text-xs text-muted-foreground", isMobile && "space-y-3")}>
+          <p>
+            深掘りヒアリングの内容が変わりました。上の「AI再生成」で本文を更新するか、手で直したうえで「深掘りを反映済み」を選んでください。
+          </p>
+          <div className={cn("flex gap-2", isMobile && "flex-col")}>
+            <Button
+              variant="outline"
+              size={isMobile ? "default" : "sm"}
+              className={cn("gap-1", isMobile && "h-10 w-full")}
+              onClick={regenerate}
+              disabled={regenerating}
+            >
+              <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+              AI再生成
+            </Button>
+            <Button
+              variant="outline"
+              size={isMobile ? "default" : "sm"}
+              className={cn(isMobile && "h-10 w-full")}
+              onClick={() => {
+                const item = deepdiveItemForStep(project, section.stepId ?? "")
+                onUpdate((s) => acknowledgeDeepdiveReview(s, item))
+                onLog(`セクション「${section.title}」を深掘り反映済みとして確認`)
+              }}
+            >
+              深掘りを反映済み
+            </Button>
+          </div>
+        </div>
+      </details>
+    ) : flowReview ? (
       <details className={cn(APP_CHROME, "open:bg-muted/55")}>
         <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between gap-2">
@@ -775,19 +868,17 @@ function SectionEditor({
           </span>
         </summary>
         <div className={cn("flex gap-2 border-t border-border/50 px-3 py-3", isMobile && "flex-col")}>
-          {sync === "needs_review" && (
-            <Button
-              variant="outline"
-              size={isMobile ? "default" : "sm"}
-              className={cn(isMobile && "h-10 w-full")}
-              onClick={() => {
-                onUpdate((s) => clearManualReview(s, project.flow))
-                onLog(`セクション「${section.title}」の要確認を解除`)
-              }}
-            >
-              要確認を解除
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size={isMobile ? "default" : "sm"}
+            className={cn(isMobile && "h-10 w-full")}
+            onClick={() => {
+              onUpdate((s) => clearManualReview(s, project.flow))
+              onLog(`セクション「${section.title}」のフロー要確認を解除`)
+            }}
+          >
+            フローと一致している
+          </Button>
           <Button
             variant="outline"
             size={isMobile ? "default" : "sm"}
@@ -980,7 +1071,17 @@ function SectionEditor({
           </div>
         )}
 
-        {sync === "needs_review" && (
+        {deepdiveReview && (
+          <div className={cn("mt-2 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              <span className="font-medium">アプリからの案内: </span>
+              深掘り回答が更新されています。「AI再生成」するか手で直し、「深掘りを反映済み」で確認してください。
+            </span>
+          </div>
+        )}
+
+        {flowReview && (
           <div className={cn("mt-2 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>

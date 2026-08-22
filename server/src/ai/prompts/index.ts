@@ -3,6 +3,8 @@ export { GOLD_SECTION_BLOCKS, GOLD_FLOW_SNIPPET } from "./reference-examples.js"
 export { buildFlowGenerationMessages, buildFlowGenerationPayload } from "./flow.js"
 export { buildManualGenerationMessages } from "./manual.js"
 export { buildSectionRegenerationMessages } from "./section.js"
+export { buildHearingNextMessages } from "./hearing.js"
+export { buildDeepdiveQuestionsMessages } from "./deepdive.js"
 export { buildHearingContext, buildDeepdiveContext, buildFlowSummary } from "./context.js"
 export { postProcessBlock, normalizeBlockText } from "./post-process.js"
 export {

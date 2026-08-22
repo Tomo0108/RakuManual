@@ -85,10 +85,11 @@ function buildMockStructuredResponse(system: string, user: string): string {
     let name = "業務"
     try {
       const parsed = JSON.parse(user) as {
+        projectName?: string
         name?: string
         hearingAnswers?: Array<{ questionId?: string; value?: string }>
       }
-      name = parsed.name ?? name
+      name = parsed.projectName ?? parsed.name ?? name
       const steps = parsed.hearingAnswers?.find((a) => a.questionId === "q8")?.value
       const parts = steps
         ? steps
@@ -127,6 +128,7 @@ function buildMockStructuredResponse(system: string, user: string): string {
   if (system.includes("セクション") && system.includes("blocks")) {
     try {
       const parsed = JSON.parse(user) as {
+        projectName?: string
         name?: string
         deepdive?: Array<{
           stepId?: string
@@ -168,6 +170,14 @@ function buildMockStructuredResponse(system: string, user: string): string {
                 .map((a) => a.answer ?? a.value ?? "")
                 .filter(Boolean)
                 .join(" / ")
+              const firstAnswer = (d.answers ?? []).map((a) => a.answer ?? a.value ?? "").find(Boolean)
+              const stepText = firstAnswer
+                ? firstAnswer.includes("・")
+                  ? firstAnswer.startsWith("・")
+                    ? firstAnswer
+                    : `・${firstAnswer}`
+                  : `・${firstAnswer.replace(/。$/, "")}すること`
+                : "・画面の指示に従い、必要項目を入力して「保存」ボタンをクリックすること"
               return {
                 title: `${num}　${label}`,
                 sectionNumber: num,
@@ -187,20 +197,20 @@ function buildMockStructuredResponse(system: string, user: string): string {
                   },
                   {
                     type: "step",
-                    text: "・画面の指示に従い、必要項目を入力して「保存」ボタンをクリックすること",
-                    needsConfirm: false,
+                    text: stepText,
+                    needsConfirm: !firstAnswer,
                   },
                 ],
               }
             })
           : [
               {
-                title: `${parsed.name ?? "業務"}の概要`,
+                title: `${parsed.projectName ?? parsed.name ?? "業務"}の概要`,
                 sectionNumber: "1",
                 blocks: [
                   {
                     type: "paragraph",
-                    text: `${parsed.name ?? "業務"}の手順概要です。`,
+                    text: `${parsed.projectName ?? parsed.name ?? "業務"}の手順概要です。`,
                     needsConfirm: true,
                   },
                 ],
@@ -216,7 +226,7 @@ function buildMockStructuredResponse(system: string, user: string): string {
     return JSON.stringify({ contradiction: null, followUp: null })
   }
 
-  if (system.includes("questions") && system.includes("深掘り")) {
+  if (system.includes("深掘りヒアリング") || (system.includes("questions") && system.includes("重要度"))) {
     try {
       const parsed = JSON.parse(user) as { step?: string; importance?: string }
       const step = parsed.step ?? "このステップ"

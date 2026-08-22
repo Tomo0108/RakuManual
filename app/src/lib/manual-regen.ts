@@ -98,6 +98,23 @@ export interface ApplyRegenInput {
   user?: string
 }
 
+/** 再生成・新規追加・廃止の前に版を残す対象 sectionId */
+export function collectChangingSectionIds(
+  project: Project,
+  choices: Record<string, ManualRegenChoice>,
+): string[] {
+  const plan = buildRegenPlan(project)
+  return plan
+    .filter((item) => {
+      const choice = choices[item.key] ?? item.defaultChoice
+      if (item.kind === "unplaced") return choice === "regenerate"
+      if (item.kind === "orphan") return choice === "archive" || choice === "regenerate"
+      return choice === "regenerate"
+    })
+    .map((item) => item.sectionId)
+    .filter((id): id is string => !!id)
+}
+
 /**
  * 保持選択に従ってマニュアルを更新する。
  * keep の本文は不変。regenerate / 新規追加の前に復元ポイントを作成する。

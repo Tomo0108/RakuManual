@@ -18,6 +18,7 @@ import { useAppSession } from "@/lib/api/use-app-session"
 import { actorName } from "@/lib/actor"
 import { fetchDeepdiveQuestions } from "@/lib/api/ai"
 import { describeAiError } from "@/lib/api/errors"
+import { markSectionsDeepdiveStale } from "@/lib/manual-deepdive-sync"
 import { REVIEW_STATUS, WARNING_BOX, SUCCESS_BOX } from "@/lib/semantic-styles"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -128,6 +129,16 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
     }))
   }
 
+  /** 深掘り回答変更時、既存マニュアルがあれば該当セクションを要確認にする */
+  const updateAnswers = (stepId: string, updater: (d: DeepDiveItem) => DeepDiveItem) => {
+    updateProject(project.id, (p) => ({
+      ...p,
+      deepdive: p.deepdive.map((d) => (d.stepId === stepId ? updater(d) : d)),
+      sections:
+        p.sections.length > 0 ? markSectionsDeepdiveStale(p.sections, stepId) : p.sections,
+    }))
+  }
+
   const selectStep = (stepId: string) => {
     setSelectedId(stepId)
     if (isMobile) setMobileView("detail")
@@ -137,7 +148,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
     if (!selected || !currentQuestion || !draft.trim()) return
     const answer = draft.trim()
     const willComplete = selected.answers.length + 1 >= questions.length
-    update(selected.stepId, (d) => ({
+    updateAnswers(selected.stepId, (d) => ({
       ...d,
       status: willComplete ? "done" : "in-progress",
       answers: [...d.answers, { question: currentQuestion, answer }],
@@ -153,7 +164,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
 
   const editAnswer = (index: number, answer: string) => {
     if (!selected) return
-    update(selected.stepId, (d) => ({
+    updateAnswers(selected.stepId, (d) => ({
       ...d,
       answers: d.answers.map((qa, i) => (i === index ? { ...qa, answer } : qa)),
     }))
@@ -161,7 +172,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
 
   const deleteAnswer = (index: number) => {
     if (!selected) return
-    update(selected.stepId, (d) => {
+    updateAnswers(selected.stepId, (d) => {
       const answers = d.answers.filter((_, i) => i !== index)
       return { ...d, answers, status: statusForAnswerCount(answers.length, d.status) }
     })
@@ -214,6 +225,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
     return (
       <StepDetailPanel
         selected={selected}
+        manualExists={project.sections.length > 0}
         questions={questions}
         currentQuestion={currentQuestion}
         questionsError={questionsError}
@@ -243,6 +255,7 @@ export function DeepDiveTab({ project, updateProject, setTab }: Props) {
         {selected ? (
           <StepDetailPanel
             selected={selected}
+            manualExists={project.sections.length > 0}
             questions={questions}
             currentQuestion={currentQuestion}
             questionsError={questionsError}
@@ -348,6 +361,7 @@ function StepListPanel({
 
 function StepDetailPanel({
   selected,
+  manualExists,
   questions,
   currentQuestion,
   questionsError,
@@ -361,6 +375,7 @@ function StepDetailPanel({
   onBack,
 }: {
   selected: DeepDiveItem
+  manualExists?: boolean
   questions: string[]
   currentQuestion: string | undefined
   questionsError: string | null
@@ -465,6 +480,12 @@ function StepDetailPanel({
                 AIによる質問生成が使えないため、標準の質問を表示しています（{questionsError}）
               </span>
             </div>
+          )}
+
+          {manualExists && (
+            <p className={cn("text-[12px] leading-relaxed text-muted-foreground", WARNING_BOX, "px-3 py-2")}>
+              マニュアル作成済みです。回答を変更すると、該当セクションが「要確認」になります。
+            </p>
           )}
 
           {selected.answers.map((qa, i) => (

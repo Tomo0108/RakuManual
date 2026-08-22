@@ -368,6 +368,92 @@ export async function generateManualFromLlm(
   return { sections, provider: llm.provider, tokens: llm.tokens, usedLlmStructure: false }
 }
 
+export async function generateNewSectionFromLlm(
+  project: Project,
+  candidate: { stepId: string; label: string; sectionNumber?: string },
+  userId: string,
+): Promise<{ section: Record<string, unknown>; provider: string; tokens: number }> {
+  const flow = project.flow as unknown as FlowState
+  const node = flow.nodes?.find((n) => n.id === candidate.stepId)
+  const deepdiveItem = project.deepdive.find((d) => d.stepId === candidate.stepId)
+  const stubSection = {
+    id: uid("s"),
+    title: candidate.label,
+    sectionNumber: candidate.sectionNumber,
+    stepId: candidate.stepId,
+    status: "draft",
+    version: 1,
+    blocks: [],
+  }
+
+  const adapter = getLlmAdapter()
+  const llm = await adapter.complete(
+    buildSectionRegenerationMessages({
+      projectName: project.name,
+      section: stubSection,
+      deepdiveItem,
+      flowNode: node,
+    }),
+    {
+      maxTokens: 1500,
+      context: { userId, projectId: project.id, action: "section_generate" },
+    },
+  )
+
+  const titles = resolveSectionTitles(project, {
+    stepId: candidate.stepId,
+    stepLabel: candidate.label,
+    sectionNumber: candidate.sectionNumber,
+  })
+
+  try {
+    const parsed = JSON.parse(extractJson(llm.text)) as {
+      title?: string
+      blocks?: Array<{ type?: string; text?: string; needsConfirm?: boolean }>
+    }
+    if (parsed.blocks?.length) {
+      return {
+        section: {
+          ...stubSection,
+          title: parsed.title ?? candidate.label,
+          majorTitle: titles.majorTitle,
+          mediumTitle: titles.mediumTitle,
+          updatedAt: new Date().toISOString().slice(0, 10),
+          blocks: parsed.blocks.map((b) => {
+            const normalized = postProcessBlock(b)
+            return {
+              id: uid("b"),
+              type: normalized.type,
+              text: normalized.text,
+              needsConfirm: normalized.needsConfirm,
+            }
+          }),
+          syncStatus: "ok",
+          sourceSnapshot: node
+            ? { label: node.data.label, kind: node.data.kind, sectionNumber: node.data.sectionNumber }
+            : { label: candidate.label, sectionNumber: candidate.sectionNumber },
+        },
+        provider: llm.provider,
+        tokens: llm.tokens,
+      }
+    }
+  } catch {
+    /* fallback */
+  }
+
+  const { regenerateSectionMock } = await import("./manual.js")
+  const tempId = uid("s-temp")
+  const mockSection = regenerateSectionMock(
+    { ...project, sections: [...project.sections, { ...stubSection, id: tempId }] },
+    tempId,
+  )
+  return {
+    section: { ...mockSection, id: uid("s"), stepId: candidate.stepId },
+    provider: llm.provider,
+    tokens: llm.tokens,
+  }
+}
+
 export async function regenerateSectionFromLlm(
   project: Project,
   sectionId: string,
