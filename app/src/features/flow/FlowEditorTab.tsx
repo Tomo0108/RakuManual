@@ -58,6 +58,8 @@ import {
   type NlProposal,
 } from "./flow-logic"
 import { aiGenerateFlow, aiProposeFlowNl, aiRegenerateFlow } from "@/lib/api/ai"
+import { stampFlowHearing } from "@/lib/manual-hearing-sync"
+import { FlowHearingStaleBanner } from "@/features/flow/FlowHearingStaleBanner"
 import { describeAiError } from "@/lib/api/errors"
 import { fetchProject } from "@/lib/api/projects"
 import {
@@ -821,7 +823,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setAiError(null)
     try {
       const { flow: aiFlow } = await aiGenerateFlow(project.id, (p) => setGenProgress(p))
-      const generated = polishFlow(autoLayout(aiFlow))
+      const generated = stampFlowHearing(polishFlow(autoLayout(aiFlow)), project.hearingAnswers)
       commit(() => generated)
       // ジョブ実行中にサーバー側が更新されている可能性があるため最新を取り直して合成する
       const latest = await fetchProject(project.id).catch(() => null)
@@ -851,10 +853,12 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setAiError(null)
     try {
       const { flow: regenFlow } = await aiRegenerateFlow(project.id, flow)
-      commit(() => polishFlow(regenFlow))
+      const stamped = stampFlowHearing(polishFlow(regenFlow), project.hearingAnswers)
+      commit(() => stamped)
       fitCanvas()
       updateProject(project.id, (p) => ({
         ...p,
+        flow: stamped,
         history: [
           {
             id: `h-${Date.now()}`,
@@ -1001,7 +1005,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
       return {
         ...p,
-        flow: finalized,
+        flow: stampFlowHearing(finalized, p.hearingAnswers),
         updatedAt: now().slice(0, 10),
         status: p.status === "flow" || p.status === "hearing" ? "deepdive" : p.status,
         deepdive: nextDeepdive,
@@ -1086,6 +1090,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   return (
     <div className="flex h-full flex-col">
+      <FlowHearingStaleBanner
+        project={project}
+        onRegenerate={() => setRegenConfirmOpen(true)}
+        isMobile={isMobile}
+      />
       {aiError && (
         <div className="flex shrink-0 items-start gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive md:text-[13px]">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />

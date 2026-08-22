@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  ClipboardList,
   AlertTriangle,
   Check,
   ChevronDown,
@@ -42,6 +43,12 @@ import {
   stampAllSectionsDeepdive,
   stampDeepdiveOnSection,
 } from "@/lib/manual-deepdive-sync"
+import {
+  acknowledgeHearingReview,
+  sectionNeedsHearingReview,
+  stampAllSectionsHearing,
+  stampHearingOnSection,
+} from "@/lib/manual-hearing-sync"
 import { appendRevision, snapshotSection } from "@/lib/manual-version"
 import { readImageFile, validateImageFile } from "@/lib/manual-image"
 import { isFilenameLikeCaption } from "@/lib/caption-quality"
@@ -61,6 +68,7 @@ import {
 } from "@/features/manual/ManualImpactBanner"
 import { ManualRegenWizard } from "@/features/manual/ManualRegenWizard"
 import { DeepdiveStaleBanner } from "@/features/manual/DeepdiveStaleBanner"
+import { HearingStaleBanner } from "@/features/manual/HearingStaleBanner"
 import { SectionHistoryButton } from "@/features/manual/SectionHistoryPanel"
 import { aiGenerateManualSections, aiRegenerateSection } from "@/lib/api/ai"
 import { describeAiError } from "@/lib/api/errors"
@@ -152,7 +160,10 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
         let next: Project = {
           ...base,
           status: base.status === "deepdive" ? "manual" : base.status,
-          sections: stampAllSectionsDeepdive(generated, base.deepdive),
+          sections: stampAllSectionsHearing(
+            stampAllSectionsDeepdive(generated, base.deepdive),
+            base.hearingAnswers,
+          ),
           history: [
             { id: `h-${Date.now()}`, date: now(), user: actor, action: `マニュアルを生成(全${generated.length}セクション)` },
             ...base.history,
@@ -248,7 +259,8 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
       return st === "needs_review" || st === "orphaned" || st === "unplaced"
     }) ||
     unplacedCandidates.length > 0 ||
-    project.sections.some((s) => sectionNeedsDeepdiveReview(s, project))
+    project.sections.some((s) => sectionNeedsDeepdiveReview(s, project)) ||
+    project.sections.some((s) => sectionNeedsHearingReview(s, project))
   const showWorkspaceChrome = hasImpactSignal || hasUnplacedTools
 
   return (
@@ -293,6 +305,11 @@ export function ManualTab({ project, updateProject, setTab }: Props) {
                 isMobile={isMobile}
               />
               <DeepdiveStaleBanner
+                project={project}
+                isMobile={isMobile}
+                onShowStaleSections={() => setImpactFilter("needs_review")}
+              />
+              <HearingStaleBanner
                 project={project}
                 isMobile={isMobile}
                 onShowStaleSections={() => setImpactFilter("needs_review")}
@@ -732,6 +749,7 @@ function SectionEditor({
   const confirms = section.blocks.filter((b) => b.needsConfirm).length
   const sync = section.syncStatus ?? "ok"
   const deepdiveReview = sectionNeedsDeepdiveReview(section, project)
+  const hearingReview = sectionNeedsHearingReview(section, project)
   const flowReview = sectionNeedsFlowReview(section, project)
 
   const updateBlock = (blockId: string, updater: (b: ManualBlock) => ManualBlock) => {
@@ -761,7 +779,10 @@ function SectionEditor({
         snapshotSection(section, { reason: "regenerate", user: actor }),
       )
       const item = deepdiveItemForStep(withSnapshot, section.stepId ?? "")
-      const merged = stampDeepdiveOnSection(regenerated, item)
+      const merged = stampHearingOnSection(
+        stampDeepdiveOnSection(regenerated, item),
+        project.hearingAnswers,
+      )
       onReplaceProject({
         ...withSnapshot,
         sections: withSnapshot.sections.map((s) => (s.id === section.id ? merged : s)),
@@ -807,6 +828,49 @@ function SectionEditor({
           >
             フローと不一致のまま残す
           </Button>
+        </div>
+      </details>
+    ) : hearingReview ? (
+      <details className={cn(APP_CHROME, "open:bg-muted/55")} open>
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <ClipboardList className="size-3.5 text-muted-foreground" />
+              <span className={APP_CHROME_LABEL}>アプリ操作</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-foreground">骨組みヒアリングの更新</span>
+              <SyncStatusBadge status="needs_review" />
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </span>
+        </summary>
+        <div className={cn("space-y-2 border-t border-border/50 px-3 py-3 text-xs text-muted-foreground", isMobile && "space-y-3")}>
+          <p>
+            骨組みヒアリングの回答が変わりました。フロー図タブで見直しのうえ、必要なら「AI再生成」で本文を更新してください。手修正で足りる場合は「骨組みを反映済み」を選んでください。
+          </p>
+          <div className={cn("flex gap-2", isMobile && "flex-col")}>
+            <Button
+              variant="outline"
+              size={isMobile ? "default" : "sm"}
+              className={cn("gap-1", isMobile && "h-10 w-full")}
+              onClick={regenerate}
+              disabled={regenerating}
+            >
+              <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+              AI再生成
+            </Button>
+            <Button
+              variant="outline"
+              size={isMobile ? "default" : "sm"}
+              className={cn(isMobile && "h-10 w-full")}
+              onClick={() => {
+                onUpdate((s) => acknowledgeHearingReview(s, project.hearingAnswers))
+                onLog(`セクション「${section.title}」を骨組み反映済みとして確認`)
+              }}
+            >
+              骨組みを反映済み
+            </Button>
+          </div>
         </div>
       </details>
     ) : deepdiveReview ? (
@@ -1067,6 +1131,16 @@ function SectionEditor({
             <span>
               <span className="font-medium">アプリからの案内: </span>
               AIが推測で補完した「要確認」箇所が {confirms} 件あります。内容を確認し、「内容OK」または本文修正で解消してください。
+            </span>
+          </div>
+        )}
+
+        {hearingReview && (
+          <div className={cn("mt-2 flex items-start gap-2 px-3 py-2.5 text-[12px] leading-relaxed md:text-[13px]", WARNING_BOX)}>
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              <span className="font-medium">アプリからの案内: </span>
+              骨組みヒアリングが更新されています。フロー図の見直しと、必要なら「AI再生成」を行ってください。
             </span>
           </div>
         )}

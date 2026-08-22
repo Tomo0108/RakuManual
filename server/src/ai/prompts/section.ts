@@ -27,6 +27,8 @@ export function buildSectionRegenerationSystemPrompt(): string {
     "",
     "参考例:",
     formatGoldSectionForPrompt(),
+    "",
+    "blocks[].text の step は敬体「〜してください。」で終える（「〜すること」で終えない）。",
   ].join("\n")
 }
 

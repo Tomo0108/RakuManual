@@ -149,12 +149,12 @@ function buildMockStructuredResponse(system: string, user: string): string {
             },
             {
               type: "note",
-              text: "※入力内容を保存前に確認すること。",
+              text: "※入力内容を保存前に確認してください。",
               needsConfirm: true,
             },
             {
               type: "step",
-              text: "・「保存」ボタンをクリックし、ステータスが「保存済み」になっていることを確認すること",
+              text: "・「保存」ボタンをクリックし、ステータスが「保存済み」になっていることを確認してください。",
               needsConfirm: false,
             },
           ],
@@ -174,10 +174,12 @@ function buildMockStructuredResponse(system: string, user: string): string {
               const stepText = firstAnswer
                 ? firstAnswer.includes("・")
                   ? firstAnswer.startsWith("・")
-                    ? firstAnswer
-                    : `・${firstAnswer}`
-                  : `・${firstAnswer.replace(/。$/, "")}すること`
-                : "・画面の指示に従い、必要項目を入力して「保存」ボタンをクリックすること"
+                    ? firstAnswer.endsWith("。")
+                      ? firstAnswer
+                      : `${firstAnswer.replace(/[。．]$/, "")}。`
+                    : `・${firstAnswer.replace(/[。．]$/, "")}してください。`
+                  : `・${firstAnswer.replace(/[。．]$/, "")}してください。`
+                : "・画面の指示に従い、必要項目を入力して「保存」ボタンをクリックしてください。"
               return {
                 title: `${num}　${label}`,
                 sectionNumber: num,
@@ -192,7 +194,7 @@ function buildMockStructuredResponse(system: string, user: string): string {
                     type: "note",
                     text: answerText
                       ? `※${answerText}`
-                      : "※操作前に入力内容を確認すること。",
+                      : "※操作前に入力内容を確認してください。",
                     needsConfirm: !answerText,
                   },
                   {

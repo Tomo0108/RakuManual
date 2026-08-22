@@ -42,6 +42,7 @@ export function buildManualGenerationSystemPrompt(): string {
     "- 深掘り answers の Q&A を step/note に落とし込む。推測で補った文は needsConfirm:true",
     "- majorTitle は q1 の業務名、mediumTitle は操作の短い見出し",
     "- sectionNumber は deepdive.sectionNumber またはフロー項番と一致させる",
+    "- blocks[].text の step は敬体「〜してください。」で終える（「〜すること」で終えない）",
     "- 画像は生成しない。画面操作は step として文章化する",
   ].join("\n")
 }

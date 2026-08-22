@@ -18,6 +18,7 @@ import type {
 import { HEARING_QUESTIONS } from "@/lib/mock-data"
 import { fetchNextHearingQuestion, streamAiCompletion } from "@/lib/api/ai"
 import { upsertHearingAnswer } from "@/lib/api/projects"
+import { applyHearingChangeToProject } from "@/lib/manual-hearing-sync"
 import { now } from "@/lib/project-utils"
 import { WARNING_TEXT, SUCCESS_TEXT, SEMANTIC } from "@/lib/semantic-styles"
 import type { UpdateProject } from "@/pages/ProjectPage"
@@ -110,17 +111,20 @@ export function HearingTab({ project, updateProject, updateProjectLocal, setTab 
    * 更新履歴を上書きしてしまうため、成功時は返却プロジェクトで置き換える。
    */
   const persistAnswer = (answer: HearingAnswer) => {
+    const hadPrior = answers.some((a) => a.questionId === answer.questionId)
     const applyLocally = (p: Project): Project => ({
       ...p,
       hearingAnswers: [...p.hearingAnswers.filter((a) => a.questionId !== answer.questionId), answer],
     })
-    updateProjectLocal(project.id, applyLocally)
+    const applyWithStale = (p: Project): Project =>
+      hadPrior ? applyHearingChangeToProject(applyLocally(p)) : applyLocally(p)
+    updateProjectLocal(project.id, applyWithStale)
     void upsertHearingAnswer(project.id, answer)
-      .then((saved) => updateProjectLocal(project.id, () => saved))
+      .then((saved) => updateProjectLocal(project.id, () => applyHearingChangeToProject(saved)))
       .catch(() => {
         // 専用APIが使えない場合のみ全体保存へフォールバック
         updateProject(project.id, (p) => ({
-          ...applyLocally(p),
+          ...applyWithStale(p),
           updatedAt: now().slice(0, 10),
         }))
       })
@@ -485,7 +489,7 @@ function UserBubble({
               </Button>
             </div>
             <p className={cn("mt-2 text-[11px]", WARNING_TEXT)}>
-              ※ 回答を修正すると、フロー図の再生成が必要になる場合があります
+              ※ 回答を修正すると、フロー図やマニュアルに「要確認」が付く場合があります
             </p>
           </div>
         ) : (

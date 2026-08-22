@@ -240,7 +240,11 @@ export function clearManualReview(
     syncStatus: "ok",
     reviewReason: undefined,
     sourceSnapshot: node
-      ? { ...snapshotFromNode(node), deepdiveAnswersKey: section.sourceSnapshot?.deepdiveAnswersKey }
+      ? {
+          ...snapshotFromNode(node),
+          deepdiveAnswersKey: section.sourceSnapshot?.deepdiveAnswersKey,
+          hearingAnswersKey: section.sourceSnapshot?.hearingAnswersKey,
+        }
       : section.sourceSnapshot,
   }
 }

@@ -22,7 +22,7 @@ export const GOLD_SECTION_BLOCKS = {
     },
     {
       type: "step" as const,
-      text: "・「商品タイプ」フィールドで該当する選択肢をクリックすること",
+      text: "・「商品タイプ」フィールドで該当する選択肢をクリックしてください。",
       needsConfirm: false,
     },
   ],
@@ -40,7 +40,7 @@ export const GOLD_SECTION_PAGINATED = {
     },
     {
       type: "step" as const,
-      text: "・表示切替ボタンをクリックして、「ページ２「属性」」を入力する",
+      text: "・表示切替ボタンをクリックして、「ページ２「属性」」を入力してください。",
       needsConfirm: false,
     },
   ],

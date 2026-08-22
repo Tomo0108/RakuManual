@@ -26,6 +26,7 @@ export function stampDeepdiveOnSection(
       kind: section.sourceSnapshot?.kind,
       sectionNumber: section.sourceSnapshot?.sectionNumber ?? section.sectionNumber,
       deepdiveAnswersKey: key,
+      hearingAnswersKey: section.sourceSnapshot?.hearingAnswersKey,
     },
   }
 }
@@ -73,14 +74,14 @@ export function countDeepdiveStaleSections(project: Project): number {
 export function sectionNeedsDeepdiveReview(section: ManualSection, project: Project): boolean {
   if (section.reviewReason === "deepdive") return true
   if (section.syncStatus !== "needs_review") return false
-  if (section.reviewReason === "flow") return false
+  if (section.reviewReason === "flow" || section.reviewReason === "hearing") return false
   const item = deepdiveItemForStep(project, section.stepId ?? "")
   return isDeepdiveStale(section, item)
 }
 
 export function sectionNeedsFlowReview(section: ManualSection, project: Project): boolean {
   if (section.syncStatus !== "needs_review") return false
-  if (section.reviewReason === "deepdive") return false
+  if (section.reviewReason === "deepdive" || section.reviewReason === "hearing") return false
   if (section.reviewReason === "flow") return true
   return !isDeepdiveStale(section, deepdiveItemForStep(project, section.stepId ?? ""))
 }

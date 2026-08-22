@@ -102,6 +102,8 @@ export interface FlowState {
   /** 担当チーム(行)の一覧 */
   lanes: string[]
   layoutMeta?: FlowLayoutMeta
+  /** フロー生成・確定時点の骨組み回答指紋（変更検知用） */
+  hearingAnswersKey?: string
 }
 
 /* ---------- 深掘りヒアリング ---------- */
@@ -186,6 +188,8 @@ export interface ManualSourceSnapshot {
   sectionNumber?: string
   /** 深掘り回答の同期基準（変更検知用） */
   deepdiveAnswersKey?: string
+  /** 骨組み回答の同期基準（変更検知用） */
+  hearingAnswersKey?: string
 }
 
 export interface ManualSection {
@@ -206,7 +210,7 @@ export interface ManualSection {
   /** フローとの対応状態。未設定は ok 扱い */
   syncStatus?: ManualSyncStatus
   /** needs_review の理由（UI 文言分岐。未設定時はフロー由来とみなす） */
-  reviewReason?: "flow" | "deepdive"
+  reviewReason?: "flow" | "deepdive" | "hearing"
   /** 最終同期／生成時のフロー側スナップショット */
   sourceSnapshot?: ManualSourceSnapshot
 }

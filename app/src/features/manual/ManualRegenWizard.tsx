@@ -8,6 +8,7 @@ import {
   collectChangingSectionIds,
 } from "@/lib/manual-regen"
 import { stampAllSectionsDeepdive } from "@/lib/manual-deepdive-sync"
+import { stampAllSectionsHearing } from "@/lib/manual-hearing-sync"
 import { appendRevisions, snapshotSection } from "@/lib/manual-version"
 import { aiApplyManualRegen } from "@/lib/api/ai"
 import { describeAiError } from "@/lib/api/errors"
@@ -104,12 +105,21 @@ export function ManualRegenWizard({
         const { sections } = await aiApplyManualRegen(project.id, choices)
         next = {
           ...base,
-          sections: stampAllSectionsDeepdive(sections, base.deepdive),
+          sections: stampAllSectionsHearing(
+            stampAllSectionsDeepdive(sections, base.deepdive),
+            base.hearingAnswers,
+          ),
           updatedAt: today(),
         }
       } else {
         next = applyRegenChoices({ project: base, choices })
-        next = { ...next, sections: stampAllSectionsDeepdive(next.sections, next.deepdive) }
+        next = {
+          ...next,
+          sections: stampAllSectionsHearing(
+            stampAllSectionsDeepdive(next.sections, next.deepdive),
+            next.hearingAnswers,
+          ),
+        }
       }
       onApply(next)
       onOpenChange(false)

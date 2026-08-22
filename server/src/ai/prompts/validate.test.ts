@@ -29,6 +29,8 @@ describe("prompt definitions", () => {
     const sys = buildManualGenerationSystemPrompt()
     assert.match(sys, /※/)
     assert.match(sys, /「」/)
+    assert.match(sys, /してください/)
+    assert.match(sys, /「〜すること」で終えない/)
     assert.ok(sys.includes(GOLD_SECTION_BLOCKS.blocks[1]!.text.slice(0, 15)))
   })
 
@@ -56,6 +58,35 @@ describe("post-process", () => {
   it("adds ・ prefix to step blocks", () => {
     const b = postProcessBlock({ type: "step", text: "保存ボタンをクリック" })
     assert.ok(b.text.startsWith("・"))
+  })
+
+  it("converts step ending すること to してください", () => {
+    const b = postProcessBlock({ type: "step", text: "保存すること" })
+    assert.equal(b.text, "・保存してください。")
+  })
+
+  it("converts しないこと to しないでください", () => {
+    const b = postProcessBlock({ type: "step", text: "自動入力項目を変更しないこと。" })
+    assert.equal(b.text, "・自動入力項目を変更しないでください。")
+  })
+
+  it("preserves 確認すること in completion check phrasing", () => {
+    const b = postProcessBlock({
+      type: "step",
+      text: "保存済みになっていることを確認すること",
+    })
+    assert.equal(b.text, "・保存済みになっていることを確認してください。")
+  })
+
+  it("does not rewrite paragraph endings", () => {
+    const b = postProcessBlock({ type: "paragraph", text: "保存すること" })
+    assert.equal(b.text, "保存すること")
+  })
+
+  it("preserves needsConfirm through post-process", () => {
+    const b = postProcessBlock({ type: "step", text: "保存すること", needsConfirm: true })
+    assert.equal(b.needsConfirm, true)
+    assert.equal(b.text, "・保存してください。")
   })
 })
 
