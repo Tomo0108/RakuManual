@@ -166,7 +166,7 @@ export function FlowInspectorPanel({
                   className="h-8 text-xs"
                 />
                 <p className="text-[10px] leading-relaxed text-muted-foreground">
-                  レイアウト時に 1.1 / 1.2 / 2.1 形式で自動採番されます。担当レーンが変わると大項目が繰り上がります。手動では変更できません。
+                  参考資料粒度で自動採番します。中項目は 1.1 / 2.1、同じ操作の分冊・分岐だけ 2.2.1 のように下層へ。担当レーンが変わると大項目が繰り上がります。
                 </p>
               </Field>
             )}

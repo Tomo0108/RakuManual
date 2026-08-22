@@ -25,8 +25,8 @@ function flow(nodes: FlowNode[], edges: FlowEdge[]): FlowState {
   return { nodes, edges, lanes: ["申請者", "経理", "上長"] }
 }
 
-describe("assignSectionNumbers", () => {
-  it("assigns 1.1, 1.2 then bumps major on lane change to 2.1", () => {
+describe("assignSectionNumbers (参考資料粒度)", () => {
+  it("distinct ops get medium numbers; lane change bumps major", () => {
     const state = assignSectionNumbers(
       flow(
         [
@@ -43,11 +43,9 @@ describe("assignSectionNumbers", () => {
     assert.equal(num("a"), "1.1")
     assert.equal(num("b"), "1.2")
     assert.equal(num("c"), "2.1")
-    assert.equal(num("s"), undefined)
-    assert.equal(num("e"), undefined)
   })
 
-  it("groups decision alternatives under the same section number", () => {
+  it("decision alternatives go deeper under the same medium (N.M.K)", () => {
     const state = assignSectionNumbers(
       flow(
         [
@@ -73,12 +71,12 @@ describe("assignSectionNumbers", () => {
     const num = (id: string) => state.nodes.find((n) => n.id === id)?.data.sectionNumber
     assert.equal(num("p"), "1.1")
     assert.equal(num("d"), "2.1")
-    assert.equal(num("yes"), "2.1")
-    assert.equal(num("no"), "2.1")
+    assert.equal(num("yes"), "2.1.1")
+    assert.equal(num("no"), "2.1.2")
     assert.equal(num("fin"), "3.1")
   })
 
-  it("rewrites legacy 1.1.n collapsed numbering", () => {
+  it("rewrites only legacy all-under-1.1.n collapse", () => {
     const legacy = flow(
       [
         node("s", "start", "申請者"),
@@ -95,6 +93,35 @@ describe("assignSectionNumbers", () => {
     assert.equal(num("a"), "1.1")
     assert.equal(num("b"), "1.2")
     assert.equal(num("c"), "2.1")
+  })
+
+  it("preserves intentional 2.2.1 pagination style from reference manuals", () => {
+    assert.equal(
+      isLegacyCollapsedNumbering([
+        node("a", "process", "営業", "2.2.1"),
+        node("b", "process", "営業", "2.2.2"),
+        node("c", "process", "営業", "2.3"),
+      ]),
+      false,
+    )
+    const state = assignSectionNumbers(
+      flow(
+        [
+          node("s", "start", "営業"),
+          node("a", "process", "営業", "2.2.1"),
+          node("b", "process", "営業", "2.2.2"),
+          node("c", "process", "営業", "2.3"),
+          node("d", "process", "営業"),
+          node("e", "end", "営業"),
+        ],
+        [edge("s", "a"), edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
+      ),
+    )
+    const num = (id: string) => state.nodes.find((n) => n.id === id)?.data.sectionNumber
+    assert.equal(num("a"), "2.2.1")
+    assert.equal(num("b"), "2.2.2")
+    assert.equal(num("c"), "2.3")
+    assert.equal(num("d"), "2.4")
   })
 
   it("preserves existing 1.1 / 2.1 style numbers", () => {

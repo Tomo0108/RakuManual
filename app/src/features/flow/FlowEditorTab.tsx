@@ -1042,7 +1042,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     persist(finalized)
     updateProject(project.id, (p) => {
       const known = new Map(p.deepdive.map((d) => [d.stepId, d]))
-      // 大項目は業務名(q1)、中項目は担当レーン名を既定値にする
+      // 大項目は業務名(q1)、中項目は操作見出し（参考資料の 1.1 商品タイプを選択 に相当）
       const majorTitle =
         p.hearingAnswers.find((a) => a.questionId === "q1" && a.value.trim())?.value.trim() ||
         p.name
@@ -1056,7 +1056,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               stepLabel: n.data.label,
               sectionNumber: n.data.sectionNumber,
               majorTitle,
-              mediumTitle: n.data.lane,
+              mediumTitle: n.data.label,
               importance: "normal" as const,
               status: "not-started" as const,
               answers: [],
@@ -1068,7 +1068,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             stepLabel: n.data.label,
             sectionNumber: n.data.sectionNumber,
             majorTitle: existing.majorTitle ?? majorTitle,
-            mediumTitle: existing.mediumTitle ?? n.data.lane,
+            mediumTitle: existing.mediumTitle ?? n.data.label,
             status:
               labelChanged && (existing.status === "done" || existing.status === "in-progress")
                 ? ("recheck" as const)
