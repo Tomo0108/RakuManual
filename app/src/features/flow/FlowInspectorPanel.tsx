@@ -33,6 +33,7 @@ interface Props {
   edge?: FlowEdge | null
   lanes: string[]
   locked?: boolean
+  onLockedEditAttempt?: () => void
   onUpdateNode: (id: string, patch: StepPatch) => void
   onUpdateEdgeLabel: (id: string, label: string) => void
   onClose: () => void
@@ -44,6 +45,7 @@ export function FlowInspectorPanel({
   edge,
   lanes,
   locked,
+  onLockedEditAttempt,
   onUpdateNode,
   onUpdateEdgeLabel,
   onClose,
@@ -82,14 +84,17 @@ export function FlowInspectorPanel({
         </Button>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
+      <div
+        className={cn("flex flex-1 flex-col gap-3 overflow-y-auto p-3", locked && "cursor-not-allowed")}
+        onClick={locked ? onLockedEditAttempt : undefined}
+      >
         {node && (
           <>
             <Field label="ラベル">
               <Input
                 value={label}
                 disabled={locked}
-                className="h-8 text-xs"
+                className={cn("h-8 text-xs", locked && "pointer-events-none")}
                 onChange={(e) => setLabel(e.target.value)}
                 onBlur={() => {
                   if (label.trim() && label !== node.data.label) {
@@ -144,7 +149,7 @@ export function FlowInspectorPanel({
                 value={system}
                 disabled={locked}
                 placeholder="例: 勤怠システム"
-                className="h-8 text-xs"
+                className={cn("h-8 text-xs", locked && "pointer-events-none")}
                 onChange={(e) => setSystem(e.target.value)}
                 onBlur={() => {
                   const next = system.trim() || undefined
@@ -161,7 +166,7 @@ export function FlowInspectorPanel({
                   className="h-8 text-xs"
                 />
                 <p className="text-[10px] leading-relaxed text-muted-foreground">
-                  レイアウト確定時に自動採番されます。手動では変更できません。
+                  レイアウト時に 1.1 / 1.2 / 2.1 形式で自動採番されます。担当レーンが変わると大項目が繰り上がります。手動では変更できません。
                 </p>
               </Field>
             )}
@@ -182,7 +187,7 @@ export function FlowInspectorPanel({
                 value={edgeLabel}
                 disabled={locked}
                 placeholder="例: はい / いいえ"
-                className="h-8 text-xs"
+                className={cn("h-8 text-xs", locked && "pointer-events-none")}
                 onChange={(e) => setEdgeLabel(e.target.value)}
                 onBlur={() => {
                   const current = typeof edge.label === "string" ? edge.label : ""

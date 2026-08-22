@@ -4,7 +4,7 @@
  * ※ 参考資料の製品名・システム名は文体の手本用であり、生成本文へ持ち込まない。
  */
 
-export const PROMPT_VERSION = "2026-08-23-ros-style-v3"
+export const PROMPT_VERSION = "2026-08-23-ros-style-v4"
 
 /** LLM への共通ロール定義（system の冒頭） */
 export const MANUAL_AUTHOR_ROLE = `あなたは日本の社内業務マニュアル（営業・オペレーション向け）の専門ライターです。
@@ -44,7 +44,7 @@ export const FLOW_RULES = [
   "lanes はヒアリング q5 の関係者（担当者・確認者・承認者等）から作る。最低1レーン",
   "start/end は各1つ。process は業務ステップ、decision は分岐（kind:decision）",
   "decision から出る edge には label に「はい」「いいえ」等の分岐条件を付ける",
-  "process ノードには sectionNumber を 1.1 形式で付与（フロー図凡例の項番と一致）",
+  "process/decision ノードには sectionNumber を 1.1 / 1.2 / 2.1 形式で付与（3段の 1.1.n は使わない。レーン切替で大項目を繰り上げ）",
   "system には利用システム名（ヒアリング等に出たアプリ名・「—」）。列が変わる場合は layoutMeta.columnSystems を意識",
   "source には根拠（q4, q8, deepdive:... 等）を短く記録",
 ] as const

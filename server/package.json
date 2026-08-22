@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "test:prompts": "node --import tsx --test src/ai/prompts/validate.test.ts src/ai/pipeline.test.ts src/flow-nl-ops.test.ts",
+    "test:prompts": "node --import tsx --test src/ai/prompts/validate.test.ts src/ai/pipeline.test.ts src/flow-nl-ops.test.ts src/flow-numbering.test.ts",
     "llm:stability": "node --import tsx src/ai/stability-demo.ts",
     "llm:scenarios": "node --import tsx src/ai/scenario-demo.ts"
   },

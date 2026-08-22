@@ -45,6 +45,15 @@ import { StepNode, setStepNodeContext } from "./StepNode"
 import { SystemAxisPanel, TeamAxisPanel, LaneGuideOverlay, FlowCanvasHeader, MobileSystemAxisPanel, MobileTeamAxis, type FlowViewport } from "./FlowAxisPanels"
 import { FlowPanBar } from "./FlowPanBar"
 import { FlowHelpButton } from "./FlowHelpButton"
+import { FlowLockBubble } from "./FlowLockBubble"
+import { vibrateLockButtonElement } from "./lock-button-vibrate"
+import {
+  canShowLockCanvasHint,
+  hasSeenLockIntro,
+  incrementLockCanvasHintCount,
+  markLockIntroSeen,
+} from "./flow-lock-hints"
+import { TUTORIAL_RESET_EVENT } from "@/lib/client-settings"
 import { FlowMobileControls } from "./FlowMobileControls"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAppSession } from "@/lib/api/use-app-session"
@@ -80,7 +89,7 @@ import {
   dimForKind,
   restackLaneColumnNodes,
 } from "./flow-layout"
-import { assignSectionNumbers } from "./flow-numbering"
+import { assignSectionNumbers, syncDeepdiveSectionNumbers } from "./flow-numbering"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -142,7 +151,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const [genProgress, setGenProgress] = useState(0)
   const [regenConfirmOpen, setRegenConfirmOpen] = useState(false)
   const [nlOpen, setNlOpen] = useState(false)
-  const [isLocked, setIsLocked] = useState(true)
+  const [isLocked, setIsLocked] = useState(false)
+  const [lockBubble, setLockBubble] = useState<"intro" | "comment" | null>(null)
+  const lockButtonRef = useRef<HTMLSpanElement>(null)
+  const nlInputRef = useRef<HTMLDivElement>(null)
   const [connectorPanelOpen, setConnectorPanelOpen] = useState(false)
   const [connectorSheetOpen, setConnectorSheetOpen] = useState(false)
   const [insertTarget, setInsertTarget] = useState<ConnectorInsertTarget | null>(null)
@@ -223,6 +235,55 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   const isEditingDisabled = isLocked || !!proposal
 
+  const vibrateLockButton = useCallback(() => {
+    vibrateLockButtonElement(lockButtonRef.current)
+  }, [])
+
+  const dismissLockBubble = useCallback(() => {
+    setLockBubble((current) => {
+      if (current === "intro") markLockIntroSeen()
+      return null
+    })
+  }, [])
+
+  /** ツールバー・パネル等（ロックボタンをバイブレーション） */
+  const hintLockedEdit = useCallback(() => {
+    if (!isLocked) return
+    vibrateLockButton()
+  }, [isLocked, vibrateLockButton])
+
+  /** フロー図内の編集試行（バイブレーションは最大2回まで） */
+  const hintLockedCanvas = useCallback(() => {
+    if (!isLocked || !canShowLockCanvasHint()) return
+    incrementLockCanvasHintCount()
+    vibrateLockButton()
+  }, [isLocked, vibrateLockButton])
+
+  /** NLコメント入力の試行（吹き出し + ロックボタンを毎回バイブレーション） */
+  const hintLockedComment = useCallback(() => {
+    if (!isLocked) return
+    vibrateLockButton()
+    setLockBubble((current) => {
+      if (current === "intro") markLockIntroSeen()
+      return "comment"
+    })
+  }, [isLocked, vibrateLockButton])
+
+  useEffect(() => {
+    if (flow.nodes.length === 0 || hasSeenLockIntro()) return
+    const timer = window.setTimeout(() => setLockBubble("intro"), 600)
+    return () => window.clearTimeout(timer)
+  }, [flow.nodes.length])
+
+  useEffect(() => {
+    const onTutorialReset = () => {
+      if (flow.nodes.length === 0 || hasSeenLockIntro()) return
+      window.setTimeout(() => setLockBubble("intro"), 300)
+    }
+    window.addEventListener(TUTORIAL_RESET_EVENT, onTutorialReset)
+    return () => window.removeEventListener(TUTORIAL_RESET_EVENT, onTutorialReset)
+  }, [flow.nodes.length])
+
   const bumpMobileTeamAxis = useCallback(() => {
     if (!isMobile) return
     setMobileTeamAxisVisible(true)
@@ -289,10 +350,14 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
 
   const didFitRef = useRef(false)
 
-  /* プロジェクトへ保存(自動保存) */
+  /* プロジェクトへ保存(自動保存)。項番が変わったら深掘り一覧も同期 */
   const persist = useCallback(
     (next: FlowState) => {
-      updateProject(project.id, (p) => ({ ...p, flow: next }))
+      updateProject(project.id, (p) => ({
+        ...p,
+        flow: next,
+        deepdive: syncDeepdiveSectionNumbers(p.deepdive, next),
+      }))
     },
     [project.id, updateProject],
   )
@@ -306,6 +371,17 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setProposal(null)
     setInstruction("")
     didFitRef.current = false
+    const numbersChanged = project.flow.nodes.some((n) => {
+      const m = next.nodes.find((x) => x.id === n.id)
+      return (m?.data.sectionNumber ?? "") !== (n.data.sectionNumber ?? "")
+    })
+    if (numbersChanged) {
+      updateProject(project.id, (p) => ({
+        ...p,
+        flow: next,
+        deepdive: syncDeepdiveSectionNumbers(p.deepdive, next),
+      }))
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- プロジェクト切替時のみ
   }, [project.id])
 
@@ -389,6 +465,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
     setStepNodeContext({
       lanes: flow.lanes,
       locked: isEditingDisabled,
+      onLockedEditAttempt: isLocked ? hintLockedCanvas : undefined,
       onRename: (id, label) => {
         commit((s) => ({
           ...s,
@@ -398,7 +475,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         }))
       },
     })
-  }, [flow.lanes, commit, isEditingDisabled])
+  }, [flow.lanes, commit, isEditingDisabled, isLocked, hintLockedCanvas])
 
   const selectedNodes = flow.nodes.filter((n) => n.selected)
   const selectedEdges = flow.edges.filter((e) => e.selected)
@@ -600,6 +677,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
+      if (isLocked) {
+        hintLockedCanvas()
+        return
+      }
       if (isEditingDisabled) return
       const raw = e.dataTransfer.getData("application/flow-connector")
       if (!raw || !rfRef.current) return
@@ -644,25 +725,32 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
       })
       fitCanvas()
     },
-    [commit, fitCanvas, isEditingDisabled],
+    [commit, fitCanvas, isEditingDisabled, isLocked, hintLockedCanvas],
   )
 
   useEffect(() => {
     setFlowInteractionContext({
       locked: isEditingDisabled,
+      onLockedEditAttempt: isLocked ? hintLockedCanvas : undefined,
       onRequestInsert: (target) => {
-        if (isEditingDisabled) return
+        if (isLocked) {
+          hintLockedCanvas()
+          return
+        }
+        if (proposal) return
         setInsertTarget(target)
       },
       onInsertConnector: handleInsertConnector,
     })
-  }, [isEditingDisabled, handleInsertConnector])
+  }, [isEditingDisabled, isLocked, proposal, hintLockedCanvas, handleInsertConnector])
 
   /* React Flow のドラッグ等の変更 */
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       let effective = changes
       if (isEditingDisabled) {
+        const blocked = changes.some((c) => c.type !== "select")
+        if (blocked && isLocked) hintLockedCanvas()
         effective = changes.filter((c) => c.type === "select")
         if (effective.length === 0) return
       }
@@ -734,13 +822,15 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         setRedoStack([])
       }
     },
-    [flow, persist, isEditingDisabled, bumpMobileTeamAxis, restoreViewport],
+    [flow, persist, isEditingDisabled, isLocked, hintLockedCanvas, bumpMobileTeamAxis, restoreViewport],
   )
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       let effective = changes
       if (isEditingDisabled) {
+        const blocked = changes.some((c) => c.type !== "select")
+        if (blocked && isLocked) hintLockedCanvas()
         effective = changes.filter((c) => c.type === "select")
         if (effective.length === 0) return
       }
@@ -767,7 +857,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         return next
       })
     },
-    [flow, persist, isEditingDisabled, restoreViewport],
+    [flow, persist, isEditingDisabled, isLocked, hintLockedCanvas, restoreViewport],
   )
 
   const onConnect = useCallback(
@@ -1042,8 +1132,11 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
   const toggleLock = () => {
     setIsLocked((prev) => {
       const next = !prev
-      // 編集開始時はコネクタパネルを開き、操作手段をすぐ使えるようにする
-      if (!next && !isMobile) setConnectorPanelOpen(true)
+      if (!next) {
+        setLockBubble((bubble) => (bubble === "comment" ? null : bubble))
+        // 編集開始時はコネクタパネルを開き、操作手段をすぐ使えるようにする
+        if (!isMobile) setConnectorPanelOpen(true)
+      }
       return next
     })
   }
@@ -1118,6 +1211,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 label="コネクタを追加"
                 onClick={openConnectorPicker}
                 disabled={isEditingDisabled}
+                onLockedAttempt={isLocked ? hintLockedEdit : undefined}
               >
                 <Layers className="size-4" />
               </ToolButton>
@@ -1126,6 +1220,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               label="選択中の要素を削除(Delete)"
               onClick={deleteSelected}
               disabled={isEditingDisabled || (selectedNodes.length === 0 && selectedEdges.length === 0)}
+              onLockedAttempt={isLocked ? hintLockedEdit : undefined}
             >
               <Trash2 className="size-4" />
             </ToolButton>
@@ -1136,23 +1231,39 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 {selectedEdges.length > 0 && `${selectedEdges.length}結線`}
               </span>
             )}
-            <ToolButton label="元に戻す(⌘Z)" onClick={undo} disabled={isEditingDisabled || undoStack.length === 0}>
+            <ToolButton
+              label="元に戻す(⌘Z)"
+              onClick={undo}
+              disabled={isEditingDisabled || undoStack.length === 0}
+              onLockedAttempt={isLocked ? hintLockedEdit : undefined}
+            >
               <Undo2 className="size-4" />
             </ToolButton>
-            <ToolButton label="やり直す(⇧⌘Z)" onClick={redo} disabled={isEditingDisabled || redoStack.length === 0}>
+            <ToolButton
+              label="やり直す(⇧⌘Z)"
+              onClick={redo}
+              disabled={isEditingDisabled || redoStack.length === 0}
+              onLockedAttempt={isLocked ? hintLockedEdit : undefined}
+            >
               <Redo2 className="size-4" />
             </ToolButton>
           </ToolGroup>
 
           {!isMobile && (
             <ToolGroup label="生成・整列">
-              <ToolButton label="レイアウトを自動整列" onClick={doAutoLayout} disabled={isEditingDisabled}>
+              <ToolButton
+                label="レイアウトを自動整列"
+                onClick={doAutoLayout}
+                disabled={isEditingDisabled}
+                onLockedAttempt={isLocked ? hintLockedEdit : undefined}
+              >
                 <AlignCenterVertical className="size-4" />
               </ToolButton>
               <ToolButton
                 label="ヒアリング回答からフロー図を再生成(手動修正は保護)"
                 onClick={() => setRegenConfirmOpen(true)}
                 disabled={isEditingDisabled}
+                onLockedAttempt={isLocked ? hintLockedEdit : undefined}
               >
                 <Sparkles className="size-4" />
               </ToolButton>
@@ -1191,14 +1302,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               </ToolButton>
             )}
             <FlowHelpButton isMobile={isMobile} isLocked={isLocked} />
-            <ToolButton
-              label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
-              onClick={toggleLock}
-              disabled={!!proposal}
-              variant={isLocked ? "outline" : "ghost"}
-            >
-              {isLocked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
-            </ToolButton>
+            <span ref={lockButtonRef} className="inline-flex rounded-md">
+              <ToolButton
+                label={isLocked ? "編集モードに切り替え" : "ロックして閲覧モードに"}
+                onClick={toggleLock}
+                disabled={!!proposal}
+                variant={isLocked ? "outline" : "ghost"}
+              >
+                {isLocked ? <Lock className="size-4" /> : <LockOpen className="size-4" />}
+              </ToolButton>
+            </span>
             <ToolButton
               label={isMobile ? "確定" : "フロー図を確定して深掘りへ"}
               onClick={requestConfirmFlow}
@@ -1223,6 +1336,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               onSelect={handlePanelConnectorSelect}
               onDragStart={onConnectorDragStart}
               disabled={isEditingDisabled}
+              onLockedEditAttempt={isLocked ? hintLockedEdit : undefined}
               mode={selectedNodes[0] ? "after" : "append"}
               targetKind={selectedNodes[0]?.data.kind}
             />
@@ -1236,6 +1350,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   viewport={viewport}
                   activeLane={activeLane}
                   editable={!isEditingDisabled}
+                  onLockedEditAttempt={isLocked ? hintLockedEdit : undefined}
                   onRenameLane={renameLane}
                   onAddLane={addLane}
                   onDeleteLane={deleteLane}
@@ -1286,11 +1401,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   }}
                   onPaneContextMenu={(e) => {
                     e.preventDefault()
+                    if (isLocked) {
+                      hintLockedCanvas()
+                      return
+                    }
                     if (isEditingDisabled) return
                     setInsertTarget({ mode: "append" })
                   }}
                   onNodeContextMenu={(e, node) => {
                     e.preventDefault()
+                    if (isLocked) {
+                      hintLockedCanvas()
+                      return
+                    }
                     if (isEditingDisabled) return
                     setInsertTarget({
                       mode: "after",
@@ -1300,6 +1423,10 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   }}
                   onEdgeContextMenu={(e, edge) => {
                     e.preventDefault()
+                    if (isLocked) {
+                      hintLockedCanvas()
+                      return
+                    }
                     if (isEditingDisabled) return
                     setInsertTarget({
                       mode: "between",
@@ -1446,6 +1573,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 columnSystems={columnSystems}
                 viewport={viewport}
                 onUpdateColumn={isEditingDisabled ? undefined : updateColumnSystem}
+                onLockedEditAttempt={isLocked ? hintLockedEdit : undefined}
               />
             ) : (
               <SystemAxisPanel
@@ -1453,6 +1581,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 viewport={viewport}
                 onUpdateColumn={isEditingDisabled ? undefined : updateColumnSystem}
                 readOnly={isEditingDisabled}
+                onLockedEditAttempt={isLocked ? hintLockedEdit : undefined}
               />
             )}
           </div>
@@ -1462,6 +1591,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             edge={inspectorEdge}
             lanes={flow.lanes}
             locked={isEditingDisabled}
+            onLockedEditAttempt={isLocked ? hintLockedEdit : undefined}
             onUpdateNode={updateSelectedNode}
             onUpdateEdgeLabel={updateEdgeLabel}
             onClose={clearSelection}
@@ -1641,6 +1771,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               edge={inspectorEdge}
               lanes={flow.lanes}
               locked={isEditingDisabled}
+              onLockedEditAttempt={isLocked ? hintLockedEdit : undefined}
               onUpdateNode={updateSelectedNode}
               onUpdateEdgeLabel={updateEdgeLabel}
               onClose={clearSelection}
@@ -1660,12 +1791,16 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                   <ChevronUp className="size-4" />
                 </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div
+                ref={nlInputRef}
+                className={cn("flex items-center gap-2", isLocked && "cursor-not-allowed")}
+                onClick={isLocked ? hintLockedComment : undefined}
+              >
                 <Input
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
                   placeholder="例: Rakumanualのリンクはexample.com / 「A」と「B」を入れ替え / 「C」を削除"
-                  className="h-10 flex-1 text-sm"
+                  className={cn("h-10 flex-1 text-sm", isLocked && "pointer-events-none")}
                   disabled={!!proposal || aiThinking || isLocked}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) void askAi()
@@ -1674,8 +1809,8 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 <Button
                   size="icon"
                   className="size-10 shrink-0"
-                  onClick={() => void askAi()}
-                  disabled={!instruction.trim() || !!proposal || aiThinking || isLocked}
+                  onClick={() => (isLocked ? hintLockedComment() : void askAi())}
+                  disabled={!isLocked && (!instruction.trim() || !!proposal || aiThinking)}
                   aria-label={aiThinking ? "解析中" : "修正案を作成"}
                 >
                   <Sparkles className="size-4" />
@@ -1683,13 +1818,22 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               </div>
             </div>
           ) : (
-            <div className="flex justify-center px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            <div
+              ref={nlInputRef}
+              className="flex justify-center px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+            >
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="size-10"
-                onClick={() => setNlOpen(true)}
+                onClick={() => {
+                  if (isLocked) {
+                    hintLockedComment()
+                    return
+                  }
+                  setNlOpen(true)
+                }}
                 aria-label="AI修正"
               >
                 <Wand2 className="size-4 text-primary" />
@@ -1699,12 +1843,19 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
         </div>
       ) : (
         <div className="shrink-0 border-t bg-background px-4 py-2.5">
-          <div className="mx-auto flex max-w-3xl items-center gap-2">
+          <div
+            ref={nlInputRef}
+            className={cn(
+              "mx-auto flex max-w-3xl items-center gap-2",
+              isLocked && "cursor-not-allowed",
+            )}
+            onClick={isLocked ? hintLockedComment : undefined}
+          >
             <Input
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               placeholder="例: Rakumanualのリンクはexample.com / 「A」と「B」を入れ替え / 「C」を削除"
-              className="h-9 flex-1"
+              className={cn("h-9 flex-1", isLocked && "pointer-events-none")}
               disabled={!!proposal || aiThinking || isLocked}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) void askAi()
@@ -1720,6 +1871,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
               }
               onClick={() => void askAi()}
               disabled={!instruction.trim() || !!proposal || aiThinking || isLocked}
+              onLockedAttempt={isLocked ? hintLockedComment : undefined}
               variant="default"
             >
               <Sparkles className="size-4" />
@@ -1727,6 +1879,23 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
           </div>
         </div>
       )}
+
+      <FlowLockBubble
+        anchorRef={lockButtonRef}
+        open={lockBubble === "intro"}
+        message="このボタンでフロー図をロック"
+        onDismiss={dismissLockBubble}
+        placement="bottom"
+        align="end"
+      />
+      <FlowLockBubble
+        anchorRef={nlInputRef}
+        open={lockBubble === "comment"}
+        message="ロックを解除してから入力"
+        onDismiss={dismissLockBubble}
+        placement="top"
+        align="center"
+      />
     </div>
   )
 }
@@ -1768,6 +1937,7 @@ function ToolButton({
   label,
   onClick,
   disabled,
+  onLockedAttempt,
   children,
   variant = "ghost",
   className,
@@ -1776,20 +1946,33 @@ function ToolButton({
   label: string
   onClick: () => void
   disabled?: boolean
+  /** disabled 時にクリックされた場合（ロック中の編集試行など） */
+  onLockedAttempt?: () => void
   children: React.ReactNode
   variant?: "ghost" | "outline" | "default"
   className?: string
   iconOnly?: boolean
 }) {
+  const handleWrapperClick = (e: React.MouseEvent) => {
+    if (disabled && onLockedAttempt) {
+      e.preventDefault()
+      e.stopPropagation()
+      onLockedAttempt()
+    }
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span>
+        <span
+          className={cn(disabled && onLockedAttempt && "cursor-not-allowed")}
+          onClick={handleWrapperClick}
+        >
           <Button
             variant={variant}
             size={iconOnly ? "icon" : "sm"}
             className={cn(iconOnly ? "size-9 shrink-0 px-0" : "h-8 gap-1.5 px-2.5 text-xs", className)}
-            onClick={onClick}
+            onClick={disabled ? undefined : onClick}
             disabled={disabled}
             aria-label={iconOnly ? label : undefined}
           >
