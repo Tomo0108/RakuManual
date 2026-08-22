@@ -1,6 +1,6 @@
-import type { FlowEdge, FlowNode, FlowState } from "./flow-types.js"
+import type { FlowEdge, FlowNode, FlowState, ColumnSystemEntry } from "./flow-types.js"
 import { uid } from "./flow-utils.js"
-import { autoLayout } from "./flow-layout.js"
+import { autoLayout, colFromX, dimForKind, normalizeColumnSystems } from "./flow-layout.js"
 
 export { autoLayout } from "./flow-layout.js"
 
@@ -31,6 +31,9 @@ export interface NlProposal {
  * 「AとBの間に◯◯を追加」「◯◯を削除」「◯◯を△△に変更」などのパターンを認識する。
  */
 export function interpretInstruction(instruction: string, state: FlowState): NlProposal {
+  const systemLink = trySystemLinkInstruction(instruction, state)
+  if (systemLink) return systemLink
+
   const { nodes } = state
   // 指示文に含まれるノードを、ラベルの部分一致で探す(長い順に優先)
   const mentioned = nodes
@@ -93,7 +96,7 @@ export function interpretInstruction(instruction: string, state: FlowState): NlP
   }
 
   // --- 追加(挿入位置が特定できた場合は後ろに) ---
-  if (/追加|足して|入れて|新しく/.test(instruction)) {
+  if (/追加|足して|入れて|新しく/.test(instruction) && !/リンク|URL|url|利用システム/.test(instruction)) {
     const newLabel = quoted[0] ?? extractAddLabel(instruction)
     const anchor = mentioned[0] ?? state.nodes[state.nodes.length - 2] ?? state.nodes[0]
     const nextEdge = state.edges.find((e) => e.source === anchor?.id)
@@ -118,6 +121,116 @@ export function interpretInstruction(instruction: string, state: FlowState): NlP
     description: `指示内容から「${fallbackLabel}」というステップの追加を提案します。位置はドラッグで調整してください。`,
     preview: (s) => previewAppend(s, fallbackLabel),
     apply: (s) => applyAppend(s, fallbackLabel),
+  }
+}
+
+/* ---------- 利用システムリンク ---------- */
+
+function extractInstructionUrl(text: string): string | null {
+  const absolute = text.match(/https?:\/\/[^\s、。,「」]+/i)
+  if (absolute) return absolute[0]
+  const domain = text.match(
+    /(?:リンク(?:は|を|:)?\s*)?([a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+(?:\/[^\s、。,「」]*)?)/i,
+  )
+  if (!domain) return null
+  const host = domain[1]
+  return host.startsWith("http") ? host : `https://${host}`
+}
+
+function inferSystemKeyword(instruction: string, state: FlowState): string | null {
+  const named = instruction.match(/([^\s、。,「」]+)のリンク/)
+  if (named?.[1]) return named[1]
+
+  for (const n of state.nodes) {
+    const sys = n.data.system?.trim()
+    if (!sys || sys === "—") continue
+    if (instruction.includes(sys)) return sys
+    const head = sys.slice(0, Math.min(8, sys.length))
+    if (head.length >= 4 && instruction.toLowerCase().includes(head.toLowerCase())) return sys
+  }
+  return null
+}
+
+function columnCountFromState(state: FlowState): number {
+  if ((state.layoutMeta?.columnCount ?? 0) > 0) return state.layoutMeta!.columnCount
+  if (state.nodes.length === 0) return 0
+  return (
+    Math.max(
+      ...state.nodes.map((n) => {
+        const k = n.data.kind
+        const dims = dimForKind(k === "start" || k === "end" || k === "decision" ? k : "process")
+        return colFromX(n.position.x, dims.w)
+      }),
+    ) + 1
+  )
+}
+
+function systemsInColumn(state: FlowState, col: number): Set<string> {
+  const systems = new Set<string>()
+  for (const n of state.nodes) {
+    const sys = n.data.system?.trim()
+    if (!sys || sys === "—") continue
+    const k = n.data.kind
+    const dims = dimForKind(k === "start" || k === "end" || k === "decision" ? k : "process")
+    if (colFromX(n.position.x, dims.w) === col) systems.add(sys)
+  }
+  return systems
+}
+
+function columnMatchesSystem(
+  col: number,
+  entry: ColumnSystemEntry,
+  keyword: string,
+  state: FlowState,
+): boolean {
+  const kw = keyword.toLowerCase()
+  if (entry.label.toLowerCase().includes(kw) || kw.includes(entry.label.toLowerCase())) return true
+  for (const sys of systemsInColumn(state, col)) {
+    const s = sys.toLowerCase()
+    if (s.includes(kw) || kw.includes(s)) return true
+  }
+  return false
+}
+
+function applyColumnSystemUrls(state: FlowState, columnSystems: ColumnSystemEntry[]): FlowState {
+  return {
+    ...state,
+    layoutMeta: {
+      columnCount: columnSystems.length,
+      columnSystems,
+      layoutVersion: state.layoutMeta?.layoutVersion,
+    },
+  }
+}
+
+/** 「Rakumanualのリンクは…」等 — 下部の利用システム行 URL を更新（ステップは増やさない） */
+function trySystemLinkInstruction(instruction: string, state: FlowState): NlProposal | null {
+  const url = extractInstructionUrl(instruction)
+  const linkIntent = /リンク|URL|url|利用システム/.test(instruction)
+  if (!url || !linkIntent) return null
+
+  const keyword = inferSystemKeyword(instruction, state)
+  const columnCount = columnCountFromState(state)
+  if (columnCount === 0) return null
+
+  const cols = normalizeColumnSystems(state.layoutMeta?.columnSystems, columnCount)
+  let updated = 0
+  const nextCols = cols.map((entry, col) => {
+    if (keyword && !columnMatchesSystem(col, entry, keyword, state)) return entry
+    if (!keyword && entry.label === "—") return entry
+    updated++
+    return { ...entry, url }
+  })
+
+  if (updated === 0) return null
+
+  const targetLabel = keyword ?? "利用システム"
+  const description = `「${targetLabel}」のリンクを ${url} に設定します（フロー下部の利用システム行）。`
+
+  return {
+    description,
+    preview: (s) => applyColumnSystemUrls(s, nextCols),
+    apply: (s) => applyColumnSystemUrls(s, nextCols),
   }
 }
 

@@ -937,8 +937,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       [
         {
           role: "system",
-          content:
-            'フロー自然言語修正。可能なら JSON で {"ops":[{"op":"addLane|rename|addNode","...":"..."}],"description":"..."} を返せ。不明なら description のみ。',
+          content: [
+            "フロー図の自然言語修正アシスタント。",
+            "利用システムのリンク設定はステップ追加ではない。下部「利用システム」行の URL を setColumnSystemUrl で更新する。",
+            'JSON: {"ops":[{"op":"setColumnSystemUrl","system":"Rakumanual","url":"https://..."}],"description":"..."}',
+            "ステップの追加・削除・改名のみ addNode/removeNode/renameNode を使う。",
+          ].join("\n"),
         },
         {
           role: "user",
@@ -955,15 +959,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       payload: { kind: "nl-edit", provider: llm.provider, tokens: llm.tokens },
     })
 
-    // LLM の description をヒントに正規表現ベースの差分を適用（手動ノード保護は flow-logic 側）
-    let enrichedInstruction = instruction
-    try {
-      const parsed = JSON.parse(extractJson(llm.text)) as { description?: string; ops?: unknown }
-      if (parsed.description) enrichedInstruction = `${instruction}\n${parsed.description}`
-    } catch {
-      if (llm.text && !llm.text.startsWith("[モック")) enrichedInstruction = `${instruction}\n${llm.text.slice(0, 200)}`
-    }
-    const result = proposeNlEdit(enrichedInstruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
+    // 正規表現ベースの差分適用（LLM description で「追加」と誤判定しないよう原文のみ使用）
+    const result = proposeNlEdit(instruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
     return { ...result, meta: { provider: llm.provider, tokens: llm.tokens } }
   })
 
