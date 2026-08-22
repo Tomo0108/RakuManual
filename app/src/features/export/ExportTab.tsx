@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { findCaptionIssues } from "@/lib/caption-quality"
+import { formatMediumHeading } from "@/lib/export-theme"
 import { cn } from "@/lib/utils"
 
 const FALLBACK_TEMPLATES: DesignTemplate[] = [
@@ -372,7 +373,7 @@ export function ExportTab({ project, updateProject }: Props) {
                 <div className="mt-2 text-xs font-semibold">{t.name}</div>
                 <div className="text-[10px] text-muted-foreground">{t.description}</div>
                 <div className="mt-2 truncate text-[10px] font-medium" style={{ color: t.color }}>
-                  1.1.1 新規申請の例
+                  {formatMediumHeading("1.1", "新規申請")}
                 </div>
               </button>
             ))}
