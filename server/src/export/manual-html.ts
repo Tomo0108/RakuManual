@@ -76,8 +76,10 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
         body += `<p>${text}</p>`
       }
       if (block.image?.url && imageMode !== "none") {
-        const alt = escapeHtml(block.image.caption?.trim() || "手順の参考画像")
-        const img = `<figure><img src="${escapeHtml(block.image.url)}" alt="${alt}" /></figure>`
+        const caption = block.image.caption?.trim() ?? ""
+        const alt = escapeHtml(caption || "手順の参考画像")
+        const captionHtml = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ""
+        const img = `<figure><img src="${escapeHtml(block.image.url)}" alt="${alt}" />${captionHtml}</figure>`
         if (imageMode === "appendix") appendixImages.push(img)
         else body += img
       }
@@ -123,7 +125,7 @@ export function buildManualHtml(project: Project, options: ExportOptions = {}): 
       border-radius: 4px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
-    figcaption { display: none; }
+    figcaption { margin-top: 0.5rem; font-size: 0.875rem; color: #444; text-align: left; }
     .flow ol { padding-left: 1.25rem; }
     .meta { font-size: 0.85rem; color: #666; margin-bottom: 2rem; }
   </style>

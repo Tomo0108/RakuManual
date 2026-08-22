@@ -5,7 +5,7 @@ import { VISIBILITY_LABEL } from "@/lib/types"
 import type { UpdateProject } from "@/pages/ProjectPage"
 import { exportManualPptx } from "@/lib/export-pptx"
 import { exportManualPdfClient } from "@/lib/export-pdf-client"
-import { downloadHtmlFile, exportProjectHtml } from "@/lib/api/export"
+import { exportManualHtml } from "@/lib/export-html"
 import {
   buildLeafSectionNumberMap,
   compareSectionNumbers,
@@ -122,26 +122,17 @@ export function ExportTab({ project, updateProject }: Props) {
     setExported(false)
     setExportError(null)
     try {
-      if (format === "html") {
-        const { html, filename } = await exportProjectHtml(project.id, {
-          template,
-          includeFlow,
-          imageMode: imageMode === "none" ? "none" : "expand",
-          sectionIds: range === "all" ? undefined : [range],
-        })
-        downloadHtmlFile(html, filename)
-        setExported(true)
-        return
-      }
       const opts = {
         includeImages: imageMode !== "none",
         includeFlow,
         template,
       }
       const result =
-        format === "pptx"
-          ? await exportManualPptx(project, targetSections, opts)
-          : await exportManualPdfClient(project, targetSections, opts)
+        format === "html"
+          ? await exportManualHtml(project, targetSections, opts)
+          : format === "pptx"
+            ? await exportManualPptx(project, targetSections, opts)
+            : await exportManualPdfClient(project, targetSections, opts)
       if (result.imageFailures > 0) {
         setExportError(
           `出力は完了しましたが、画像 ${result.imageFailures} 件を埋め込めませんでした（権限切れ・破損の可能性）`,
@@ -325,7 +316,7 @@ export function ExportTab({ project, updateProject }: Props) {
             [
               { id: "pdf", icon: FileText, title: "PDF", desc: "PowerPointと同じスライドデザインで出力（閲覧・印刷用）" },
               { id: "pptx", icon: Presentation, title: "PowerPoint", desc: "スライド形式で出力（長文は複数スライドに分割）" },
-              { id: "html", icon: Globe, title: "HTML", desc: "ブラウザで開ける単一ファイル（社内Wiki貼付・簡易配布）" },
+              { id: "html", icon: Globe, title: "HTML", desc: "画像埋め込みの単一ファイル（オフラインでも開ける）" },
             ] as const
           ).map((f) => (
             <Card
