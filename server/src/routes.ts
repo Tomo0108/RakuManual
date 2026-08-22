@@ -31,7 +31,7 @@ import { buildManualPdf } from "./export/manual-pdf.js"
 import { getDashboardMetrics } from "./metrics.js"
 import { applyPublish, validatePublish } from "./publish.js"
 import { answerQuestion } from "./qa.js"
-import { proposeNlEdit, mergeFlowPreservingManual } from "./ai/flow.js"
+import { proposeFlowNlEdit, buildFlowNlEditMessages, mergeFlowPreservingManual, FlowNlEditError } from "./ai/flow.js"
 import { regenerateSectionMock } from "./ai/manual.js"
 import { generateDeepdiveQuestions, nextHearingQuestion } from "./ai/hearing.js"
 import { extractJson, generateFlowFromLlm, regenerateSectionFromLlm } from "./ai/structured.js"
@@ -932,25 +932,13 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     if (!instruction) return reply.status(400).send({ error: "instruction is required" })
     if (!body.flow) return reply.status(400).send({ error: "flow is required" })
 
+    const flowState = body.flow as unknown as Parameters<typeof proposeFlowNlEdit>[1]
+    const messages = buildFlowNlEditMessages(instruction, flowState)
     const adapter = getLlmAdapter()
-    const llm = await adapter.complete(
-      [
-        {
-          role: "system",
-          content: [
-            "フロー図の自然言語修正アシスタント。",
-            "利用システムのリンク設定はステップ追加ではない。下部「利用システム」行の URL を setColumnSystemUrl で更新する。",
-            'JSON: {"ops":[{"op":"setColumnSystemUrl","system":"Rakumanual","url":"https://..."}],"description":"..."}',
-            "ステップの追加・削除・改名のみ addNode/removeNode/renameNode を使う。",
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ instruction, flow: body.flow }).slice(0, 3500),
-        },
-      ],
-      { context: { userId: user.id, projectId: existing.id, action: "flow_nl_edit" } },
-    )
+    const llm = await adapter.complete(messages, {
+      context: { userId: user.id, projectId: existing.id, action: "flow_nl_edit" },
+      maxTokens: 1024,
+    })
     recordLlmUsage({ userId: user.id, projectId: existing.id, action: "flow_nl_edit", tokens: llm.tokens })
     recordOperationLog({
       userId: user.id,
@@ -959,9 +947,15 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       payload: { kind: "nl-edit", provider: llm.provider, tokens: llm.tokens },
     })
 
-    // 正規表現ベースの差分適用（LLM description で「追加」と誤判定しないよう原文のみ使用）
-    const result = proposeNlEdit(instruction, body.flow as unknown as Parameters<typeof proposeNlEdit>[1])
-    return { ...result, meta: { provider: llm.provider, tokens: llm.tokens } }
+    try {
+      const result = proposeFlowNlEdit(instruction, flowState, llm.text)
+      return { ...result, meta: { provider: llm.provider, tokens: llm.tokens } }
+    } catch (e) {
+      if (e instanceof FlowNlEditError) {
+        return reply.status(422).send({ error: e.message })
+      }
+      throw e
+    }
   })
 
   app.post<{ Params: { id: string } }>("/api/projects/:id/ai/flow/regenerate", async (request, reply) => {

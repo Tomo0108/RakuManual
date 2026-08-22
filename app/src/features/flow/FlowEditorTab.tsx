@@ -1664,7 +1664,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
                 <Input
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
-                  placeholder="修正内容を入力…"
+                  placeholder="例: Rakumanualのリンクはexample.com / 「A」と「B」を入れ替え / 「C」を削除"
                   className="h-10 flex-1 text-sm"
                   disabled={!!proposal || aiThinking || isLocked}
                   onKeyDown={(e) => {
@@ -1703,7 +1703,7 @@ export function FlowEditorTab({ project, updateProject, setTab }: Props) {
             <Input
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
-              placeholder="修正内容を入力…"
+              placeholder="例: Rakumanualのリンクはexample.com / 「A」と「B」を入れ替え / 「C」を削除"
               className="h-9 flex-1"
               disabled={!!proposal || aiThinking || isLocked}
               onKeyDown={(e) => {
